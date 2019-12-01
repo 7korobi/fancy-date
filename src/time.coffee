@@ -35,27 +35,6 @@ to_sec = (str)->
           throw new Error "#{str} at #{num}#{unit}"
   timeout
 
-to_timer = (msec, unit_mode = 1)->
-  str = ""
-  for o in TIMERS
-    unit = o[unit_mode]
-    base = o[2]
-    if idx = Math.floor( msec / base )
-      str += "#{idx}#{unit}"
-    msec = msec % base
-  str
-
-to_relative_time_distance = (msec)->
-  return DISTANCE_NAN if msec < -VALID || VALID < msec || msec - 0 == NaN
-  for [limit], idx in DISTANCES when msec < limit
-    return DISTANCES[idx]
-  return DISTANCE_LONG_AGO
-
-to_tempo = (size, zero_str = "0s", write_at = new Date)->
-  size = to_msec size
-  zero   = to_msec(zero_str) + tempo_zero
-  to_tempo_bare size, zero, write_at - 0, 0
-
 to_tempo_bare = (size, zero, write_at)->
   now_idx = Math.floor(( write_at - zero) / size)
   last_at = (now_idx + 0) * size + zero
@@ -123,65 +102,11 @@ to_tempo_by = (table, zero, write_at)->
 
   { last_at, write_at, next_at, timeout, now_idx, remain, since, zero, size, table }
 
-SECOND = to_msec  "1s"
-MINUTE = to_msec  "1m"
-HOUR =   to_msec  "1h"
-DAY =    to_msec  "1d"
-WEEK =   to_msec  "1w"
-INTERVAL = 0x7fffffff # 31bits.
-MONTH =  to_msec "30d"
-YEAR =   to_msec  "1y"
-VALID = 0xfffffffffffff # 52 bits.
-
-TIMEZONE_OFFSET_JP = to_msec "-9h"
-
-timezone =
-  if window?
-    MINUTE * (new Date).getTimezoneOffset()
-  else
-    TIMEZONE_OFFSET_JP
-
-tempo_zero = (- new Date(0).getDay() ) * DAY + timezone
-
-TIMERS = [
-  [ "年", "y", YEAR   ]
-  [ "週", "w", WEEK   ]
-  [ "日", "d", DAY    ]
-  [ "時", "h", HOUR   ]
-  [ "分", "m", MINUTE ]
-  [ "秒", "s", SECOND ]
-]
-
-DISTANCES = [
-  DISTANCE_NAN = 
-  [   -VALID, INTERVAL,   YEAR, "？？？"]
-  [    -YEAR, INTERVAL,   YEAR, "%s年後"]
-  [   -MONTH, INTERVAL,  MONTH, "%sヶ月後"]
-  [    -WEEK,     WEEK,   WEEK, "%s週間後"]
-  [     -DAY,      DAY,    DAY, "%s日後"]
-  [    -HOUR,     HOUR,   HOUR, "%s時間後"]
-  [  -MINUTE,   MINUTE, MINUTE, "%s分後"]
-  [   -25000,   SECOND, SECOND, "%s秒後"]
-  [    25000,    25000,  25000, "今"]
-  [   MINUTE,   SECOND, SECOND, "%s秒前"]
-  [     HOUR,   MINUTE, MINUTE, "%s分前"]
-  [      DAY,     HOUR,   HOUR, "%s時間前"]
-  [     WEEK,      DAY,    DAY, "%s日前"]
-  [    MONTH,     WEEK,   WEEK, "%s週間前"]
-  [     YEAR, INTERVAL,  MONTH, "%sヶ月前"]
-  [    VALID, INTERVAL,   YEAR, "%s年前"]
-  DISTANCE_LONG_AGO =
-  [ Infinity, INTERVAL,  VALID, "昔"]
-]
 
 module.exports = m = {
   Tempo
-  to_timer
   to_msec
   to_sec
-  to_tempo
   to_tempo_bare
   to_tempo_by
-  to_relative_time_distance
-  timezone
 }
