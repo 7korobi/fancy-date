@@ -57,9 +57,7 @@ class Indexer
 export class FancyDate
   constructor: (o)->
     if o
-      { dic, calc } = o
-      @dic  = _.cloneDeep dic
-      @calc = _.cloneDeep calc
+      { @dic, @calc } = _.cloneDeep o
     else
       @dic = { list: {} }
       @calc =
