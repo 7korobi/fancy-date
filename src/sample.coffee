@@ -364,6 +364,18 @@ GREGORIO =
     true
   ]
 
+ROMULUS =
+  calendar: [
+    "1970年1月1日(木)0時0分0秒"
+    0
+    null
+    [0, 31,30,31,30,31,30,30,31,30,30]
+  ]
+  rolls: [
+    ["", 0, "ABCDEFGH"]
+    ["", 0, 六十干支,六十干支よみ]
+  ]
+
 FastEarth = [ # 天体が地球の百倍速のケース
   [315569251.470, new Date("2019/03/21 06:58").getTime() / 100]
   [ 25514428.896, new Date("2019/01/06 10:28").getTime() / 100]
@@ -391,6 +403,11 @@ FancyDate.平気法 = FancyDate.Gregorian.dup()
   .yeary    ...平気法.yeary
   .daily    ...平気法.daily
   .init()
+
+#FancyDate.Romulus = FancyDate.Gregorian.dup()
+#  .calendar ...ROMULUS.calendar
+# .rolls    ...ROMULUS.rolls
+#  .init()
 
 FancyDate.Fast = FancyDate.Gregorian.dup()
   .planet   ...FastEarth

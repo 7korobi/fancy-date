@@ -102,8 +102,10 @@ export class FancyDate
     @
 
   rolls: ( weeks, etos )->
-    weeks = new Indexer @dic, 'E', ...weeks
-    etos  = new Indexer @dic, 'T', ...etos
+    if weeks
+      weeks = new Indexer @dic, 'E', ...weeks
+    if etos
+      etos  = new Indexer @dic, 'T', ...etos
     Object.assign @dic, { weeks, etos }
     @
 
@@ -202,7 +204,7 @@ export class FancyDate
       @dic.regex[key] = f @dic.list[key]
     @
 
-  def_table_by_leap_year: ->
+  def_table_by_leap_day: ->
     day = @calc.msec.day
     upto = (src)->
       msec = 0
@@ -235,7 +237,8 @@ export class FancyDate
     range.month = {}
     for size in years
       a = Array.from month_divs
-      a[1] = size - month_sum
+      idx = month_divs.indexOf 0
+      a[idx] = size - month_sum
       range.month[size] = a
 
     year = upto range.year
@@ -257,20 +260,58 @@ export class FancyDate
         else
           null
 
+  def_table_by_leap_month: ->
+    day = @calc.msec.day
+    upto = (src)->
+      msec = 0
+      for i in src
+        msec += i * day
+
+    years = _.uniq @calc.range.year
+
+    { months, month_divs } = @dic
+    month_sum = 0
+    for i in month_divs
+      month_sum += i
+
+    range =
+      month: {}
+    for size in years
+      a = Array.from month_divs
+      idx = month_divs.indexOf 0
+      a[idx] = size - month_sum
+      range.month[size] = a
+
+    month = {}
+    for size in years
+      month[size * day] = upto range.month[size]
+
+    @table = { range, msec: { month } }
+    ({ size }, path)->
+      switch path
+        when 'month'
+          month[size]
+        else
+          null
   def_table_by_season: ->
     @table = { range: {}, msec: {} }
     (o, path)-> null
 
   def_table: ->
-    @get_table = 
+    @get_table =
       if @dic.leaps?
-        @def_table_by_leap_year()
+        @def_table_by_leap_day()
       else
-        @def_table_by_season()
+        if @dic.month_divs?
+          @def_table_by_leap_month()
+        else
+          @def_table_by_season()
 
   def_idx: ->
-    week = @dic.weeks.length
-    eto  = @dic.etos.length
+    if @dic.weeks?
+      week = @dic.weeks.length
+    if @dic.etos?
+      eto  = @dic.etos.length
     Object.assign @calc.divs, { week, eto }
 
     [,year, month, day, week, hour, minute, second] = @dic.start.match reg_parse
@@ -280,9 +321,12 @@ export class FancyDate
     hour   = hour   - 0
     minute = minute - 0
     second = second - 0
-    eto    = @dic.etos.idx
-    week   = @dic.weeks.idx
-    season = @dic.seasons.idx
+    if @dic.etos?
+      eto    = @dic.etos.idx
+    if @dic.weeks?
+      week   = @dic.weeks.idx
+    if @dic.seasons?
+      season = @dic.seasons.idx
     moon   = 0
 
     if @dic.leaps?
