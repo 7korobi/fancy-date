@@ -102,8 +102,8 @@ export class FancyDate
     @
 
   rolls: ( weeks, etos )->
-    weeks = new Indexer @dic, 'E',   ...weeks
-    etos  = new Indexer @dic, '干支', ...etos
+    weeks = new Indexer @dic, 'E', ...weeks
+    etos  = new Indexer @dic, 'T', ...etos
     Object.assign @dic, { weeks, etos }
     @
 
@@ -132,9 +132,9 @@ export class FancyDate
 
   init: ->
     G = (s, list)=> if ! list || idx = list.indexOf(s) < 0 then s - 0 else idx
-    Z = w = M = d = D = (s, list)=> if ! list || idx = list.indexOf(s) < 0 then s - 1 else idx
+    T = Z = w = M = d = D = (s, list)=> if ! list || idx = list.indexOf(s) < 0 then s - 1 else idx
     e = E = N = J = Y = y = u = H = m = s = S = (s)=> s - 0
-    @dic.indexer = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N, D,w,J }
+    @dic.indexer = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J }
 
     at = (list, now_idx)->
       if list
@@ -150,12 +150,12 @@ export class FancyDate
         else
           ""
       }#{ at( list, o.now_idx ) ? _.padStart o.now_idx + 1, length, '0' }"
-    Z = w = d = D =     (o, list, length)=> at( list, o.now_idx ) ? _.padStart o.now_idx + 1, length, '0'
+    T = Z = w = d = D = (o, list, length)=> at( list, o.now_idx ) ? _.padStart o.now_idx + 1, length, '0'
     H = m = e = E = N = (o, list, length)=> at( list, o.now_idx ) ? _.padStart o.now_idx, length, '0'
     J = Y = y = u = s = (o, list, length)=> _.padStart o.now_idx, length, '0'
     S = ( o, list, length )=>
       "#{ o.now_idx / @calc.msec.second }"[2..]
-    @dic.labeler = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N, D,w,J }
+    @dic.labeler = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J }
 
 
     season = sub_define    @calc.msec.year, @dic.seasons.length
@@ -188,7 +188,7 @@ export class FancyDate
     list.push Infinity
     @table.msec.era = list
 
-    G = (list)=> "(#{ list.join("|") })"
+    G = T = (list)=> "(#{ list.join("|") })"
     M = d = H = m = e = E = Z = N = (list)=>
       if list
         "(#{ list.join("|") })"
@@ -198,7 +198,7 @@ export class FancyDate
     J = (list)=> "([\\d.]+)"
 
     @dic.regex = {}
-    for key, f of { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N, D,w,J }
+    for key, f of { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J }
       @dic.regex[key] = f @dic.list[key]
     @
 
@@ -280,7 +280,7 @@ export class FancyDate
     hour   = hour   - 0
     minute = minute - 0
     second = second - 0
-    eto    = 56
+    eto    = @dic.etos.idx
     week   = @dic.weeks.idx
     season = @dic.seasons.idx
     moon   = 0
@@ -493,28 +493,30 @@ K   = @dic.axtial_tilt / 360
 
     # 今月と中気
     Nn = to_tempo_mod "moon", "day"
-    Nn.now_idx -= N0.now_idx
-    Nn_p = Zz.last_at + @calc.msec.season * ( 1 + Nn.now_idx * 2 )
+    Zs = drill_down Zz, "season", Nn.last_at
+    center_at =
+      if Zs.now_idx & 1
+        Zs.last_at
+      else
+        Zs.next_at
+    unless Nn.last_at <= center_at < Nn.next_at
+      Zs = drill_down Zz, "season", Nn.next_at
+      center_at =
+        if Zs.now_idx & 1
+          Zs.last_at
+        else
+          Zs.next_at
+      unless Nn.last_at <= center_at < Nn.next_at
+        Nn.is_leap = true
 
-    # 先月と中気
-    Np = to_tempo_mod "moon", "day", Nn.last_at - 1
-    Np.now_idx -= N0.now_idx
-    Np_p = Zz.last_at + @calc.msec.season * ( 1 + Np.now_idx * 2 )
-
-    unless after_leap_month = Np.next_at <= Np_p
-      Nn.is_leap = Nn.next_at <= Nn_p
-    if after_leap_month
-      Nn.now_idx -= 1
-    else
-      switch Nn.now_idx
-        when -1
-          # 太陽年初に0月が出てしまう。昨年末にする。
-          Nn.now_idx = @dic.months.length - 1
-          Zz = to_tempo_bare Zz.size, Zz.zero + Zz.size, utc
-        when @dic.months.length
-          # 太陽年末に13月が出てしまう。年初にする。
-          Nn.now_idx = 0
-          Zz = to_tempo_bare Zz.size, Zz.zero - Zz.size, utc
+    switch Zs.now_idx >> 1
+      when -1
+        # 太陽年初に0月が出てしまう。昨年末にする。
+        Zz = to_tempo_bare Zz.size, Zz.zero, Zs.last_at
+      when @dic.seasons.length >> 1
+        # 太陽年末に13月が出てしまう。年初にする。
+        Zz = to_tempo_bare Zz.size, Zz.zero, Zs.next_at
+    Nn.now_idx = ( Zs.now_idx %% @dic.seasons.length ) >> 1
 
     N  = drill_down Nn, 'day'
 
@@ -564,7 +566,7 @@ K   = @dic.axtial_tilt / 360
     S = { now_idx }
 
     T =
-      label: [( u.now_idx + @calc.idx.eto )% 60]
+      now_idx: ( u.now_idx + @calc.idx.eto )% @dic.etos.length
 
     G = {}
     if @table.msec.era?
@@ -579,26 +581,7 @@ K   = @dic.axtial_tilt / 360
       G.label = "紀元前"
       y.now_idx = 1 - y.now_idx
 
-    graph = "#{
-      @dic.seasons.at Z.now_idx
-    } #{
-      if Z.now_idx % 2
-        _.padStart ( Z.now_idx + 1 )/ 2, 2,'0'
-      else
-        "  "
-    }\t #{
-      y.now_idx
-    }年#{
-      if Nn.is_leap
-        "閏"
-      else
-        "  "
-    }#{
-      _.padStart Nn.now_idx + 1, 2,'0'
-    }月#{
-      _.padStart N.now_idx + 1, 2,'0'
-    }日\t"
-    { G,u, y,M,d, D, Y,w,e,E, H,m,s,S, Z,N, J, era, graph }
+    { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J, era }
 
   index: (tgt, str = default_parse_format)->
     p = y = M = d = H = m = s = S = J = 0

@@ -171,7 +171,7 @@ describe "Gregorian", =>
       }#{
         format msec, " Y-ww-EEE", { locale }
       }#{
-        g.format msec, " Y-ww-E Z Gy年M月dd日 H時m分"
+        g.format msec, " Y-ww-E Z T Gy年M月dd日 H時m分"
       }"
     expect dst
     .toMatchSnapshot()
