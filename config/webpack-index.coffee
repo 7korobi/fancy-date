@@ -25,7 +25,7 @@ typescript =
   loader: 'ts-loader'
 
 module.exports =
-  mode: 'development'
+  mode: 'production'
   target: 'node' # Important
   devtool: 'source-map'
   entry:

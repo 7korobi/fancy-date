@@ -1,10 +1,65 @@
-class Tempo {
+
+export class Tempo {
   table: number[]
   zero: number
   write_at: number
   now_idx: number
   last_at: number
   next_at: number
+  get size() { return this.next_at - this.last_at }
+  get since() { return this.write_at - this.last_at }
+  get remain() { return this.next_at - this.write_at }
+  get timeout() { return this.next_at - this.write_at }
+  get moderate_at() {
+    if (this.now_idx & 1) {
+      return this.last_at
+    } else {
+      return this.next_at
+    }
+  }
+
+  mod_bare(sub_size: number, sub_zero: number): Tempo {
+    let { last_at, write_at, next_at, now_idx, size, zero } = this
+    const do2 = to_tempo_bare(sub_size, sub_zero, next_at)
+
+    if ( do2.last_at <= write_at ) {
+      const do3 = to_tempo_bare(sub_size, sub_zero, next_at + size)
+      last_at = do2.last_at
+      next_at = do3.last_at
+      now_idx++
+    } else {
+      const do1 = to_tempo_bare(sub_size, sub_zero, last_at)
+      last_at = do1.last_at
+      next_at = do2.last_at
+    }
+    return new Tempo(
+      zero,
+      now_idx,
+      write_at,
+      last_at,
+      next_at
+    )
+  }
+
+  copy() { return this.dup() }
+  dup(): Tempo {
+    const now = new Date().getTime()
+    if ( this.table ) {
+      return to_tempo_by(this.table, this.zero, now)
+    } else {
+      return to_tempo_bare(this.size, this.zero, now)
+    }
+  }
+
+  async sleep() {
+    const { timeout } = this
+    return new Promise((ok, ng) => {
+      setTimeout(() => {
+        ok(timeout);
+      }, timeout);
+    })
+  }
+
   constructor(zero: number, now_idx: number, write_at: number, last_at: number, next_at: number, table: number[] = null) {
     if ( table ) {
       this.table = table
@@ -16,17 +71,13 @@ class Tempo {
     this.last_at = last_at
     this.next_at = next_at
   }
-  get size() { return this.next_at - this.last_at }
-  get since() { return this.write_at - this.last_at}
-  get remain() { return this.next_at - this.write_at }
-  get timeout() { return this.next_at - this.write_at }
 };
 
-function to_msec (str: string): number {
+export function to_msec (str: string): number {
   return 1000 * to_sec(str);
 };
 
-function to_sec (str: string): number {
+export function to_sec (str: string): number {
   let timeout = 0;
   str.replace(/(\d+)([ヵ]?([smhdwy秒分時日週月年])[間]?(半$)?)|0/g, (full, num_str: string, fullunit, unit: string, appendix: string) => {
     let num = Number(num_str);
@@ -68,7 +119,7 @@ function to_sec (str: string): number {
   return timeout;
 };
 
-function to_tempo_bare (size: number, zero: number, write_at: number) {
+export function to_tempo_bare (size: number, zero: number, write_at: number) {
   const now_idx = Math.floor((write_at - zero) / size);
   const last_at = (now_idx + 0) * size + zero;
   const next_at = (now_idx + 1) * size + zero;
@@ -83,7 +134,7 @@ function to_tempo_bare (size: number, zero: number, write_at: number) {
 }
 
 // バイナリサーチ 高速化はするが、微差なので複雑さのせいで逆に遅いかも？
-function to_tempo_by (table: number[], zero: number, write_at: number) {
+export function to_tempo_by (table: number[], zero: number, write_at: number) {
   const scan_at = write_at - zero
   let now_idx = -1
   let next_at = zero
@@ -119,11 +170,3 @@ function to_tempo_by (table: number[], zero: number, write_at: number) {
     table
   )
 };
-
-export {
-  Tempo,
-  to_msec,
-  to_sec,
-  to_tempo_bare,
-  to_tempo_by
-}

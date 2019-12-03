@@ -496,47 +496,8 @@ K   = @dic.earthy[2] / 360
     to_tempo = (path, write_at = utc)=>
       to_tempo_bare @calc.msec[path], @calc.zero[path], write_at
 
-    to_tempo_mod = ({ next_at, write_at, now_idx, size, zero }, sub)=>
-      do2 = to_tempo sub, next_at
-      if do2.last_at <= write_at
-        do3 = to_tempo sub, next_at + size
-        now_idx += 1
-        last_at = do2.last_at
-        next_at = do3.last_at
-
-      else
-        do1 = to_tempo sub, next_at - size
-        last_at = do1.last_at
-        next_at = do2.last_at
-
-      new Tempo(
-        zero
-        now_idx
-        write_at
-        last_at
-        next_at
-      )
-
-    to_tempo_mod2 = ({ last_at, write_at, now_idx, size, zero }, sub)=>
-      do2 = to_tempo sub, last_at
-      if do2.next_at <= write_at
-        do3 = to_tempo sub, last_at + size
-        now_idx += 1
-        last_at = do2.next_at
-        next_at = do3.next_at
-
-      else
-        do1 = to_tempo sub, last_at - size
-        last_at = do1.next_at
-        next_at = do2.next_at
-
-      new Tempo(
-        zero
-        now_idx
-        write_at
-        last_at
-        next_at
-      )
+    to_tempo_mod = (o, sub)=>
+      o.mod_bare @calc.msec[sub], @calc.zero[sub]
 
     J = to_tempo_bare @calc.msec.day, @calc.zero.jd, utc # ユリウス日
 
@@ -553,19 +514,9 @@ K   = @dic.earthy[2] / 360
     Nn = to_tempo "moon"
     Nn = to_tempo_mod Nn, "day"
     Zs = drill_down Zz, "season", Nn.last_at
-    center_at =
-      if Zs.now_idx & 1
-        Zs.last_at
-      else
-        Zs.next_at
-    unless Nn.last_at <= center_at < Nn.next_at
+    unless Nn.last_at <= Zs.moderate_at < Nn.next_at
       Zs = drill_down Zz, "season", Nn.next_at
-      center_at =
-        if Zs.now_idx & 1
-          Zs.last_at
-        else
-          Zs.next_at
-      unless Nn.last_at <= center_at < Nn.next_at
+      unless Nn.last_at <= Zs.moderate_at < Nn.next_at
         Nn.is_leap = true
 
     switch Zs.now_idx >> 1
@@ -586,7 +537,7 @@ K   = @dic.earthy[2] / 360
       M = drill_down u, "month"
       d = drill_down M, "day"
     else
-      u = Zz # to_tempo_mod2 Zz, "moon"
+      u = Zz
       M = Nn
       d = N
 
@@ -740,4 +691,3 @@ K   = @dic.earthy[2] / 360
         token
     .join("")
 
-module.exports = FancyDate

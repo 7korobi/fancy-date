@@ -1,4 +1,4 @@
-FancyDate = require './fancy-date'
+{ FancyDate } = require './fancy-date'
 
 七曜 = ['月','火','水','木','金','土','日']
 六曜 = ["先勝","友引","先負","仏滅","大安","赤口"]
