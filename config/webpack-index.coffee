@@ -20,6 +20,10 @@ coffee =
         ]
       ]
 
+typescript =
+  test: /\.ts$/
+  loader: 'ts-loader'
+
 module.exports =
   mode: 'development'
   target: 'node' # Important
@@ -29,16 +33,17 @@ module.exports =
   output:
     path: current
     filename: '[name].js' # Important
-    library: 'VuePetitStore'
+    library: 'FancyDate'
     libraryTarget: 'umd' # Important
 
   module:
     rules: [
       coffee
+      typescript
     ]
 
   resolve:
-    extensions: [ '.coffee', '.js' ]
+    extensions: [ '.coffee', '.ts', '.js' ]
 
   externals: [nodeExternals()] # Important
 

@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "target": "esnext",    // esnextに変換する
+    "module": "commonjs",  // commonjs方式のモジュールシステム(import/export)を使う
+    "noImplicitAny": true, // TypeScriptでは型定義がない変数はany型になる(暗黙のany型)のでこれを禁止する
+  }
+}
