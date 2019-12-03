@@ -9,7 +9,8 @@ const YEAR  = to_msec( "1y")
 const INTERVAL =   0x7fffffff // 31bits.
 const VALID = 0xfffffffffffff // 52bits.
 
-const timezone = window ? ( MINUTE * new Date().getTimezoneOffset()) : to_msec("-9h")
+const has_window = "undefined" !== typeof window && window !== null
+const timezone = has_window ? ( MINUTE * new Date().getTimezoneOffset()) : to_msec("-9h")
 const tempo_zero = (- new Date(0).getDay() ) * DAY + timezone
 
 const TIMERS: [string, string, number][] = [
