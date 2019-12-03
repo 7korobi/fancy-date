@@ -117,12 +117,12 @@ describe "Gregorian", =>
   test 'format', =>
     str = "Gy年M月d日(E)H時 Z"
     expect [
-      g.format 100000000000000, str 
-      g.format 10000000000000, str 
-      g.format new Date("2019-5-1").getTime(), str 
-      g.format 1000000000000, str 
-      g.format 100000000000, str 
-      g.format 10000000000, str 
+      g.format 100000000000000, str
+      g.format 10000000000000, str
+      g.format 1556636400000, str
+      g.format 1000000000000, str
+      g.format 100000000000, str
+      g.format 10000000000, str
       g.format 0, str 
       g.format g.calc.zero.period, str 
     ].join("\n")
