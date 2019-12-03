@@ -87,8 +87,7 @@ export class Tempo {
   }
 
   copy() { return this.dup() }
-  dup(): Tempo {
-    const now = new Date().getTime()
+  dup(now: number = Date.now()): Tempo {
     if ( this.table ) {
       return to_tempo_by(this.table, this.zero, now)
     } else {
@@ -96,11 +95,20 @@ export class Tempo {
     }
   }
 
+  tick() {
+    const now = Date.now()
+    if ( this.next_at <= now ) {
+      return this.dup(now)
+    } else {
+      return null
+    }
+  }
+
   async sleep() {
     const { timeout } = this
     return new Promise((ok, ng) => {
       setTimeout(() => {
-        ok(timeout);
+        ok(this);
       }, timeout);
     })
   }
@@ -118,7 +126,7 @@ export class Tempo {
   }
 };
 
-export function to_tempo(size_str: string, zero_str: string = "0s", write_at: number | Date = new Date()) {
+export function to_tempo(size_str: string, zero_str: string = "0s", write_at: number | Date = Date.now()) {
   const size = to_msec(size_str)
   const zero = to_msec(zero_str) + tempo_zero
   return to_tempo_bare(size, zero, Number(write_at))
