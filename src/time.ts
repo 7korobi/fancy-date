@@ -104,13 +104,8 @@ export class Tempo {
     }
   }
 
-  async sleep() {
-    const { timeout } = this
-    return new Promise((ok, ng) => {
-      setTimeout(() => {
-        ok(this);
-      }, timeout);
-    })
+  sleep() {
+    return Tempo.sleep([this])
   }
 
   constructor(zero: number, now_idx: number, write_at: number, last_at: number, next_at: number, table: number[] = null) {
@@ -123,6 +118,19 @@ export class Tempo {
     this.now_idx = now_idx
     this.last_at = last_at
     this.next_at = next_at
+  }
+  static async sleep(tempos: Tempo[]) {
+    if (tempos && tempos.length ) {
+      const o = tempos.reduce(((min, o)=> min.timeout < o.timeout ? min : o ), { timeout: Infinity })
+      if ( o.timeout < Infinity ) {
+        return new Promise((ok) => {
+          setTimeout(() => {
+            ok(o);
+          }, o.timeout);
+        })  
+      }
+    }
+    return new Promise(ok => ok(null))
   }
 };
 

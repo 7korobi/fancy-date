@@ -1,6 +1,6 @@
 {
   "name": "fancy-date",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "架空の暦を扱う",
   "main": "lib/index.min.js",
   "repository": "git@github.com:7korobi/fancy-date.git",
