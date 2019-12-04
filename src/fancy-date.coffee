@@ -131,20 +131,19 @@ export class FancyDate
         if s?
           s
 
-    G = (o)-> o.label
-    M = (o, list, length)->
+    G = ()-> @label
+    M = ( length )->
       "#{
-        if o.is_leap
+        if @is_leap
           "閏"
         else
           ""
-      }#{ at( list, o.now_idx ) ? _.padStart o.now_idx + 1, length, '0' }"
-    T = Z = w = d = D = (o, list, length)=> at( list, o.now_idx ) ? _.padStart o.now_idx + 1, length, '0'
-    H = m = e = E = N = (o, list, length)=> at( list, o.now_idx ) ? _.padStart o.now_idx, length, '0'
-    J = Y = y = u = s = (o, list, length)=> _.padStart o.now_idx, length, '0'
-    S = ( o, list, length )=>
-      "#{ o.now_idx / @calc.msec.second }"[2..]
-    @dic.labeler = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J }
+      }#{ at( @list, @now_idx ) ? _.padStart @now_idx + 1, length, '0' }"
+    T = Z = w = d = D = ( length )-> at( @list, @now_idx ) ? _.padStart @now_idx + 1, length, '0'
+    H = m = e = E = N = ( length )-> at( @list, @now_idx ) ? _.padStart @now_idx, length, '0'
+    J = Y = y = u = s = ( length )-> _.padStart @now_idx, length, '0'
+    S = ( length )-> "#{ @now_idx }"[1..]
+    @dic.to_label = { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J }
 
 
     season = sub_define    @calc.msec.year, @dic.Z.length
@@ -539,7 +538,7 @@ K   = @dic.earthy[2] / 360
     else
       u = Zz
       M = Nn
-      d = N
+      d = N.dup utc
 
     # day    in week (曜日)
     w0 = to_tempo 'week', u.last_at
@@ -572,7 +571,7 @@ K   = @dic.earthy[2] / 360
       s = drill_down m, "second"
 
     # minute in day
-    now_idx = utc - s.last_at
+    now_idx = ( utc - s.last_at ) / @calc.msec.second
     S = { now_idx }
 
     T =
@@ -591,7 +590,14 @@ K   = @dic.earthy[2] / 360
       G.label = "紀元前"
       y.now_idx = 1 - y.now_idx
 
-    { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J, era }
+    @appear { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J, era }
+
+  appear: (o)->
+    for key, val of @dic.list
+      o[key].list = val
+    for key, val of @dic.to_label
+      o[key].to_label = val
+    o
 
   index: (tgt, str = default_parse_format)->
     p = y = M = d = H = m = s = S = J = 0
@@ -620,13 +626,6 @@ K   = @dic.earthy[2] / 360
         "(#{token.replace(/([\\\[\]().*?])/g,"\\$1")})"
     .join("")
     new RegExp reg
-
-  to_label: ( o, token )->
-    if f = @dic.labeler[token[0]]
-      list = @dic.list[token[0]]
-      f o, list, token.length
-    else
-      token
 
   tempo_list: (tempos, token)->
     switch token[0]
@@ -685,8 +684,9 @@ K   = @dic.earthy[2] / 360
     o = @to_tempos utc
     str.match reg_token
     .map (token)=>
-      if val = o[token[0]]
-        @to_label val, token
+      val = o[token[0]]
+      if val?.to_label?
+        val.to_label token.length
       else
         token
     .join("")

@@ -86,6 +86,18 @@ export class Tempo {
     )
   }
 
+  succ( n = 1 ) { return this.slide(+n) }
+  back( n = 1 ) { return this.slide(-n) }
+  slide( n: number ) {
+    if ( this.table ) {
+      const last_at = this.table[this.now_idx + n - 1] + this.zero
+      return to_tempo_by(this.table, this.zero, last_at + this.since)
+    } else {
+      const size = n * this.size
+      return to_tempo_bare(this.size, this.zero, this.write_at + size)
+    }
+  }
+
   copy() { return this.dup() }
   dup(now: number = Date.now()): Tempo {
     if ( this.table ) {
