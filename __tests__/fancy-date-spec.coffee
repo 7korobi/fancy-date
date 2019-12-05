@@ -171,7 +171,7 @@ describe "Gregorian", =>
       }#{
         format msec, " Y-ww-EEE", { locale }
       }#{
-        g.format msec, " Y-ww-E TZ Gy年M月dd日 H時m分 J"
+        g.format msec, " Y-ww-E TZ Gyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()
@@ -202,7 +202,7 @@ describe "火星", =>
     dst = []
     for msec in mars_msecs
       dst.push "#{
-        mg.format msec, "Z Gy年M月dd日 E H時m分 ssss秒"
+        mg.format msec, "Z Gyyyy/MM/dd E HH:mm:ss"
       } #{
         format msec, "\tyyyy-MM-dd EEE HH:mm", { locale }
       }"
