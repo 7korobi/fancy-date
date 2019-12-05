@@ -433,10 +433,12 @@ K   = @dic.earthy[2] / 360
     T0  = to_tempo_bare @calc.msec.year, @calc.zero.season, utc
 
     # 南中差分の計算がテキトウになってしまった。あとで検討。
-    南中差分A = Math.floor 2   * deg_to_day * sin(( T0.since              ) * year_to_rad     )
-    南中差分B = Math.floor 2.5 * deg_to_day * sin(( T0.since + 1296000000 ) * year_to_rad * 2 )
-    南中時刻 = ( last_at + next_at ) / 2 + 南中差分A + 南中差分B
-    真夜中 = last_at + 南中差分A + 南中差分B
+    南中差分A = deg_to_day * 2.0 * sin( year_to_rad * 1 *   T0.since )
+    南中差分B = deg_to_day * 2.5 * sin( year_to_rad * 2 * ( T0.since + @calc.msec.year * 0.1 ))
+    南中差分 = 南中差分A + 南中差分B
+
+    南中時刻 = ( last_at + next_at ) / 2 + 南中差分
+    真夜中 = last_at + 南中差分
 
     T1 = to_tempo_bare @calc.msec.year, @dic.sunny[1], 南中時刻
 
@@ -450,8 +452,8 @@ K   = @dic.earthy[2] / 360
     日の出 = Math.floor 南中時刻 - 時角 * rad_to_day
     日の入 = Math.floor 南中時刻 + 時角 * rad_to_day
     { 
-      T0: [@calc.msec.year, @calc.zero.season, utc],
-      utc,idx,高度,K,lat,T1,南中差分A,南中差分B,  時角,方向, last_at, 真夜中,日の出,南中時刻,日の入, next_at }
+      T0,
+      utc,idx,高度,K,lat,T1,南中差分,  時角,方向, last_at, 真夜中,日の出,南中時刻,日の入, next_at }
 
   to_tempo_by_solor: (utc, day)->
     { 日の出, 南中時刻, 日の入 } = @solor utc, 2, day
