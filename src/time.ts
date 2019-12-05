@@ -55,6 +55,7 @@ export class Tempo {
   get since() { return this.write_at - this.last_at }
   get remain() { return this.next_at - this.write_at }
   get timeout() { return this.next_at - this.write_at }
+  get center_at() { return ( this.next_at + this.last_at ) / 2 }
   get moderate_at() {
     if (this.now_idx & 1) {
       return this.last_at

@@ -237,14 +237,6 @@ export class FancyDate
       month[size * day] = upto range.month[size]
 
     @table = { range, msec: { year, month } }
-    ({ size }, path)->
-      switch path
-        when 'year'
-          year
-        when 'month'
-          month[size]
-        else
-          null
 
   def_table_by_leap_month: ->
     day = @calc.msec.day
@@ -273,25 +265,18 @@ export class FancyDate
       month[size * day] = upto range.month[size]
 
     @table = { range, msec: { month } }
-    ({ size }, path)->
-      switch path
-        when 'month'
-          month[size]
-        else
-          null
+
   def_table_by_season: ->
     @table = { range: {}, msec: {} }
-    (o, path)-> null
 
   def_table: ->
-    @get_table =
-      if @is_table_leap
-        @def_table_by_leap_day()
+    if @is_table_leap
+      @def_table_by_leap_day()
+    else
+      if @is_table_month
+        @def_table_by_leap_month()
       else
-        if @is_table_month
-          @def_table_by_leap_month()
-        else
-          @def_table_by_season()
+        @def_table_by_season()
 
   def_idx: ->
     week = @dic.E?.length
@@ -411,12 +396,13 @@ K   = @dic.earthy[2] / 360
   南中時刻 + 時角
 ###
 
-  solor: (utc, idx = 2, { last_at, next_at } = to_tempo_bare @calc.msec.day, @calc.zero.day, utc )->
+  solor: (utc, idx = 2, { last_at, center_at, next_at } = to_tempo_bare @calc.msec.day, @calc.zero.day, utc )->
     days = [
         6      # golden hour end         / golden hour
       -18 / 60 # sunrise bottom edge end / sunset bottom edge start
       -50 / 60 # sunrise top edge start  / sunset top edge end
        -6      # dawn                    / dusk
+       -7.36   # 寛政暦 太陽の伏角が7°21′40″
       -12      # nautical dawn           / nautical dusk
       -18      # night end               / night
     ]
@@ -437,7 +423,7 @@ K   = @dic.earthy[2] / 360
     南中差分B = deg_to_day * 2.5 * sin( year_to_rad * 2 * ( T0.since + @calc.msec.year * 0.1 ))
     南中差分 = 南中差分A + 南中差分B
 
-    南中時刻 = ( last_at + next_at ) / 2 + 南中差分
+    南中時刻 = center_at + 南中差分
     真夜中 = last_at + 南中差分
 
     T1 = to_tempo_bare @calc.msec.year, @dic.sunny[1], 南中時刻
@@ -456,7 +442,7 @@ K   = @dic.earthy[2] / 360
       utc,idx,高度,K,lat,T1,南中差分,  時角,方向, last_at, 真夜中,日の出,南中時刻,日の入, next_at }
 
   to_tempo_by_solor: (utc, day)->
-    { 日の出, 南中時刻, 日の入 } = @solor utc, 2, day
+    { 日の出, 南中時刻, 日の入 } = @solor utc, 4, day
     size = @dic.H.length / 4
 
     list = []
@@ -484,7 +470,8 @@ K   = @dic.earthy[2] / 360
 
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>
-      table = @get_table base, path
+      data = @table.msec[path]
+      table = data?[base.size] || data
       if table
         o = to_tempo_by table, base.last_at, at
       else
