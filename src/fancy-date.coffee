@@ -468,6 +468,46 @@ K   = @dic.earthy[2] / 360
     list.push ...tails.reverse()
     to_tempo_by list, day.last_at, utc
 
+  雑節: (Zz, dd)->
+    [
+      立春, 立夏, 立秋, 立冬,
+      冬至, 春分, 夏至, 秋分,
+      入梅, 半夏生,
+      春土用, 夏土用, 秋土用, 冬土用,
+    ] = [
+      1/8, 3/8, 5/8, 7/8,
+       1 , 2/8, 4/8, 6/8,
+       80/360, 100/360,
+      3/40, 13/40, 23/40, 33/40
+    ].map (n)=>
+      dd.dup ( n - 1/8 ) * Zz.size + Zz.last_at
+
+    [春彼岸, 秋彼岸] = [春分, 秋分].map (d)=>
+      [-3..3].map (n)=>
+        d.slide(n)
+    土用 = []
+    土用count = (d, limit)->
+      while d.last_at < limit.last_at
+        土用.push(d)
+        d = d.succ()
+      return 土用[-1..][0]
+
+    春節分 = 土用count 春土用, 立春
+    夏節分 = 土用count 夏土用, 立夏
+    秋節分 = 土用count 秋土用, 立秋
+    冬節分 = 土用count 冬土用, 立冬
+    節分 = 春節分
+
+    [ 八十八夜, 二百十日, 二百二十日 ] = [88, 210, 220].map (n)=> 立春.succ(n - 1)
+    { 立春, 立夏, 立秋, 立冬,
+      冬至, 春分, 夏至, 秋分,
+      入梅, 半夏生,
+      春土用, 夏土用, 秋土用, 冬土用, 土用,
+      春節分, 夏節分, 秋節分, 冬節分, 節分,
+      春彼岸, 秋彼岸,
+      八十八夜, 二百十日, 二百二十日,
+    }
+
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>
       data = @table.msec[path]
@@ -501,6 +541,8 @@ K   = @dic.earthy[2] / 360
     # 今月と中気
     Nn = to_tempo "moon"
     Nn = to_tempo_mod Nn, "day"
+    N  = drill_down Nn, 'day'
+
     Zs = drill_down Zz, "season", Nn.last_at
     unless Nn.last_at <= Zs.moderate_at < Nn.next_at
       Zs = drill_down Zz, "season", Nn.next_at
@@ -510,13 +552,11 @@ K   = @dic.earthy[2] / 360
     switch Zs.now_idx >> 1
       when -1
         # 太陽年初に0月が出てしまう。昨年末にする。
-        Zz = to_tempo_bare Zz.size, Zz.zero, Zs.last_at
+        Zz = Zz.dup Zs.last_at
       when @dic.Z.length >> 1
         # 太陽年末に13月が出てしまう。年初にする。
-        Zz = to_tempo_bare Zz.size, Zz.zero, Zs.next_at
+        Zz = Zz.dup Zs.next_at
     Nn.now_idx = ( Zs.now_idx %% @dic.Z.length ) >> 1
-
-    N  = drill_down Nn, 'day'
 
     if @is_table_leap
       p = to_tempo 'period'
@@ -528,6 +568,7 @@ K   = @dic.earthy[2] / 360
       u = Zz
       M = Nn
       d = N.dup utc
+    雑節 = @雑節 Zz, d
 
     # day    in week (曜日)
     w0 = to_tempo 'week', u.last_at
@@ -579,7 +620,7 @@ K   = @dic.earthy[2] / 360
       G.label = "紀元前"
       y.now_idx = 1 - y.now_idx
 
-    @appear { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J, era }
+    @appear { G, u,Y,y,M,d, H,m,s,S, e,E, Z,N,T, D,w,J, 雑節 }
 
   appear: (o)->
     for key, val of @dic.list

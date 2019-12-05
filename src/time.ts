@@ -99,7 +99,7 @@ export class Tempo {
     }
   }
 
-  copy() { return this.dup() }
+  copy(now: number = Date.now()) { return this.dup(now) }
   dup(now: number = Date.now()): Tempo {
     if ( this.table ) {
       return to_tempo_by(this.table, this.zero, now)

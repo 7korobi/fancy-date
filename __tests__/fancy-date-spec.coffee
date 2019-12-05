@@ -114,6 +114,28 @@ describe "Gregorian", =>
       leap: [4, -128, 456, -3217]
       minute: [60]
 
+  test '雑季', =>
+    expect [
+      g.to_tempos 100000000000000
+      g.to_tempos 10000000000000
+      g.to_tempos 1556636400000
+      g.to_tempos 1000000000000
+      g.to_tempos 100000000000
+      g.to_tempos 10000000000
+      g.to_tempos 0 
+      g.to_tempos g.calc.zero.period 
+    ].map (o)=>
+      list =
+        for key, val of o.雑節
+          if val.length
+            val.map (d)=>
+              g.format d.center_at, "yyyy/MM/dd E Z #{key}"
+          else
+            g.format val.center_at, "yyyy/MM/dd E Z #{key}"
+      list.flat(2).sort()
+    .toMatchSnapshot()
+    return
+
   test 'format', =>
     str = "Gy年M月d日(E)H時 Z"
     expect [
