@@ -118,9 +118,7 @@ describe "平気法", =>
     dst = []
     for msec in earth_msecs
       dst.push "#{
-        平気法.format msec, "Gy年Mdd日 Z E Hm ssss秒"
-      } #{
-        g.format msec, "Z E"
+        平気法.format msec, "Gy年Mdd日 E Hm ssss秒"
       } #{
         format msec, "\tyyyy-MM-dd EEE HH:mm", { locale }
       }"
