@@ -1,6 +1,5 @@
-require './sample'
-
 module.exports = {
+  ...require "./sample"
   ...require "./fancy-date"
   ...require "./time"
 }

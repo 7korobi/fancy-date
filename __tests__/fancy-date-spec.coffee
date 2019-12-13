@@ -88,13 +88,39 @@ describe "平気法", =>
     expect 平気法.precision()
     .toEqual
       leap: [4]
-      minute: [3600]
+      day: [[12],[2],[3600]]
+
+  test '雑節', =>
+    expect [
+      平気法.to_tempos 100000000000000
+      平気法.to_tempos 10000000000000
+      平気法.to_tempos 1556636400000
+      平気法.to_tempos 1000000000000
+      平気法.to_tempos 100000000000
+      平気法.to_tempos 10000000000
+      平気法.to_tempos 0 
+    ].map (o)=>
+      list =
+        for key, val of o.雑節
+          if val
+            if val.length
+              val.map (d)=>
+                平気法.format d.center_at, "Gyy年Mdd日 E Z #{key}"
+            else
+              平気法.format val.center_at, "Gyy年Md日 E Z #{key}"
+          else
+            "#{val} #{key}"
+      list.flat(2).sort()
+    .toMatchSnapshot()
+    return
 
   test '二十四節季と月相', =>
     dst = []
     for msec in earth_msecs
       dst.push "#{
-        平気法.format msec, "Gy年Mdd日 E Hm ssss秒"
+        平気法.format msec, "Gy年Mdd日 Z E Hm ssss秒"
+      } #{
+        g.format msec, "Z E"
       } #{
         format msec, "\tyyyy-MM-dd EEE HH:mm", { locale }
       }"
@@ -112,9 +138,9 @@ describe "Gregorian", =>
     expect g.precision()
     .toEqual
       leap: [4, -128, 456, -3217]
-      minute: [60]
+      day: [[24],[60],[60]]
 
-  test '雑季', =>
+  test '雑節', =>
     expect [
       g.to_tempos 100000000000000
       g.to_tempos 10000000000000
@@ -123,7 +149,7 @@ describe "Gregorian", =>
       g.to_tempos 100000000000
       g.to_tempos 10000000000
       g.to_tempos 0 
-      g.to_tempos g.calc.zero.period 
+      g.to_tempos g.calc.zero.period
     ].map (o)=>
       list =
         for key, val of o.雑節
@@ -137,7 +163,7 @@ describe "Gregorian", =>
     return
 
   test 'format', =>
-    str = "Gy年M月d日(E)H時 Z"
+    str = "Gy年MM月dd日(E)HH時 Z"
     expect [
       g.format 100000000000000, str
       g.format 10000000000000, str
@@ -150,18 +176,18 @@ describe "Gregorian", =>
     ].join("\n")
     .toEqual [
       "西暦5138年11月16日(水)18時 立冬"
-      "西暦2286年11月21日(日)2時 小雪"
-      "西暦2019年5月1日(水)0時 穀雨"
-      "西暦2001年9月9日(日)10時 白露"
-      "西暦1973年3月3日(土)18時 雨水"
-      "西暦1970年4月27日(月)2時 穀雨"
-      "西暦1970年1月1日(木)9時 冬至"
-      "紀元前1年1月1日(土)0時 冬至"
+      "西暦2286年11月21日(日)02時 小雪"
+      "西暦2019年05月01日(水)00時 穀雨"
+      "西暦2001年09月09日(日)10時 白露"
+      "西暦1973年03月03日(土)18時 雨水"
+      "西暦1970年04月27日(月)02時 穀雨"
+      "西暦1970年01月01日(木)09時 冬至"
+      "紀元前1年01月01日(土)00時 冬至"
     ].join("\n")
     return
 
   test 'parse → fomat cycle', =>
-    str = "Gy年M月d日(E)H時m分s秒"
+    str = "Gy年MM月dd日(E)H時m分s秒"
     expect [
       g.format g.parse("1970年4月27日"), str
       g.format g.parse("1973年3月3日"), str
@@ -170,9 +196,9 @@ describe "Gregorian", =>
       g.format g.parse("5138年11月16日"), str
     ].join("\n")
     .toEqual [
-      "西暦1970年4月27日(月)0時0分0秒"
-      "西暦1973年3月3日(土)0時0分0秒"
-      "西暦2001年9月9日(日)0時0分0秒"
+      "西暦1970年04月27日(月)0時0分0秒"
+      "西暦1973年03月03日(土)0時0分0秒"
+      "西暦2001年09月09日(日)0時0分0秒"
       "西暦2286年11月21日(日)0時0分0秒"
       "西暦5138年11月16日(水)0時0分0秒"
     ].join("\n")
@@ -193,7 +219,7 @@ describe "Gregorian", =>
       }#{
         format msec, " Y-ww-EEE", { locale }
       }#{
-        g.format msec, " Y-ww-E TZ Gyyyy/MM/dd HH:mm:ss J"
+        g.format msec, " Y-ww-E aZ Gyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()
@@ -209,8 +235,8 @@ describe "火星", =>
   test 'precision', =>
     expect mg.precision()
     .toEqual
-      leap: [1,-2,10,-143,328,-3468]
-      minute: [59.66061827956989]
+      leap: [1,-7,73,-1536]
+      day: [[24],[60],[61.625025]]
 
   test '太陽の動き', =>
     dst = []

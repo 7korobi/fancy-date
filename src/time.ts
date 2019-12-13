@@ -64,17 +64,40 @@ export class Tempo {
     }
   }
 
-  mod_bare(sub_size: number, sub_zero: number): Tempo {
+  ceil(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
     let { last_at, write_at, next_at, now_idx, size, zero } = this
-    const do2 = to_tempo_bare(sub_size, sub_zero, next_at)
+    const do2 = subf(sub1, sub2, last_at)
+
+    if ( write_at < do2.next_at ) {
+      const do3 = subf(sub1, sub2, last_at - size)
+      next_at = do2.next_at
+      last_at = do3.next_at
+      now_idx--
+    } else {
+      const do1 = subf(sub1, sub2, next_at)
+      next_at = do1.next_at
+      last_at = do2.next_at
+    }
+    return new Tempo(
+      zero,
+      now_idx,
+      write_at,
+      last_at,
+      next_at
+    )
+  }
+
+  floor(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
+    let { last_at, write_at, next_at, now_idx, size, zero } = this
+    const do2 = subf(sub1, sub2, next_at)
 
     if ( do2.last_at <= write_at ) {
-      const do3 = to_tempo_bare(sub_size, sub_zero, next_at + size)
+      const do3 = subf(sub1, sub2, next_at + size)
       last_at = do2.last_at
       next_at = do3.last_at
       now_idx++
     } else {
-      const do1 = to_tempo_bare(sub_size, sub_zero, last_at)
+      const do1 = subf(sub1, sub2, last_at)
       last_at = do1.last_at
       next_at = do2.last_at
     }
@@ -87,6 +110,18 @@ export class Tempo {
     )
   }
 
+  is_cover( at: number ) { return this.last_at <= at && at < this.next_at }
+
+  upto( limit: Tempo, cb: (p: Tempo) => void ) {
+    let p: Tempo = this
+    let last = null
+    while ( p.last_at < limit.last_at ) {
+      cb(p)
+      last = p
+      p = p.succ()
+    }
+    return last
+  }
   succ( n = 1 ) { return this.slide(+n) }
   back( n = 1 ) { return this.slide(-n) }
   slide( n: number ) {
