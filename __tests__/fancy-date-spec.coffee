@@ -6,8 +6,9 @@ locale = require "date-fns/locale/ja"
 _ = require 'lodash'
 
 
-g = Gregorian
-mg = MarsGregorian
+g = FancyDate.Gregorian
+mg = FancyDate.MarsGregorian
+jg = FancyDate.JupiterGregorian
 
 to_graph = (c, msec)->
   { PI } = Math
@@ -29,46 +30,38 @@ to_graph = (c, msec)->
     Math.floor 時角 / deg_to_rad
   }"
 
+deploy = (c, moon_zero, season_zero)->
+  list = []
+  for i in [0.. to_msec("20y") / c.calc.msec.moon]
+    msec = moon_zero + i * c.calc.msec.moon
+    { last_at, next_at } = c.to_tempos(msec).d
+    list.push last_at - 1
+    list.push last_at
+    list.push next_at - 1
+    list.push next_at
+  for i in [0.. to_msec("20y") / c.calc.msec.season]
+    msec = season_zero + i * c.calc.msec.season
+    { last_at, next_at } = c.to_tempos(msec).d
+    list.push last_at - 1
+    list.push last_at
+    list.push next_at - 1
+    list.push next_at
+  _.sortedUniq list.sort()
 
-moon_zero   = to_tempo_bare( g.calc.msec.moon,   g.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-season_zero = to_tempo_bare( g.calc.msec.season, g.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
-list = []
-for i in [0.. to_msec("20y") / g.calc.msec.moon]
-  msec = moon_zero + i * g.calc.msec.moon
-  { last_at, next_at } = to_tempo_bare to_msec("1d"), to_msec("15h"), msec
-  list.push last_at - 1
-  list.push last_at
-  list.push next_at - 1
-  list.push next_at
-for i in [0.. to_msec("20y") / g.calc.msec.season]
-  msec = season_zero + i * g.calc.msec.season
-  { last_at, next_at } = to_tempo_bare to_msec("1d"), to_msec("15h"), msec
-  list.push last_at - 1
-  list.push last_at
-  list.push next_at - 1
-  list.push next_at
-earth_msecs = _.sortedUniq list.sort()
+earth_msecs = deploy( g,
+  moon_zero   = to_tempo_bare( g.calc.msec.moon,   g.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
+  season_zero = to_tempo_bare( g.calc.msec.season, g.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+)
 
+mars_msecs = deploy( mg,
+  moon_zero   = to_tempo_bare( mg.calc.msec.moon,   mg.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
+  season_zero = to_tempo_bare( mg.calc.msec.season, mg.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+)
 
-moon_zero   = to_tempo_bare( mg.calc.msec.moon,   mg.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-season_zero = to_tempo_bare( mg.calc.msec.season, mg.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
-list = []
-for i in [0.. to_msec("20y") / mg.calc.msec.moon]
-  msec = moon_zero + i * mg.calc.msec.moon
-  { last_at, next_at } = to_tempo_bare mg.calc.msec.day, mg.calc.zero.day, msec
-  list.push last_at - 1
-  list.push last_at + 1
-  list.push next_at - 1
-  list.push next_at + 1
-for i in [0.. to_msec("20y") / mg.calc.msec.season]
-  msec = season_zero + i * mg.calc.msec.season
-  { last_at, next_at } = to_tempo_bare mg.calc.msec.day, mg.calc.zero.day, msec
-  list.push last_at - 1
-  list.push last_at + 1
-  list.push next_at - 1
-  list.push next_at + 1
-mars_msecs = _.uniq list.sort()
-
+jupiter_msecs = deploy( jg,
+  moon_zero   = to_tempo_bare( jg.calc.msec.moon,   jg.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
+  season_zero = to_tempo_bare( jg.calc.msec.season, jg.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+)
 
 describe "define", =>
   test 'data', =>
@@ -265,4 +258,39 @@ describe "火星", =>
     return
   return
 
+describe "木星", =>
+  test 'calc', =>
+    expect jg.calc
+    .toMatchSnapshot()
+    return
 
+  test 'precision', =>
+    expect jg.precision()
+    .toEqual
+      leap: [1, -5, 105,-2044]
+      day: [[24],[60],[24.84]]
+    expect jg.table.month
+    .toMatchSnapshot()
+
+  test '太陽の動き', =>
+    dst = []
+    for msec in jupiter_msecs
+      dst.push to_graph jg, msec
+    expect dst
+    .toMatchSnapshot()
+    return
+
+  test '二十四節季と月相', =>
+    dst = []
+    for msec in jupiter_msecs
+      dst.push "#{
+        format msec, "yyyy-MM-dd HH:mm", { locale }
+      }\t#{
+        g.format msec, "a-Z-E"
+      } #{
+        jg.format msec, "a-Z-E\tGyyyy/MM/dd HH:mm:ss"
+      }"
+    expect dst
+    .toMatchSnapshot()
+    return
+  return

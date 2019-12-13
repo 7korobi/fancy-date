@@ -507,3 +507,12 @@ FancyDate.MarsGregorian = FancyDate.Gregorian.dup()
   )
   .init()
 
+FancyDate.JupiterGregorian = FancyDate.Gregorian.dup()
+  .planet   ...木星
+  .era "西暦"
+  .calendar(
+    ["1年(火) 壬子-辛巳",'y年(E) a-A', g.parse "0年4月1日"] # 春分が３月くらいになるよう、恣意的に決めました。
+    [1,5, 100]
+  )
+  .init()
+
