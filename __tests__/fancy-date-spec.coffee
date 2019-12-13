@@ -105,7 +105,7 @@ describe "平気法", =>
               平気法.format val.center_at, "Gyy年Md日 E Z #{key}"
           else
             "#{val} #{key}"
-      list.flat(2).sort()
+      _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
     return
 
@@ -153,7 +153,7 @@ describe "Gregorian", =>
               g.format d.center_at, "yyyy/MM/dd E Z #{key}"
           else
             g.format val.center_at, "yyyy/MM/dd E Z #{key}"
-      list.flat(2).sort()
+      _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
     return
 
