@@ -9,12 +9,12 @@ _ = require 'lodash'
 g = Gregorian
 mg = MarsGregorian
 
-to_graph = (g, msec)->
+to_graph = (c, msec)->
   { PI } = Math
   deg_to_rad  = 2 * PI / 360
-  { 方向,時角, 真夜中,日の出,南中時刻,日の入 } = g.solor msec
+  { 方向,時角, 真夜中,日の出,南中時刻,日の入 } = c.solor msec
   "#{
-    format msec, "yyyy-MM-dd EE HH:mm", { locale }
+    c.format msec, "Gyyyy-MM-dd HH:mm a-Z-E", { locale }
   }  真夜中.#{
     format 真夜中, "HH:mm", { locale }
   } 日の出.#{
@@ -57,16 +57,16 @@ for i in [0.. to_msec("20y") / mg.calc.msec.moon]
   msec = moon_zero + i * mg.calc.msec.moon
   { last_at, next_at } = to_tempo_bare mg.calc.msec.day, mg.calc.zero.day, msec
   list.push last_at - 1
-  list.push last_at
+  list.push last_at + 1
   list.push next_at - 1
-  list.push next_at
+  list.push next_at + 1
 for i in [0.. to_msec("20y") / mg.calc.msec.season]
   msec = season_zero + i * mg.calc.msec.season
   { last_at, next_at } = to_tempo_bare mg.calc.msec.day, mg.calc.zero.day, msec
   list.push last_at - 1
-  list.push last_at
+  list.push last_at + 1
   list.push next_at - 1
-  list.push next_at
+  list.push next_at + 1
 mars_msecs = _.uniq list.sort()
 
 
@@ -89,6 +89,8 @@ describe "平気法", =>
     .toEqual
       leap: [4]
       day: [[12],[2],[3600]]
+    expect mg.table.month
+    .toMatchSnapshot()
 
   test '雑節', =>
     expect [
@@ -118,9 +120,9 @@ describe "平気法", =>
     dst = []
     for msec in earth_msecs
       dst.push "#{
-        平気法.format msec, "Gy年Mdd日 E Hm ssss秒"
+        g.format msec, "yyyy-a-Z-E-A HH:mm"
       } #{
-        format msec, "\tyyyy-MM-dd EEE HH:mm", { locale }
+        平気法.format msec, "a-Z-E-A-F Gy年Mdd日 Hm ssss秒"
       }"
     expect dst
     .toMatchSnapshot()
@@ -137,6 +139,8 @@ describe "Gregorian", =>
     .toEqual
       leap: [4, -128, 456, -3217]
       day: [[24],[60],[60]]
+    expect mg.table.month
+    .toMatchSnapshot()
 
   test '雑節', =>
     expect [
@@ -214,10 +218,10 @@ describe "Gregorian", =>
     for msec in earth_msecs
       dst.push "#{
         format msec, "yyyy-MM-dd", { locale }
-      }#{
-        format msec, " Y-ww-EEE", { locale }
-      }#{
-        g.format msec, " Y-ww-E aZ Gyyyy/MM/dd HH:mm:ss J"
+      } #{
+        format msec, "Y-ww-EEE", { locale }
+      } #{
+        g.format msec, "Y-ww-E aZ\tGyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()
@@ -233,8 +237,10 @@ describe "火星", =>
   test 'precision', =>
     expect mg.precision()
     .toEqual
-      leap: [1,-7,73,-1536]
-      day: [[24],[60],[61.625025]]
+      leap: [1,-7,73,-1554]
+      day: [[24],[60],[61.625024305555556]]
+    expect mg.table.month
+    .toMatchSnapshot()
 
   test '太陽の動き', =>
     dst = []
@@ -248,9 +254,11 @@ describe "火星", =>
     dst = []
     for msec in mars_msecs
       dst.push "#{
-        mg.format msec, "Z Gyyyy/MM/dd E HH:mm:ss"
+        format msec, "yyyy-MM-dd HH:mm", { locale }
+      }\t#{
+        g.format msec, "a-Z-E"
       } #{
-        format msec, "\tyyyy-MM-dd EEE HH:mm", { locale }
+        mg.format msec, "a-Z-E\tGyyyy/MM/dd HH:mm:ss"
       }"
     expect dst
     .toMatchSnapshot()

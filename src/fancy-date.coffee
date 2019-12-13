@@ -227,7 +227,7 @@ export class FancyDate
             is_leap = ! mode % 2
           @calc.range.year[is_leap]
     range.year[0] = @calc.range.year[1]
-    years = _.uniq range.year
+    years = @calc.range.year
 
     { month_divs } = @dic
     unless month_divs
@@ -265,7 +265,7 @@ export class FancyDate
       for i in src
         msec += i * day
 
-    years = _.uniq @calc.range.year
+    years = @calc.range.year
 
     { month_divs } = @dic
     month_sum = 0
