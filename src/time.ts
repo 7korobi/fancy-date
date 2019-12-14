@@ -173,14 +173,16 @@ export class Tempo {
       if ( o.timeout < Infinity ) {
         return new Promise((ok) => {
           setTimeout(() => {
-            ok(o);
-          }, o.timeout);
+            ok(o)
+          }, o.timeout)
         })  
       }
     }
     return new Promise(ok => ok(null))
   }
-};
+}
+
+const modulo = (a: number, b: number) => (+a % (b = +b) + b) % b
 
 export function to_tempo(size_str: string, zero_str: string = "0s", write_at: number | Date = Date.now()) {
   const size = to_msec(size_str)
@@ -189,9 +191,9 @@ export function to_tempo(size_str: string, zero_str: string = "0s", write_at: nu
 }
 
 export function to_tempo_bare(size: number, zero: number, write_at: number) {
-  const now_idx = Math.floor((write_at - zero) / size);
-  const last_at = (now_idx + 0) * size + zero;
-  const next_at = (now_idx + 1) * size + zero;
+  const now_idx = Math.floor((write_at - zero) / size)
+  const last_at = (now_idx + 0) * size + zero
+  const next_at = (now_idx + 1) * size + zero
 
   return new Tempo(
     zero,
@@ -204,31 +206,29 @@ export function to_tempo_bare(size: number, zero: number, write_at: number) {
 
 // バイナリサーチ 高速化はするが、微差なので複雑さのせいで逆に遅いかも？
 export function to_tempo_by(table: number[], zero: number, write_at: number) {
-  const scan_at = write_at - zero
-  let now_idx = -1
+  const scan_base = write_at - zero
+  const table_size = table[table.length - 1]
+  const table_idx = Math.floor( scan_base / table_size )
+  const scan_at = scan_base - table_idx * table_size 
+
+  let now_idx = table.length
+  let top_idx = 0
   let next_at = zero
-  let last_at = -Infinity
 
-  if (!( scan_at < 0 )) {
-    let top_idx = 0;
-    now_idx = table.length;
+  while (top_idx < now_idx) {
+    const mid_idx = ( top_idx + now_idx ) >>> 1
+    next_at = table[mid_idx]
 
-    while (top_idx < now_idx) {
-      const mid_idx = ( top_idx + now_idx ) >>> 1;
-      next_at = table[mid_idx];
-
-      if (next_at <= scan_at) {
-        top_idx = mid_idx + 1;
-      } else {
-        now_idx = mid_idx;
-      }
+    if (next_at <= scan_at) {
+      top_idx = mid_idx + 1
+    } else {
+      now_idx = mid_idx
     }
-
-    next_at = table[now_idx] || Infinity;
-    last_at = table[now_idx - 1] || 0;
-    next_at += zero;
-    last_at += zero;
   }
+
+  const last_at = zero + (table[now_idx - 1] || 0)
+  next_at = zero + table[now_idx]
+  now_idx += table_idx * table.length
 
   return new Tempo(
     zero,
@@ -238,17 +238,17 @@ export function to_tempo_by(table: number[], zero: number, write_at: number) {
     next_at,
     table
   )
-};
+}
 
 
 export function to_msec (str: string): number {
-  return 1000 * to_sec(str);
-};
+  return 1000 * to_sec(str)
+}
 
 export function to_sec (str: string): number {
-  let timeout = 0;
+  let timeout = 0
   str.replace(/(\d+)([ヵ]?([smhdwy秒分時日週月年])[間]?(半$)?)|0/g, (full, num_str: string, fullunit, unit: string, appendix: string) => {
-    let num = Number(num_str);
+    let num = Number(num_str)
     if (! num ) { return null }
     if ('半' === appendix) { num += 0.5 }
 
@@ -256,36 +256,36 @@ export function to_sec (str: string): number {
       switch (unit) {
         case "s":
         case "秒":
-          return 1;
+          return 1
 
         case "m":
         case "分":
-          return 60;
+          return 60
 
         case "h":
         case "時":
-          return 3600;
+          return 3600
 
         case "d":
         case "日":
-          return 3600 * 24;
+          return 3600 * 24
 
         case "w":
         case "週":
-          return 3600 * 24 * 7;
+          return 3600 * 24 * 7
 
         case "y":
         case "年":
-          return 31556925.147;
+          return 31556925.147
         // 2019 average.
 
         default:
-          throw new Error(`${str} at ${num}${unit}`);
+          throw new Error(`${str} at ${num}${unit}`)
       }
-    })();
-  });
-  return timeout;
-};
+    })()
+  })
+  return timeout
+}
 
 export function to_timer(msec: number, unit_mode: number = 1) {
   let str = ""

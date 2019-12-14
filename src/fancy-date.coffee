@@ -380,6 +380,7 @@ export class FancyDate
     Object.assign @calc.zero, { period, era, week, season, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
 
   precision: ->
+    is_just = (x, n)-> n == Math.floor( n / x ) * x
     gaps = [( @calc.msec.year / @calc.msec.day ) - @calc.range.year[0]]
     if @dic.leaps
       for v, idx in @dic.leaps
@@ -391,6 +392,9 @@ export class FancyDate
         gaps.push gap
     day: [ @calc.range.hour, @calc.range.minute, @calc.range.second ]
     leap: gaps.map (i)=> parseInt 1 / i
+    is_legal_solor: is_just( 4, @dic.H.length )
+    is_legal_eto: is_just( @dic.c.length, @dic.a.length ) && is_just( @dic.b.length, @dic.a.length )
+    is_legal_ETO: is_just( @dic.C.length, @dic.A.length ) && is_just( @dic.B.length, @dic.A.length )
 
 ###
 http://bakamoto.sakura.ne.jp/buturi/2hinode.pdf
@@ -463,7 +467,7 @@ K   = @dic.earthy[2] / 360
     日の出 = Math.floor 南中時刻 - 時角 * rad_to_day
     日の入 = Math.floor 南中時刻 + 時角 * rad_to_day
     { T0, utc, idx, K,lat,T1,
-      高度,南中差分, 時角,方向,
+      時角,方向, 高度, 南中差分
       last_at, 真夜中,日の出,南中時刻,日の入, next_at
     }
 

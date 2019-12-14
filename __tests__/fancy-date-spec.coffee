@@ -15,15 +15,15 @@ to_graph = (c, msec)->
   deg_to_rad  = 2 * PI / 360
   { 方向,時角, 真夜中,日の出,南中時刻,日の入 } = c.solor msec
   "#{
-    c.format msec, "Gyyyy-MM-dd HH:mm a-Z-E", { locale }
+    c.format msec, "Gyyyy-MM-dd HH:mm a-Z-E"
   }  真夜中.#{
-    format 真夜中, "HH:mm", { locale }
+    c.format 真夜中, "HH:mm"
   } 日の出.#{
-    format 日の出, "HH:mm", { locale }
+    c.format 日の出, "HH:mm"
   } 南中時刻.#{
-    format 南中時刻, "HH:mm", { locale }
+    c.format 南中時刻, "HH:mm"
   } 日の入.#{
-    format 日の入, "HH:mm", { locale }
+    c.format 日の入, "HH:mm"
   } 方向.#{
     Math.floor 方向 / deg_to_rad
   } 時角.#{
@@ -49,8 +49,8 @@ deploy = (c, moon_zero, season_zero)->
   _.sortedUniq list.sort()
 
 earth_msecs = deploy( g,
-  moon_zero   = to_tempo_bare( g.calc.msec.moon,   g.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-  season_zero = to_tempo_bare( g.calc.msec.season, g.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+  moon_zero   = to_tempo_bare(  g.calc.msec.moon,    g.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
+  season_zero = to_tempo_bare(  g.calc.msec.season,  g.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
 )
 
 mars_msecs = deploy( mg,
@@ -82,6 +82,7 @@ describe "平気法", =>
     .toEqual
       leap: [4]
       day: [[12],[2],[3600]]
+      is_legal_solor: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -132,6 +133,7 @@ describe "Gregorian", =>
     .toEqual
       leap: [4, -128, 456, -3217]
       day: [[24],[60],[60]]
+      is_legal_solor: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -232,6 +234,7 @@ describe "火星", =>
     .toEqual
       leap: [1,-7,73,-1554]
       day: [[24],[60],[61.625024305555556]]
+      is_legal_solor: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -269,6 +272,7 @@ describe "木星", =>
     .toEqual
       leap: [1, -5, 105,-2044]
       day: [[24],[60],[24.84]]
+      is_legal_solor: true
     expect jg.table.month
     .toMatchSnapshot()
 
