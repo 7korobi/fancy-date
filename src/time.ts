@@ -128,13 +128,17 @@ export class Tempo {
   slide( n: number ) {
     if ( this.table ) {
       const now_idx = this.now_idx + n
+      const idx = now_idx % this.table.length
+
       const new_table_idx = Math.floor(      now_idx / this.table.length )
       const now_table_idx = Math.floor( this.now_idx / this.table.length )
-      const table_diff = this.table[this.table.length - 1] * ( new_table_idx - now_table_idx )
-      const idx = now_idx % this.table.length
+      const table_idx_diff = new_table_idx - now_table_idx
+      const table_diff = table_idx_diff ? this.table[this.table.length - 1] * table_idx_diff : 0
+
       const last_at = this.zero + table_diff + (this.table[idx - 1] || 0)
       const next_at = this.zero + table_diff +  this.table[idx]
       const write_at = last_at + this.since
+
       return new Tempo( this.zero, now_idx, write_at, last_at, next_at, this.table )
     } else {
       const size = n * this.size

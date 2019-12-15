@@ -519,16 +519,17 @@ K   = @dic.earthy[2] / 360
 
     [春彼岸, 秋彼岸] = [春分, 秋分].map (dd)=>
       Tempo.join(dd.back(3), dd.succ(3))
-    春節分 = 立春.back()
-    夏節分 = 立夏.back()
-    秋節分 = 立秋.back()
-    冬節分 = 立冬.back()
-    節分 = 春節分
 
     春 = Tempo.join(立春,夏土用.back())
+    夏節分 = 立夏.back()
     夏 = Tempo.join(立夏,秋土用.back())
+    秋節分 = 立秋.back()
     秋 = Tempo.join(立秋,冬土用.back())
+    冬節分 = 立冬.back()
     冬 = Tempo.join(立冬,春土用.back())
+    春節分 = 立春2.back()
+    節分 = 春節分
+
     夏土用 = Tempo.join(夏土用,夏節分)
     秋土用 = Tempo.join(秋土用,秋節分)
     冬土用 = Tempo.join(冬土用,冬節分)

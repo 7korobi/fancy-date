@@ -101,14 +101,7 @@ describe "平気法", =>
     ].map (o)=>
       list =
         for key, val of o.雑節
-          if val
-            if val.length
-              val.map (d)=>
-                平気法.format d.center_at, "Gyy年Mdd日 E Z #{key}"
-            else
-              平気法.format val.center_at, "Gyy年Md日 E Z #{key}"
-          else
-            "#{val} #{key}"
+          "#{ 平気法.format val.last_at, "J Gyy年Mdd日" } ～ #{ 平気法.format val.next_at - 1, "Gyy年Mdd日 #{ key }" }"
       _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
     return
@@ -156,7 +149,7 @@ describe "Gregorian", =>
     ].map (o)=>
       list =
         for key, val of o.雑節
-          "#{ g.format val.last_at, "yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
+          "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
       _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
     return
