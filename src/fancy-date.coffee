@@ -385,11 +385,12 @@ export class FancyDate
     if @dic.leaps
       for v, idx in @dic.leaps
         gap = gaps[gaps.length - 1]
-        if idx % 2
+        if idx & 1
           gap += 1 / v
         else
           gap -= 1 / v
         gaps.push gap
+    year: [[@dic.M.length], @calc.range.month ]
     day: [ @calc.range.hour, @calc.range.minute, @calc.range.second ]
     leap: gaps.map (i)=> parseInt 1 / i
     is_legal_solor: is_just( 4, @dic.H.length )
@@ -500,37 +501,44 @@ K   = @dic.earthy[2] / 360
 
   雑節: ({ Zz, u, d })->
     d0 = to_tempo_bare d.size, d.zero, Zz.zero
-    [ 冬至,       春土用, 立春, 入梅,
+    [                   立春, 入梅,
       春分, 半夏生, 夏土用, 立夏,
       夏至,       秋土用, 立秋,
       秋分,       冬土用, 立冬,
-    ] = [
-       0 ,           3/40, 1/8, 80/360,
+      冬至,       春土用, 立春2
+    ] = [                  1/8, 80/360,
       2/8, 100/360, 13/40, 3/8,
       4/8,          23/40, 5/8,
       6/8,          33/40, 7/8,
+      8/8,          43/40, 9/8
     ].map (n)=>
       now = Zz.last_at + ( n - 1/8 ) * Zz.size
-      if now < u.last_at
-        now += Zz.size
       to_tempo_bare d.size, d0.last_at, now
       
+    [ 八十八夜, 二百十日, 二百二十日 ] = [88, 210, 220].map (n)=> 立春.succ(n - 1)
 
     [春彼岸, 秋彼岸] = [春分, 秋分].map (dd)=>
-      [-3..3].map (n)=>
-        dd.slide(n)
-    土用 = []
-    春節分 = 春土用.upto 立春, (dd)=> 土用.push dd
-    夏節分 = 夏土用.upto 立夏, (dd)=> 土用.push dd
-    秋節分 = 秋土用.upto 立秋, (dd)=> 土用.push dd
-    冬節分 = 冬土用.upto 立冬, (dd)=> 土用.push dd
+      Tempo.join(dd.back(3), dd.succ(3))
+    春節分 = 立春.back()
+    夏節分 = 立夏.back()
+    秋節分 = 立秋.back()
+    冬節分 = 立冬.back()
     節分 = 春節分
 
-    [ 八十八夜, 二百十日, 二百二十日 ] = [88, 210, 220].map (n)=> 立春.succ(n - 1)
+    春 = Tempo.join(立春,夏土用.back())
+    夏 = Tempo.join(立夏,秋土用.back())
+    秋 = Tempo.join(立秋,冬土用.back())
+    冬 = Tempo.join(立冬,春土用.back())
+    夏土用 = Tempo.join(夏土用,夏節分)
+    秋土用 = Tempo.join(秋土用,秋節分)
+    冬土用 = Tempo.join(冬土用,冬節分)
+    春土用 = Tempo.join(春土用,立春2)
+
     { 立春, 立夏, 立秋, 立冬,
       冬至, 春分, 夏至, 秋分,
       入梅, 半夏生,
-      春土用, 夏土用, 秋土用, 冬土用, 土用,
+      春, 夏, 秋, 冬,
+      春土用, 夏土用, 秋土用, 冬土用,
       春節分, 夏節分, 秋節分, 冬節分, 節分,
       春彼岸, 秋彼岸,
       八十八夜, 二百十日, 二百二十日,
@@ -616,19 +624,21 @@ K   = @dic.earthy[2] / 360
     else
       # 旧暦では、週は月初にリセットする。
       E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
+
     a = now_idx: ( u.now_idx - @calc.zero.year60 ) %% @dic.a.length
     b = now_idx: ( u.now_idx - @calc.zero.year12 ) %% @dic.b.length
     c = now_idx: ( u.now_idx - @calc.zero.year10 ) %% @dic.c.length
     f = now_idx: ( u.now_idx - @calc.zero.year_s ) %% @dic.f.length
+
     A = to_tempo_bare @calc.msec.day, @calc.zero.day60, utc
     B = to_tempo_bare @calc.msec.day, @calc.zero.day12, utc
     C = to_tempo_bare @calc.msec.day, @calc.zero.day10, utc
     F = to_tempo_bare @calc.msec.day, @calc.zero.day_s, utc
 
-    A.now_idx %= @dic.A.length
-    B.now_idx %= @dic.B.length
-    C.now_idx %= @dic.C.length
-    F.now_idx %= @dic.F.length
+    A.now_idx %%= @dic.A.length
+    B.now_idx %%= @dic.B.length
+    C.now_idx %%= @dic.C.length
+    F.now_idx %%= @dic.F.length
 
     Q_length = @dic.M.length / 4
     Q =

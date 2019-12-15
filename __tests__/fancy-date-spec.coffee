@@ -32,14 +32,14 @@ to_graph = (c, msec)->
 
 deploy = (c, moon_zero, season_zero)->
   list = []
-  for i in [0.. to_msec("20y") / c.calc.msec.moon]
+  for i in [0.. to_msec("5y") / c.calc.msec.moon]
     msec = moon_zero + i * c.calc.msec.moon
     { last_at, next_at } = c.to_tempos(msec).d
     list.push last_at - 1
     list.push last_at
     list.push next_at - 1
     list.push next_at
-  for i in [0.. to_msec("20y") / c.calc.msec.season]
+  for i in [0.. to_msec("5y") / c.calc.msec.season]
     msec = season_zero + i * c.calc.msec.season
     { last_at, next_at } = c.to_tempos(msec).d
     list.push last_at - 1
@@ -49,18 +49,18 @@ deploy = (c, moon_zero, season_zero)->
   _.sortedUniq list.sort()
 
 earth_msecs = deploy( g,
-  moon_zero   = to_tempo_bare(  g.calc.msec.moon,    g.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-  season_zero = to_tempo_bare(  g.calc.msec.season,  g.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+  moon_zero   = to_tempo_bare(  g.calc.msec.moon,    g.calc.zero.moon,   new Date("2018-01-01") - 0 ).last_at
+  season_zero = to_tempo_bare(  g.calc.msec.season,  g.calc.zero.season, new Date("2018-01-01") - 0 ).last_at
 )
 
 mars_msecs = deploy( mg,
-  moon_zero   = to_tempo_bare( mg.calc.msec.moon,   mg.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-  season_zero = to_tempo_bare( mg.calc.msec.season, mg.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+  moon_zero   = to_tempo_bare( mg.calc.msec.moon,   mg.calc.zero.moon,   new Date("2018-01-01") - 0 ).last_at
+  season_zero = to_tempo_bare( mg.calc.msec.season, mg.calc.zero.season, new Date("2018-01-01") - 0 ).last_at
 )
 
 jupiter_msecs = deploy( jg,
-  moon_zero   = to_tempo_bare( jg.calc.msec.moon,   jg.calc.zero.moon,   new Date("2013-1-1") - 0 ).last_at
-  season_zero = to_tempo_bare( jg.calc.msec.season, jg.calc.zero.season, new Date("2013-1-1") - 0 ).last_at
+  moon_zero   = to_tempo_bare( jg.calc.msec.moon,   jg.calc.zero.moon,   new Date("2018-01-01") - 0 ).last_at
+  season_zero = to_tempo_bare( jg.calc.msec.season, jg.calc.zero.season, new Date("2018-01-01") - 0 ).last_at
 )
 
 describe "define", =>
@@ -81,8 +81,11 @@ describe "平気法", =>
     expect 平気法.precision()
     .toEqual
       leap: [4]
+      year: [[12],[30,31]]
       day: [[12],[2],[3600]]
       is_legal_solor: true
+      is_legal_eto: true
+      is_legal_ETO: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -132,8 +135,11 @@ describe "Gregorian", =>
     expect g.precision()
     .toEqual
       leap: [4, -128, 456, -3217]
+      year: [[12],[30,31]]
       day: [[24],[60],[60]]
       is_legal_solor: true
+      is_legal_eto: true
+      is_legal_ETO: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -150,11 +156,7 @@ describe "Gregorian", =>
     ].map (o)=>
       list =
         for key, val of o.雑節
-          if val.length
-            val.map (d)=>
-              g.format d.center_at, "yyyy/MM/dd E Z #{key}"
-          else
-            g.format val.center_at, "yyyy/MM/dd E Z #{key}"
+          "#{ g.format val.last_at, "yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
       _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
     return
@@ -186,6 +188,7 @@ describe "Gregorian", =>
   test 'parse → fomat cycle', =>
     str = "Gy年MM月dd日(E)H時m分s秒"
     expect [
+      g.format g.parse(    "0年4月1日"), str
       g.format g.parse("1970年4月27日"), str
       g.format g.parse("1973年3月3日"), str
       g.format g.parse("2001年9月9日"), str
@@ -193,6 +196,7 @@ describe "Gregorian", =>
       g.format g.parse("5138年11月16日"), str
     ].join("\n")
     .toEqual [
+      "紀元前1年04月01日(土)0時0分0秒"
       "西暦1970年04月27日(月)0時0分0秒"
       "西暦1973年03月03日(土)0時0分0秒"
       "西暦2001年09月09日(日)0時0分0秒"
@@ -233,8 +237,11 @@ describe "火星", =>
     expect mg.precision()
     .toEqual
       leap: [1,-7,73,-1554]
+      year: [[20],[33,34]]
       day: [[24],[60],[61.625024305555556]]
       is_legal_solor: true
+      is_legal_eto: true
+      is_legal_ETO: true
     expect mg.table.month
     .toMatchSnapshot()
 
@@ -270,11 +277,36 @@ describe "木星", =>
   test 'precision', =>
     expect jg.precision()
     .toEqual
-      leap: [1, -5, 105,-2044]
-      day: [[24],[60],[24.84]]
-      is_legal_solor: true
+      leap: [1]
+      year: [[320],[32,33]]
+      day: [[10],[60],[59.616]]
+      is_legal_solor: false
+      is_legal_eto: true
+      is_legal_ETO: true
     expect jg.table.month
     .toMatchSnapshot()
+
+  test 'format', =>
+    str = "Gy年MM月dd日(E)HH時 abc"
+    expect [
+      jg.format   10000000000000, str
+      jg.format    1556636400000, str
+      jg.format      10000000000, str
+      jg.format                0, str 
+      jg.format     -10000000000, str
+      jg.format   -1000000000000, str
+      jg.format  -10000000000000, str
+    ].join("\n")
+    .toEqual [
+      "西暦27年203月07日(土)04時 戊寅寅戊"
+      "西暦5年25月23日(金)08時 丙辰辰丙"
+      "紀元前1年閏303月39日(金)00時 辛亥亥辛"
+      "紀元前1年295月01日(月)04時 辛亥亥辛"
+      "紀元前1年閏287月03日(火)08時 辛亥亥辛"
+      "紀元前3年79月20日(日)07時 己酉酉己"
+      "紀元前27年65月35日(月)04時 乙酉酉乙"
+    ].join("\n")
+    return
 
   test '太陽の動き', =>
     dst = []

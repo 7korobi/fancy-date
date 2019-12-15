@@ -122,12 +122,20 @@ export class Tempo {
     }
     return last
   }
+
   succ( n = 1 ) { return this.slide(+n) }
   back( n = 1 ) { return this.slide(-n) }
   slide( n: number ) {
     if ( this.table ) {
-      const last_at = this.table[this.now_idx + n - 1] + this.zero
-      return to_tempo_by(this.table, this.zero, last_at + this.since)
+      const now_idx = this.now_idx + n
+      const new_table_idx = Math.floor(      now_idx / this.table.length )
+      const now_table_idx = Math.floor( this.now_idx / this.table.length )
+      const table_diff = this.table[this.table.length - 1] * ( new_table_idx - now_table_idx )
+      const idx = now_idx % this.table.length
+      const last_at = this.zero + table_diff + (this.table[idx - 1] || 0)
+      const next_at = this.zero + table_diff +  this.table[idx]
+      const write_at = last_at + this.since
+      return new Tempo( this.zero, now_idx, write_at, last_at, next_at, this.table )
     } else {
       const size = n * this.size
       return to_tempo_bare(this.size, this.zero, this.write_at + size)
@@ -167,6 +175,18 @@ export class Tempo {
     this.last_at = last_at
     this.next_at = next_at
   }
+
+  static join(a: Tempo, b: Tempo) {
+    if ( a.zero != b.zero ) {
+      throw new Error("can't join.")
+    }
+    const last_at  = Math.min(a.last_at, b.last_at)
+    const next_at  = Math.max(a.next_at, b.next_at)
+    const write_at = ( a.write_at + b.write_at ) / 2
+    const size = next_at - last_at
+    return to_tempo_bare( size, last_at, write_at )
+  }
+
   static async sleep(tempos: Tempo[]) {
     if (tempos && tempos.length ) {
       const o = tempos.reduce(((min, o)=> min.timeout < o.timeout ? min : o ), { timeout: Infinity })
@@ -206,10 +226,12 @@ export function to_tempo_bare(size: number, zero: number, write_at: number) {
 
 // バイナリサーチ 高速化はするが、微差なので複雑さのせいで逆に遅いかも？
 export function to_tempo_by(table: number[], zero: number, write_at: number) {
-  const scan_base = write_at - zero
+  let scan_at = write_at - zero
   const table_size = table[table.length - 1]
-  const table_idx = Math.floor( scan_base / table_size )
-  const scan_at = scan_base - table_idx * table_size 
+  const table_idx = Math.floor( scan_at / table_size )
+  if ( table_idx ) {
+    scan_at -= table_idx * table_size 
+  }
 
   let now_idx = table.length
   let top_idx = 0

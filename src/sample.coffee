@@ -505,6 +505,9 @@ FancyDate.MarsGregorian = FancyDate.Gregorian.dup()
     ["1年(火) 壬子-辛巳",'y年(E) a-A', g.parse "0年4月1日"] # 春分が３月くらいになるよう、恣意的に決めました。
     [1, 7, 70]
   )
+  .algo(
+    M: [20]
+  )
   .init()
 
 FancyDate.JupiterGregorian = FancyDate.Gregorian.dup()
@@ -512,7 +515,11 @@ FancyDate.JupiterGregorian = FancyDate.Gregorian.dup()
   .era "西暦"
   .calendar(
     ["1年(火) 壬子-辛巳",'y年(E) a-A', g.parse "0年4月1日"] # 春分が３月くらいになるよう、恣意的に決めました。
-    [1,5, 100]
+  )
+  .algo(
+    H: [10]
+    M: [320]
+    Z: [640]
   )
   .init()
 
