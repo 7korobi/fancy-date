@@ -113,9 +113,9 @@ describe "平気法", =>
     dst = []
     for msec in earth_msecs
       dst.push "#{
-        g.format msec, "yyyy-a-Z-E-A HH:mm"
+        g.format msec, "yyyy a-A Z-E HH:mm"
       } #{
-        平気法.format msec, "a-Z-E-A-F Gy年Mdd日 Hm ssss秒"
+        平気法.format msec, "a-A f-F Z-E Gy年Mdd日 Hm ssss秒"
       }"
     expect dst
     .toMatchSnapshot()
@@ -219,7 +219,7 @@ describe "Gregorian", =>
       } #{
         format msec, "Y-ww-EEE", { locale }
       } #{
-        g.format msec, "Y-ww-E aZ\tGyyyy/MM/dd HH:mm:ss J"
+        g.format msec, "Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()

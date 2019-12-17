@@ -523,26 +523,26 @@ K   = @dic.earthy[2] / 360
     [ 八十八夜, 二百十日, 二百二十日 ] = [88, 210, 220].map (n)=> 立春.succ(n - 1)
 
     [春彼岸, 秋彼岸] = [春分, 秋分].map (dd)=>
-      Tempo.join(dd.back(3), dd.succ(3))
+      Tempo.join dd.back(3), dd.succ(3)
     [春社日, 秋社日] = [春分, 秋分].map (dd)=>
       C = to_tempo_bare @calc.msec.day, @calc.zero.day10, dd.write_at
       C.now_idx %%= @dic.C.length
       C.slide ( @dic.C.length / 2 ) - C.now_idx - 1
   
-    春 = Tempo.join(立春,夏土用.back())
+    春 = Tempo.join 立春,夏土用.back()
     夏節分 = 立夏.back()
-    夏 = Tempo.join(立夏,秋土用.back())
+    夏 = Tempo.join 立夏,秋土用.back()
     秋節分 = 立秋.back()
-    秋 = Tempo.join(立秋,冬土用.back())
+    秋 = Tempo.join 立秋,冬土用.back()
     冬節分 = 立冬.back()
-    冬 = Tempo.join(立冬,春土用.back())
+    冬 = Tempo.join 立冬,春土用.back()
     春節分 = 立春2.back()
     節分 = 春節分
 
-    夏土用 = Tempo.join(夏土用,夏節分)
-    秋土用 = Tempo.join(秋土用,秋節分)
-    冬土用 = Tempo.join(冬土用,冬節分)
-    春土用 = Tempo.join(春土用,立春2)
+    夏土用 = Tempo.join 夏土用,夏節分
+    秋土用 = Tempo.join 秋土用,秋節分
+    冬土用 = Tempo.join 冬土用,冬節分
+    春土用 = Tempo.join 春土用,立春2
 
 
     o = {
