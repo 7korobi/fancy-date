@@ -63,6 +63,9 @@ export class Tempo {
       return this.next_at
     }
   }
+  get deg() {
+    return `${Math.floor( 360 * this.since / this.size )}deg`
+  }
 
   ceil(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
     let { last_at, write_at, next_at, now_idx, size, zero } = this

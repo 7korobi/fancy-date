@@ -505,7 +505,7 @@ K   = @dic.earthy[2] / 360
     to_tempo_by list, day.last_at, utc
 
   雑節: ({ Zz, u, d })->
-    d0 = to_tempo_bare d.size, d.zero, Zz.zero
+    d0 = d.dup Zz.zero
     [                   立春, 入梅,
       春分, 半夏生, 夏土用, 立夏,
       夏至,       秋土用, 立秋,
@@ -540,15 +540,21 @@ K   = @dic.earthy[2] / 360
     冬土用 = Tempo.join(冬土用,冬節分)
     春土用 = Tempo.join(春土用,立春2)
 
-    { 立春, 立夏, 立秋, 立冬,
-      冬至, 春分, 夏至, 秋分,
-      入梅, 半夏生,
-      春, 夏, 秋, 冬,
-      春土用, 夏土用, 秋土用, 冬土用,
-      春節分, 夏節分, 秋節分, 冬節分, 節分,
-      春彼岸, 秋彼岸,
-      八十八夜, 二百十日, 二百二十日,
+
+    o = {
+      立春, 立夏, 立秋, 立冬
+      冬至, 春分, 夏至, 秋分
+      入梅, 半夏生
+      春, 夏, 秋, 冬
+      春土用, 夏土用, 秋土用, 冬土用
+      春節分, 夏節分, 秋節分, 冬節分, 節分
+      春彼岸, 秋彼岸
+      八十八夜, 二百十日, 二百二十日
     }
+    o.covers =
+      for k, t of o when t.is_cover d.center_at
+        k.match(/.(土用)|(.+)/)[1...].join("")
+    o
 
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>
@@ -629,7 +635,7 @@ K   = @dic.earthy[2] / 360
       s = drill_down m, "second"
 
     # minute in day
-    now_idx = ( utc - s.last_at ) / @calc.msec.second
+    now_idx = ( utc - s.last_at ) / 1000
     S = { now_idx }
 
     if @table.msec.era?
@@ -666,9 +672,7 @@ K   = @dic.earthy[2] / 360
     f = now_idx: ( u.now_idx - @calc.zero.year_s ) %% @dic.f.length
 
     # 月不断
-    Q_length = @dic.M.length / 4
-    Q =
-      now_idx: Math.floor M.now_idx / Q_length
+    Q = now_idx: Math.floor 4 * M.now_idx / @dic.M.length
 
     # 日不断
     A = to_tempo_bare @calc.msec.day, @calc.zero.day60, utc
@@ -686,7 +690,7 @@ K   = @dic.earthy[2] / 360
     else
       E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
 
-    result = { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z,a,b,c,d,m,p,s,u,w,x,y }
+    result = { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
     for key, val of result when val && @dic[key]
       val.list     = @dic[key].list
       val.to_label = @dic[key].to_label
