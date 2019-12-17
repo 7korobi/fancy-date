@@ -792,14 +792,16 @@ K   = @dic.earthy[2] / 360
       ( y * @calc.msec.year) +
       ( M * @calc.msec.month )
 
-  format: (utc, str = default_format_format)->
-    o = @to_tempos utc
+  format_by: ( tempos, str = default_format_format )->
     str.match reg_token
     .map (token)=>
-      val = o[token[0]]
+      val = tempos[token[0]]
       if val?.to_label?
         val.to_label token.length
       else
         token
     .join("")
+
+  format: ( utc, str )->
+    @format_by @to_tempos(utc), str
 
