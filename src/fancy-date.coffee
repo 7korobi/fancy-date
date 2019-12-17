@@ -524,7 +524,11 @@ K   = @dic.earthy[2] / 360
 
     [春彼岸, 秋彼岸] = [春分, 秋分].map (dd)=>
       Tempo.join(dd.back(3), dd.succ(3))
-
+    [春社日, 秋社日] = [春分, 秋分].map (dd)=>
+      C = to_tempo_bare @calc.msec.day, @calc.zero.day10, dd.write_at
+      C.now_idx %%= @dic.C.length
+      C.slide ( @dic.C.length / 2 ) - C.now_idx - 1
+  
     春 = Tempo.join(立春,夏土用.back())
     夏節分 = 立夏.back()
     夏 = Tempo.join(立夏,秋土用.back())
@@ -546,6 +550,7 @@ K   = @dic.earthy[2] / 360
       冬至, 春分, 夏至, 秋分
       入梅, 半夏生
       春, 夏, 秋, 冬
+      春社日, 秋社日
       春土用, 夏土用, 秋土用, 冬土用
       春節分, 夏節分, 秋節分, 冬節分, 節分
       春彼岸, 秋彼岸
@@ -553,7 +558,7 @@ K   = @dic.earthy[2] / 360
     }
     o.covers =
       for k, t of o when t.is_cover d.center_at
-        k.match(/.(土用)|(.+)/)[1...].join("")
+        k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
     o
 
   to_tempos: (utc)->
