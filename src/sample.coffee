@@ -403,6 +403,8 @@
   [ 35, 0 ]
 ]
 
+元号[244...]
+
 export DIC = {
   元号,
   九星, 九曜, 七曜, 六曜,
@@ -429,7 +431,7 @@ FancyDate.Gregorian = g = new FancyDate()
   .calendar(
     ["1970年(木) 庚戌-辛巳",'y年(E) a-A', 0]
     [4, 100, 400]
-    [31, 0,31,30,31,30,31,31,30,31,30,31]
+    [31, null,31,30,31,30,31,31,30,31,30,31]
   )
   .algo(
     M: [12]
@@ -438,21 +440,29 @@ FancyDate.Gregorian = g = new FancyDate()
 
     N: [月相,月相かな]
 
-    E: [七曜,七曜かな,           946771200000] # 2000-01-02
-    Z: [二十四節季,二十四節季かな, 1549174464356] # 2019-02-03 15:14
+    E: [七曜,七曜かな         ] # 2000-01-02
+    Z: [二十四節季,二十四節季かな] # 2019-02-03 15:14
 
-    a: [60, 441730800000] # 1984
-    A: [60, 1574467200000] # 2019-11-23
+    a: [60] # 1984
+    A: [60] # 2019-11-23
     B: [十二支,十二支かな]
     C: [十干,十干かな]
   )
   .init()
 
-FancyDate.平気法 = FancyDate.Gregorian.dup()
-  .planet   ...地球
-  .era "西暦", 元号
+FancyDate.Julian = g.dup()
   .calendar(
-    ["1970年 庚戌-辛巳 三碧木-七赤金",'y年 a-A f-F', 0]
+    ["1582/10/5(金) 壬午-甲戌",'y/M/d(E) a-A', g.parse("1582/10/15",'y/M/d')]
+    [4]
+    [31, null,31,30,31,30,31,31,30,31,30,31]
+  )
+  .init()
+
+FancyDate.平気法 = g.dup()
+  .planet   ...地球
+  .era "皇紀", 元号
+  .calendar(
+    ["2630年 庚戌-辛巳 三碧木-七赤金",'y年 a-A f-F', 0]
   )
   .daily true
   .algo(
@@ -461,8 +471,8 @@ FancyDate.平気法 = FancyDate.Gregorian.dup()
     H: [時鐘,時鐘かな]
     m: [['','半'],['','はん']]
 
-    f: [九星,九星かな,          1136073600000] # 2006-01-01
-    F: [九星.reverse(),九星かな.reverse(),          1136073600000] # 2006-01-01
+    f: [九星,九星かな] # 2006-01-01
+    F: [九星.reverse(),九星かな.reverse()] # 2006-01-01
   )
   .init()
 
@@ -472,7 +482,7 @@ FancyDate.Romulus = new FancyDate()
   .calendar(
     ["1970年(A)",'y年(E)', 0]
     null
-    [0, 31,30,31,30,31,30,30,31,30,30]
+    [null, 31,30,31,30,31,30,30,31,30,30]
   )
   .algo(
     M: [11]
@@ -481,8 +491,8 @@ FancyDate.Romulus = new FancyDate()
 
     N: [月相,月相かな]
 
-    E: ["ABCDEFGH",null,      946771200000] # 2000-01-02
-    Z: [二十四節季,二十四節季かな, 1549174464356] # 2019-02-03 15:14
+    E: ["ABCDEFGH",null] # 2000-01-02
+    Z: [二十四節季,二十四節季かな] # 2019-02-03 15:14
   )
   .init()
 
@@ -493,12 +503,12 @@ FastEarth = [ # 天体が地球の百倍速のケース
   日本
 ]
 
-FancyDate.Fast = FancyDate.Gregorian.dup()
+FancyDate.Fast = g.dup()
   .planet   ...FastEarth
   .era "fast", 元号
   .init()
 
-FancyDate.MarsGregorian = FancyDate.Gregorian.dup()
+FancyDate.MarsGregorian = g.dup()
   .planet   ...火星
   .era "西暦"
   .calendar(
@@ -510,7 +520,7 @@ FancyDate.MarsGregorian = FancyDate.Gregorian.dup()
   )
   .init()
 
-FancyDate.JupiterGregorian = FancyDate.Gregorian.dup()
+FancyDate.JupiterGregorian = g.dup()
   .planet   ...木星
   .era "西暦"
   .calendar(

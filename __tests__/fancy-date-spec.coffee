@@ -100,7 +100,7 @@ describe "平気法", =>
       平気法.to_tempos 0 
     ].map (o)=>
       list =
-        for key, val of o.雑節
+        for key, val of g.雑節 o
           "#{ 平気法.format val.last_at, "J Gyy年Mdd日" } ～ #{ 平気法.format val.next_at - 1, "Gyy年Mdd日 #{ key }" }"
       _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()
@@ -148,7 +148,7 @@ describe "Gregorian", =>
       g.to_tempos g.calc.zero.period
     ].map (o)=>
       list =
-        for key, val of o.雑節
+        for key, val of g.雑節 o
           "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
       _.flattenDepth(list, 2).sort()
     .toMatchSnapshot()

@@ -234,7 +234,7 @@ export class FancyDate
       month_divs =
         for str, idx in @dic.M
           @calc.range.month[1 - idx % 2]
-      month_divs[1] = 0
+      month_divs[1] = null
     month_sum = 0
     for i in month_divs
       month_sum += i
@@ -242,7 +242,7 @@ export class FancyDate
     range.month = {}
     for size in years
       a = Array.from month_divs
-      idx = month_divs.indexOf 0
+      idx = month_divs.indexOf null
       a[idx] = size - month_sum
       range.month[size] = a
 
@@ -426,7 +426,27 @@ K   = @dic.earthy[2] / 360
   南中時刻 + 時角
 ###
 
-  solor: (utc, idx = 2, { last_at, center_at, next_at } = to_tempo_bare @calc.msec.day, @calc.zero.day, utc )->
+  noon: ( utc, { last_at, center_at } = to_tempo_bare @calc.msec.day, @calc.zero.day, utc )->
+    { sin, PI } = Math
+    deg_to_day  = @calc.msec.day / 360
+    year_to_rad = 2 * PI / @calc.msec.year
+
+    T0  = to_tempo_bare @calc.msec.year, @calc.zero.season, utc
+
+    # 南中差分の計算がテキトウになってしまった。あとで検討。
+    南中差分A = deg_to_day * 2.0 * sin( year_to_rad * T0.since )
+    南中差分B = deg_to_day * 2.5 * sin( year_to_rad * T0.since * 2 + PI * 0.4 )
+    南中差分 = 南中差分A + 南中差分B
+
+    南中時刻 = center_at + 南中差分
+    真夜中 = last_at + 南中差分
+
+    T1 = to_tempo_bare @calc.msec.year, @dic.sunny[1], 南中時刻
+    季節 = T1.since * year_to_rad
+
+    { T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
+
+  solor: ( utc, idx = 2, { 季節, 南中時刻, 真夜中 } = @noon utc )->
     days = [
         6      # golden hour end         / golden hour
       -18 / 60 # sunrise bottom edge end / sunset bottom edge start
@@ -438,28 +458,12 @@ K   = @dic.earthy[2] / 360
     ]
     { asin, acos, atan, sin, cos, tan, PI } = Math
     deg_to_rad  = 2 * PI / 360
-    year_to_rad = 2 * PI / @calc.msec.year
     rad_to_day  = @calc.msec.day / ( 2 * PI )
-    deg_to_day  = @calc.msec.day / 360
 
     高度 = days[idx]      * deg_to_rad
     K   = @dic.earthy[2] * deg_to_rad
     lat = @dic.geo[0]    * deg_to_rad
 
-    T0  = to_tempo_bare @calc.msec.year, @calc.zero.season, utc
-
-    # 南中差分の計算がテキトウになってしまった。あとで検討。
-    南中差分A = deg_to_day * 2.0 * sin( year_to_rad * 1 *   T0.since )
-    南中差分B = deg_to_day * 2.5 * sin( year_to_rad * 2 * ( T0.since + @calc.msec.year * 0.1 ))
-    南中差分 = 南中差分A + 南中差分B
-
-    南中時刻 = center_at + 南中差分
-    真夜中 = last_at + 南中差分
-
-    T1 = to_tempo_bare @calc.msec.year, @dic.sunny[1], 南中時刻
-
-    spring = T1.last_at
-    季節 = T1.since * year_to_rad
     赤緯 = asin( sin(K) * sin(季節) )
     赤経 = atan( tan(季節) * cos(K) )
     時角 = acos(( sin(高度) - sin(lat) * sin(赤緯) ) / (cos(lat) * cos(赤緯)) )
@@ -467,13 +471,14 @@ K   = @dic.earthy[2] / 360
 
     日の出 = Math.floor 南中時刻 - 時角 * rad_to_day
     日の入 = Math.floor 南中時刻 + 時角 * rad_to_day
-    { T0, utc, idx, K,lat,T1,
-      時角,方向, 高度, 南中差分
-      last_at, 真夜中,日の出,南中時刻,日の入, next_at
+
+    { K,lat
+      時角,方向, 高度
+      真夜中, 日の出, 南中時刻, 日の入
     }
 
   to_tempo_by_solor: (utc, day)->
-    { 日の出, 南中時刻, 日の入 } = @solor utc, 4, day
+    { 日の出, 南中時刻, 日の入 } = @solor utc, 4, @noon utc, day
     size = @dic.H.length / 4
 
     list = []
@@ -607,47 +612,10 @@ K   = @dic.earthy[2] / 360
       u = Zu
       M = Nn
       d = N.dup utc
-    雑節 = @雑節 { Zz, u, d }
 
-    # day in week (曜日)
-    w0 = to_tempo 'week', u.last_at
-    w = drill_down w0, "week"
-
-    Y =
-      now_idx: u.now_idx
-    if u.next_at < w.next_at
-      # 年末最終週は、翌年初週
-      Y.now_idx += 1
-      w.now_idx  = 0
-
-    E = drill_down w, "day"
-    if @is_table_leap
-    else
-      # 旧暦では、週は月初にリセットする。
-      E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
-
-    a = now_idx: ( u.now_idx - @calc.zero.year60 ) %% @dic.a.length
-    b = now_idx: ( u.now_idx - @calc.zero.year12 ) %% @dic.b.length
-    c = now_idx: ( u.now_idx - @calc.zero.year10 ) %% @dic.c.length
-    f = now_idx: ( u.now_idx - @calc.zero.year_s ) %% @dic.f.length
-
-    A = to_tempo_bare @calc.msec.day, @calc.zero.day60, utc
-    B = to_tempo_bare @calc.msec.day, @calc.zero.day12, utc
-    C = to_tempo_bare @calc.msec.day, @calc.zero.day10, utc
-    F = to_tempo_bare @calc.msec.day, @calc.zero.day_s, utc
-
-    A.now_idx %%= @dic.A.length
-    B.now_idx %%= @dic.B.length
-    C.now_idx %%= @dic.C.length
-    F.now_idx %%= @dic.F.length
-
-    Q_length = @dic.M.length / 4
-    Q =
-      now_idx: Math.floor M.now_idx / Q_length
     G = {}
 
-    # day    in year appendix
-    D = drill_down u, "day"
+    # day in year appendix
     if @dic.is_solor
       # hour   in day
       H = @to_tempo_by_solor utc, d
@@ -677,7 +645,48 @@ K   = @dic.earthy[2] / 360
       y.now_idx = 1 - y.now_idx
     x = @dic.x.tempo
 
-    result = { G, p, u,Y,y,M,d, H,m,s,S, E,Q, Z,N,A,B,C,a,b,c, D,w,J, x, 雑節 }
+
+    # 年初来番号
+    w0 = to_tempo 'week', u.last_at
+    w = drill_down w0, "week"
+    D = drill_down u, "day"
+
+    Y =
+      now_idx: u.now_idx
+    if u.next_at < w.next_at
+      # 年末最終週は、翌年初週
+      Y.now_idx += 1
+      w.now_idx  = 0
+
+
+    # 年不断
+    a = now_idx: ( u.now_idx - @calc.zero.year60 ) %% @dic.a.length
+    b = now_idx: ( u.now_idx - @calc.zero.year12 ) %% @dic.b.length
+    c = now_idx: ( u.now_idx - @calc.zero.year10 ) %% @dic.c.length
+    f = now_idx: ( u.now_idx - @calc.zero.year_s ) %% @dic.f.length
+
+    # 月不断
+    Q_length = @dic.M.length / 4
+    Q =
+      now_idx: Math.floor M.now_idx / Q_length
+
+    # 日不断
+    A = to_tempo_bare @calc.msec.day, @calc.zero.day60, utc
+    B = to_tempo_bare @calc.msec.day, @calc.zero.day12, utc
+    C = to_tempo_bare @calc.msec.day, @calc.zero.day10, utc
+    E = to_tempo_bare @calc.msec.day, @calc.zero.week,  utc
+    F = to_tempo_bare @calc.msec.day, @calc.zero.day_s, utc
+
+    A.now_idx %%= @dic.A.length
+    B.now_idx %%= @dic.B.length
+    C.now_idx %%= @dic.C.length
+    F.now_idx %%= @dic.F.length
+    if @is_table_leap # 旧暦では、週は月初にリセットする。
+      E.now_idx %%= @dic.E.length
+    else
+      E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
+
+    result = { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z,a,b,c,d,m,p,s,u,w,x,y }
     for key, val of result when val && @dic[key]
       val.list     = @dic[key].list
       val.to_label = @dic[key].to_label
@@ -752,8 +761,8 @@ K   = @dic.earthy[2] / 360
     @tempo_list @to_tempos(utc), token
 
   parse: (tgt, str = default_parse_format)->
-    { p,y,M,d,H,m,s,S, J } = @index tgt, str
-
+    { G, p,y,M,d,H,m,s,S, J } = @index tgt, str
+    y += @calc.eras[G][2] - 1
     if J
       return @calc.zero.jd + J * @calc.msec.day 
 
