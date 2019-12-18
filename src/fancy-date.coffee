@@ -379,6 +379,12 @@ export class FancyDate
     day60 = day + zero_size("A", "day")
     Object.assign @calc.zero, { period, era, week, season, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
 
+  bless: (o)->
+    for key, val of o when val && @dic[key]
+      val.list     = @dic[key].list
+      val.to_label = @dic[key].to_label
+    o
+
   precision: ->
     is_just = (x, n)-> n == Math.floor( n / x ) * x
     gaps = [( @calc.msec.year / @calc.msec.day ) - @calc.range.year[0]]
@@ -544,8 +550,7 @@ K   = @dic.earthy[2] / 360
     冬土用 = Tempo.join 冬土用,冬節分
     春土用 = Tempo.join 春土用,立春2
 
-
-    o = {
+    {
       立春, 立夏, 立秋, 立冬
       冬至, 春分, 夏至, 秋分
       入梅, 半夏生
@@ -556,10 +561,12 @@ K   = @dic.earthy[2] / 360
       春彼岸, 秋彼岸
       八十八夜, 二百十日, 二百二十日
     }
-    o.covers =
-      for k, t of o when t.is_cover d.center_at
-        k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
-    o
+
+  note: (tempos)->
+    o = @雑節 tempos
+    for k, t of o when t.is_cover tempos.d.center_at
+      k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
+
 
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>
@@ -669,7 +676,7 @@ K   = @dic.earthy[2] / 360
       Y.now_idx += 1
       w.now_idx  = 0
 
-
+  
     # 年不断
     a = now_idx: ( u.now_idx - @calc.zero.year60 ) %% @dic.a.length
     b = now_idx: ( u.now_idx - @calc.zero.year12 ) %% @dic.b.length
@@ -695,11 +702,7 @@ K   = @dic.earthy[2] / 360
     else
       E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
 
-    result = { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
-    for key, val of result when val && @dic[key]
-      val.list     = @dic[key].list
-      val.to_label = @dic[key].to_label
-    result
+    @bless { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
   index: (tgt, str = default_parse_format)->
     data = null

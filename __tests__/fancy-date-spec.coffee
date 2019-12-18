@@ -100,12 +100,9 @@ describe "平気法", =>
       平気法.to_tempos 0 
     ].map (o)=>
       list =
-        for key, val of g.雑節 o
-          if val.write_at
-            "#{ 平気法.format val.last_at, "J Gyy年Mdd日" } ～ #{ 平気法.format val.next_at - 1, "Gyy年Mdd日 #{ key }" }"
-          else
-            "#{ val.join(" ") }"
-      _.flattenDepth(list, 2).sort()
+        for key, val of 平気法.雑節 o
+          "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
+      [..._.flattenDepth(list, 2).sort(), 平気法.note(o).join("") ]
     .toMatchSnapshot()
     return
 
@@ -152,11 +149,8 @@ describe "Gregorian", =>
     ].map (o)=>
       list =
         for key, val of g.雑節 o
-          if val.write_at
-            "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
-          else
-            "#{ val.join(" ") }"
-      _.flattenDepth(list, 2).sort()
+          "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
+      [..._.flattenDepth(list, 2).sort(), g.note(o).join("") ]
     .toMatchSnapshot()
     return
 
@@ -277,7 +271,7 @@ describe "木星", =>
     expect jg.precision()
     .toEqual
       leap: [1]
-      year: [[320],[32,33]]
+      year: [[260],[40,41]]
       day: [[10],[60],[59.616]]
       is_legal_solor: false
       is_legal_eto: true
@@ -297,13 +291,13 @@ describe "木星", =>
       jg.format  -10000000000000, str
     ].join("\n")
     .toEqual [
-      "西暦27年203月07日(土)04時 戊寅寅戊"
-      "西暦5年25月23日(金)08時 丙辰辰丙"
-      "紀元前1年閏303月39日(金)00時 辛亥亥辛"
-      "紀元前1年295月01日(月)04時 辛亥亥辛"
-      "紀元前1年閏287月03日(火)08時 辛亥亥辛"
-      "紀元前3年79月20日(日)07時 己酉酉己"
-      "紀元前27年65月35日(月)04時 乙酉酉乙"
+      "西暦27年165月07日(水)04時 戊寅寅戊"
+      "西暦5年20月23日(日)08時 丙辰辰丙"
+      "紀元前1年245月39日(水)00時 辛亥亥辛"
+      "紀元前1年239月01日(月)04時 辛亥亥辛"
+      "紀元前1年232月03日(水)08時 辛亥亥辛"
+      "紀元前3年64月20日(土)07時 己酉酉己"
+      "紀元前27年53月35日(水)04時 乙酉酉乙"
     ].join("\n")
     return
 
@@ -323,7 +317,7 @@ describe "木星", =>
       }\t#{
         g.format msec, "a-Z-E"
       } #{
-        jg.format msec, "a-Z-E\tGyyyy/MM/dd HH:mm:ss"
+        jg.format msec, "a-ZZZ-E\tGyy/MMM/dd HH:mm:ss"
       }"
     expect dst
     .toMatchSnapshot()

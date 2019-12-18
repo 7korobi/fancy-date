@@ -528,8 +528,8 @@ FancyDate.JupiterGregorian = g.dup()
   )
   .algo(
     H: [10]
-    M: [320]
-    Z: [640]
+    M: [260]
+    Z: [520]
   )
   .init()
 
