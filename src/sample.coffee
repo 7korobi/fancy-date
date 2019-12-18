@@ -520,7 +520,7 @@ FancyDate.MarsGregorian = g.dup()
   )
   .init()
 
-FancyDate.JupiterGregorian = g.dup()
+FancyDate.Jupiter = g.dup()
   .planet   ...木星
   .era "西暦"
   .calendar(

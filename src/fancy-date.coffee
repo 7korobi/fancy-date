@@ -483,34 +483,7 @@ K   = @dic.earthy[2] / 360
       真夜中, 日の出, 南中時刻, 日の入
     }
 
-  to_tempo_by_solor: (utc, day)->
-    { 日の出, 南中時刻, 日の入 } = @solor utc, 4, @noon utc, day
-    size = @dic.H.length / 4
-
-    list = []
-    next_at = 0
-    msec = ( 日の出 - day.last_at ) / size
-    for idx in [0        ... 1 * size]
-      next_at += msec
-      list.push Math.floor next_at
-
-    next_at = 日の出 - day.last_at
-    msec = ( 日の入 - 日の出 ) / ( 2 * size )
-    for idx in [1 * size ... 3 * size]
-      next_at += msec
-      list.push Math.floor next_at
-
-    next_at = day.size
-    msec = ( day.next_at - 日の入 ) / size
-
-    tails = []
-    for idx in [3 * size ... 4 * size]
-      tails.push Math.ceil next_at
-      next_at -= msec
-    list.push ...tails.reverse()
-    to_tempo_by list, day.last_at, utc
-
-  雑節: ({ Zz, u, d })->
+  雑節: (utc, { Zz, u, d } = @to_tempos(utc))->
     d0 = d.dup Zz.zero
     [                   立春, 入梅,
       春分, 半夏生, 夏土用, 立夏,
@@ -562,11 +535,36 @@ K   = @dic.earthy[2] / 360
       八十八夜, 二百十日, 二百二十日
     }
 
-  note: (tempos)->
-    o = @雑節 tempos
+  to_tempo_by_solor: (utc, day)->
+    { 日の出, 南中時刻, 日の入 } = @solor utc, 4, @noon utc, day
+    size = @dic.H.length / 4
+
+    list = []
+    next_at = 0
+    msec = ( 日の出 - day.last_at ) / size
+    for idx in [0        ... 1 * size]
+      next_at += msec
+      list.push Math.floor next_at
+
+    next_at = 日の出 - day.last_at
+    msec = ( 日の入 - 日の出 ) / ( 2 * size )
+    for idx in [1 * size ... 3 * size]
+      next_at += msec
+      list.push Math.floor next_at
+
+    next_at = day.size
+    msec = ( day.next_at - 日の入 ) / size
+
+    tails = []
+    for idx in [3 * size ... 4 * size]
+      tails.push Math.ceil next_at
+      next_at -= msec
+    list.push ...tails.reverse()
+    to_tempo_by list, day.last_at, utc
+
+  note: (utc, tempos = @to_tempos(utc), o = @雑節(utc, tempos))->
     for k, t of o when t.is_cover tempos.d.center_at
       k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
-
 
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>
@@ -742,6 +740,8 @@ K   = @dic.earthy[2] / 360
         "(#{token.replace(/([\\\[\]().*?])/g,"\\$1")})"
     .join("")
     new RegExp reg
+
+  table: (utc, tempos = @to_tempos(utc))->
 
   tempo_list: (tempos, token)->
     switch token[0]

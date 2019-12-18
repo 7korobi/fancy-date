@@ -8,14 +8,14 @@ _ = require 'lodash'
 
 g = FancyDate.Gregorian
 mg = FancyDate.MarsGregorian
-jg = FancyDate.JupiterGregorian
+jg = FancyDate.Jupiter
 
-to_graph = (c, msec)->
+to_graph = (c, msec, str = "Gyyyy-MM-dd HH:mm a-Z-E")->
   { PI } = Math
   deg_to_rad  = 2 * PI / 360
   { 方向,時角, 真夜中,日の出,南中時刻,日の入 } = c.solor msec
   "#{
-    c.format msec, "Gyyyy-MM-dd HH:mm a-Z-E"
+    c.format msec, str
   }  真夜中.#{
     c.format 真夜中, "HH:mm"
   } 日の出.#{
@@ -91,18 +91,20 @@ describe "平気法", =>
 
   test '雑節', =>
     expect [
-      平気法.to_tempos 100000000000000
-      平気法.to_tempos 10000000000000
-      平気法.to_tempos 1556636400000
-      平気法.to_tempos 1000000000000
-      平気法.to_tempos 100000000000
-      平気法.to_tempos 10000000000
-      平気法.to_tempos 0 
-    ].map (o)=>
+      100000000000000
+      10000000000000
+      1556636400000
+      1000000000000
+      100000000000
+      10000000000
+      0 
+    ].map (utc)=>
+      o = 平気法.to_tempos utc
+      z = 平気法.雑節 utc, o
       list =
-        for key, val of 平気法.雑節 o
-          "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
-      [..._.flattenDepth(list, 2).sort(), 平気法.note(o).join("") ]
+        for key, val of z
+          "#{ 平気法.format val.last_at, "J Gyy年Mdd日" } ～ #{ 平気法.format val.next_at - 1, "Mdd日 #{ key }" }"
+      [..._.flattenDepth(list, 2).sort(), 平気法.note(utc, o, z).join("") ]
     .toMatchSnapshot()
     return
 
@@ -138,19 +140,20 @@ describe "Gregorian", =>
 
   test '雑節', =>
     expect [
-      g.to_tempos 100000000000000
-      g.to_tempos 10000000000000
-      g.to_tempos 1556636400000
-      g.to_tempos 1000000000000
-      g.to_tempos 100000000000
-      g.to_tempos 10000000000
-      g.to_tempos 0 
-      g.to_tempos g.calc.zero.period
-    ].map (o)=>
+      100000000000000
+      10000000000000
+      1556636400000
+      1000000000000
+      100000000000
+      10000000000
+      0 
+    ].map (utc)=>
+      o = g.to_tempos utc
+      z = g.雑節 utc, o
       list =
-        for key, val of g.雑節 o
+        for key, val of z
           "#{ g.format val.last_at, "J yyyy/MM/dd" } ～ #{ g.format val.next_at - 1, "MM/dd #{ key }" }"
-      [..._.flattenDepth(list, 2).sort(), g.note(o).join("") ]
+      [..._.flattenDepth(list, 2).sort(), g.note(utc, o, z).join("") ]
     .toMatchSnapshot()
     return
 
@@ -254,7 +257,7 @@ describe "火星", =>
       }\t#{
         g.format msec, "a-Z-E"
       } #{
-        mg.format msec, "a-Z-E\tGyyyy/MM/dd HH:mm:ss"
+        mg.format msec, "a-Z-E\tGyy/MMM/dd HH:mm:ss"
       }"
     expect dst
     .toMatchSnapshot()
@@ -304,7 +307,7 @@ describe "木星", =>
   test '太陽の動き', =>
     dst = []
     for msec in jupiter_msecs
-      dst.push to_graph jg, msec
+      dst.push to_graph jg, msec, "Gyy-MMM-dd HH:mm a-ZZZ-E"
     expect dst
     .toMatchSnapshot()
     return
