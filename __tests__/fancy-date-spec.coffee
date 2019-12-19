@@ -1,5 +1,4 @@
 { FancyDate, to_msec, to_tempo_bare } = require "../lib/index.min"
-{ Gregorian, MarsGregorian, 平気法 } = FancyDate
 
 format = require "date-fns/format"
 locale = require "date-fns/locale/ja"
@@ -9,6 +8,8 @@ _ = require 'lodash'
 g = FancyDate.Gregorian
 mg = FancyDate.MarsGregorian
 jg = FancyDate.Jupiter
+fg = FancyDate.フランス革命暦
+平気法 = FancyDate.平気法
 
 to_graph = (c, msec, str = "Gyyyy-MM-dd HH:mm a-Z-E")->
   { PI } = Math
@@ -135,7 +136,7 @@ describe "Gregorian", =>
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
-    expect mg.table.month
+    expect g.table.range.month
     .toMatchSnapshot()
 
   test '雑節', =>
@@ -234,7 +235,7 @@ describe "火星", =>
     .toEqual
       leap: [1,-7,73,-1554]
       year: [[20],[33,34]]
-      day: [[24],[60],[61.625024305555556]]
+      day: [[24],[60],[60]]
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
@@ -275,7 +276,7 @@ describe "木星", =>
     .toEqual
       leap: [1]
       year: [[260],[40,41]]
-      day: [[10],[60],[59.616]]
+      day: [[10],[60],[60]]
       is_legal_solor: false
       is_legal_eto: true
       is_legal_ETO: true
@@ -321,6 +322,47 @@ describe "木星", =>
         g.format msec, "a-Z-E"
       } #{
         jg.format msec, "a-ZZZ-E\tGyy/MMM/dd HH:mm:ss"
+      }"
+    expect dst
+    .toMatchSnapshot()
+    return
+  return
+
+
+describe "フランス革命歴", =>
+  test 'calc', =>
+    expect fg.calc
+    .toMatchSnapshot()
+
+  test 'precision', =>
+    expect fg.precision()
+    .toEqual
+      leap: [4, -128, 456, -3217]
+      year: [[13],[28,29]]
+      day: [[10],[100],[100]]
+      is_legal_solor: false
+      is_legal_eto: true
+      is_legal_ETO: true
+    expect fg.table.range.month
+    .toMatchSnapshot()
+
+  test '太陽の動き', =>
+    dst = []
+    for msec in earth_msecs
+      dst.push to_graph fg, msec
+    expect dst
+    .toMatchSnapshot()
+    return
+
+  test '二十四節季と月相', =>
+    dst = []
+    for msec in earth_msecs
+      dst.push "#{
+        format msec, "yyyy-MM-dd", { locale }
+      } #{
+        format msec, "Y-ww-EEE", { locale }
+      } #{
+        fg.format msec, "Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()

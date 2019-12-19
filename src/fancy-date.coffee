@@ -194,10 +194,11 @@ export class FancyDate
     week   = daily_define  @dic.E.length * @calc.msec.day, @calc.msec.day
 
     hour   = sub_define    @calc.msec.day, @dic.H.length
-    minute = sub_define      hour.msec,  @dic.m.length
-    second = sub_define    minute.msec,  minute.msec / 1000
-    calc_set.call @, "range", { month, hour, minute, second }
-    calc_set.call @, "msec",  { season, month, week, hour, minute, second }
+    minute = sub_define      hour.msec, @dic.m.length
+    second = sub_define    minute.msec, @dic.s.length
+    msec   = sub_define    second.msec, second.msec
+    calc_set.call @, "range", { season, month, week, hour, minute, second, msec }
+    calc_set.call @, "msec",  { season, month, week, hour, minute, second, msec }
 
   def_eras: ->
     zero = @calc.zero.era
@@ -629,25 +630,18 @@ K   = @dic.earthy[2] / 360
       M = Nn
       d = N.dup utc
 
-    G = {}
-
-    # day in year appendix
+    # hour minute second  in day
     if @dic.is_solor
-      # hour   in day
       H = @to_tempo_by_solor utc, d
       size = H.size / @dic.m.length
       m = to_tempo_bare size, H.last_at, utc
-      s = to_tempo_bare 1000, m.last_at, utc
     else
-      # hour   in day
       H = drill_down d, "hour"
       m = drill_down H, "minute"
-      s = drill_down m, "second"
+    s = drill_down m, "second"
+    S = drill_down s, "msec"
 
-    # minute in day
-    now_idx = ( utc - s.last_at ) / 1000
-    S = { now_idx }
-
+    G = {}
     if @table.msec.era?
       era_base = to_tempo_by @table.msec.era, @calc.zero.era, utc
       era = @calc.eras[era_base.now_idx]
@@ -741,39 +735,27 @@ K   = @dic.earthy[2] / 360
     .join("")
     new RegExp reg
 
-  table: (utc, tempos = @to_tempos(utc))->
+  to_table: (utc, bk, ik, has_notes = false)->
+    o = @to_tempos utc
 
-  tempo_list: (tempos, token)->
-    switch token[0]
-      when 'G'
-        throw new Error "request token can't tempos. [#{token}]"
+    if has_notes
+      雑節 = @雑節 utc, o
+      for a in o[bk].to_list o[ik]
+        a.notes =
+          for k, t of 雑節 when t.is_hit a
+            k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].filter(s => s)
+    else
+      o[bk].to_list o[ik]
 
-    unless tempo = tempos[token[0]]
-      throw new Error "request token can't tempos. [#{token}]"
-
-    { table, length, now_idx, last_at, size, zero } = tempo
-    list = []
-    if table
-      last_at = zero
-      for next_at, now_idx in table
-        next_at += zero
-        size = next_at - last_at
-        list.push { now_idx, size, last_at, next_at, last_time: new Date(last_at), next_time: new Date(next_at) }
-        last_at = next_at
-
-    if length
-      base = last_at - size * now_idx
-      for now_idx in [0...length]
-        last_at = (now_idx + 0) * size + zero
-        next_at = (now_idx + 1) * size + zero
-        list.push { now_idx, size, last_at, next_at, last_time: new Date(last_at), next_time: new Date(next_at) }
-    list
-
-  ranges: (utc, token)->
-    @tempo_list @to_tempos(utc), token
+  yeary_table:   (utc)-> @to_table utc, 'y', 'M', true
+  monthry_table: (utc)-> @to_table utc, 'M', 'd', true
+  weekly_table:  (utc)-> @to_table utc, 'w', 'd', true
+  time_table:    (utc)-> @to_table utc, 'd', 'H'
 
   parse: (tgt, str = default_parse_format)->
     { G, p,y,M,d,H,m,s,S, J } = @index tgt, str
+    unless @calc.eras[G]
+      console.error tgt, str
     y += @calc.eras[G][2] - 1
     if J
       return @calc.zero.jd + J * @calc.msec.day 

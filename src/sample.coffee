@@ -437,6 +437,7 @@ FancyDate.Gregorian = g = new FancyDate()
     M: [12]
     H: [24]
     m: [60]
+    s: [60]
 
     N: [月相,月相かな]
 
@@ -470,6 +471,8 @@ FancyDate.平気法 = g.dup()
     M: [和風月名,和風月名かな]
     H: [時鐘,時鐘かな]
     m: [['','半'],['','はん']]
+    s: [3600]
+    S: [1000]
 
     f: [九星,九星かな] # 2006-01-01
     F: [九星.reverse(),九星かな.reverse()] # 2006-01-01
@@ -533,3 +536,19 @@ FancyDate.Jupiter = g.dup()
   )
   .init()
 
+FancyDate.フランス革命暦 = g.dup()
+  .era "革命暦"
+  .calendar(
+    ["1年葡萄月1日 壬子-癸酉", "y年Md日 a-A", g.parse "1792年9月22日"]
+    [4, 100, 400]
+    [30,30,30,30, 30,30,30,30, 30,30,30,30, null]
+  )
+  .algo(
+    M: [["葡萄月","霧月","霜月","雪月","雨月","風月","芽月","花月","牧月","収穫月","熱月","実月","休日"],["Vendémiaire","Brumaire","Frimaire","Nivôse","Pluviôse","Ventôse","Germinal","Floréal","Prairial","Messidor","Thermidor","Fructidor","Vacances"]]
+    H: [10]
+    m: [100]
+    s: [100]
+
+    E: [10]
+  )
+  .init()

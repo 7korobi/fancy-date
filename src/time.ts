@@ -114,16 +114,21 @@ export class Tempo {
   }
 
   is_cover( at: number ) { return this.last_at <= at && at < this.next_at }
+  is_hit( that: Tempo ) { return( this.last_at <= that.next_at && that.last_at < this.next_at )}
+  to_list( step: Tempo ) {
+    const a = step.dup( this.last_at )
+    const b = step.dup( this.next_at - 1 )
+    return a.upto(b)
+  }
 
-  upto( limit: Tempo, cb: (p: Tempo) => void ) {
+  upto( limit: Tempo ) {
     let p: Tempo = this
-    let last = null
+    const ary = []
     while ( p.last_at < limit.last_at ) {
-      cb(p)
-      last = p
+      ary.push(p)
       p = p.succ()
     }
-    return last
+    return ary
   }
 
   succ( n = 1 ) { return this.slide(+n) }
