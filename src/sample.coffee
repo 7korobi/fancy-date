@@ -453,7 +453,7 @@ FancyDate.Gregorian = g = new FancyDate()
 
 FancyDate.Julian = g.dup()
   .calendar(
-    ["1582/10/5(金) 壬午-甲戌",'y/M/d(E) a-A', g.parse("1582/10/15",'y/M/d')]
+    ["1582/10/5(金) 壬午-甲戌",'y/M/d(E) a-A', g.parse("1582年10月15日")]
     [4]
     [31, null,31,30,31,30,31,31,30,31,30,31]
   )
@@ -463,7 +463,7 @@ FancyDate.平気法 = g.dup()
   .planet   ...地球
   .era "皇紀", 元号
   .calendar(
-    ["2630年 庚戌-辛巳 三碧木-七赤金",'y年 a-A f-F', 0]
+    ["2630年睦月1日 庚戌-辛巳 三碧木-七赤金",'y年Md日 a-A f-F', 0]
   )
   .daily true
   .algo(
@@ -479,23 +479,16 @@ FancyDate.平気法 = g.dup()
   )
   .init()
 
-FancyDate.Romulus = new FancyDate()
-  .planet   ...地球
+FancyDate.Romulus = g.dup()
   .era "ロムルス暦"
   .calendar(
-    ["1970年(A)",'y年(E)', 0]
+    ["754年1月1日(A)",'y年M月d日(E)', g.parse("1年3月19日")]
     null
     [null, 31,30,31,30,31,30,30,31,30,30]
   )
   .algo(
     M: [11]
-    H: [24]
-    m: [60]
-
-    N: [月相,月相かな]
-
     E: ["ABCDEFGH",null] # 2000-01-02
-    Z: [二十四節季,二十四節季かな] # 2019-02-03 15:14
   )
   .init()
 
@@ -539,7 +532,7 @@ FancyDate.Jupiter = g.dup()
 FancyDate.フランス革命暦 = g.dup()
   .era "革命暦"
   .calendar(
-    ["1年葡萄月1日 壬子-癸酉", "y年Md日 a-A", g.parse "1792年9月22日"]
+    ["1年葡萄月1日 1曜 壬子-癸酉", "y年Md日 E曜 a-A", g.parse "1792年9月22日"]
     [4, 100, 400]
     [30,30,30,30, 30,30,30,30, 30,30,30,30, null]
   )

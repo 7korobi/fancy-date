@@ -8,6 +8,7 @@ _ = require 'lodash'
 g = FancyDate.Gregorian
 mg = FancyDate.MarsGregorian
 jg = FancyDate.Jupiter
+rg = FancyDate.Romulus
 fg = FancyDate.フランス革命暦
 平気法 = FancyDate.平気法
 
@@ -295,13 +296,13 @@ describe "木星", =>
       jg.format  -10000000000000, str
     ].join("\n")
     .toEqual [
-      "西暦27年165月07日(水)04時 戊寅寅戊"
-      "西暦5年20月23日(日)08時 丙辰辰丙"
-      "紀元前1年245月39日(水)00時 辛亥亥辛"
-      "紀元前1年239月01日(月)04時 辛亥亥辛"
-      "紀元前1年232月03日(水)08時 辛亥亥辛"
-      "紀元前3年64月20日(土)07時 己酉酉己"
-      "紀元前27年53月35日(水)04時 乙酉酉乙"
+      "西暦193年180月07日(木)04時 甲子子甲"
+      "西暦171年35月23日(月)08時 壬寅寅壬"
+      "西暦167年01月39日(木)00時 戊戌戌戊"
+      "西暦166年255月01日(水)04時 丁酉酉丁"
+      "西暦166年248月03日(金)08時 丁酉酉丁"
+      "西暦164年80月20日(月)07時 乙未未乙"
+      "西暦140年68月35日(木)04時 辛未未辛"
     ].join("\n")
     return
 
@@ -363,6 +364,46 @@ describe "フランス革命歴", =>
         format msec, "Y-ww-EEE", { locale }
       } #{
         fg.format msec, "Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J"
+      }"
+    expect dst
+    .toMatchSnapshot()
+    return
+  return
+
+describe "ロムルス歴", =>
+  test 'calc', =>
+    expect rg.calc
+    .toMatchSnapshot()
+
+  test 'precision', =>
+    expect rg.precision()
+    .toEqual
+      leap: [4]
+      year: [[11],[33,34]]
+      day: [[24],[60],[60]]
+      is_legal_solor: true
+      is_legal_eto: true
+      is_legal_ETO: true
+    expect rg.table.range.month
+    .toMatchSnapshot()
+
+  test '太陽の動き', =>
+    dst = []
+    for msec in earth_msecs
+      dst.push to_graph rg, msec
+    expect dst
+    .toMatchSnapshot()
+    return
+
+  test '二十四節季と月相', =>
+    dst = []
+    for msec in earth_msecs
+      dst.push "#{
+        format msec, "yyyy-MM-dd", { locale }
+      } #{
+        format msec, "Y-ww-EEE", { locale }
+      } #{
+        rg.format msec, "Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J"
       }"
     expect dst
     .toMatchSnapshot()

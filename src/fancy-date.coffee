@@ -150,7 +150,8 @@ export class FancyDate
           "([#{list}])"
       else
         "(\\d+)"
-    D = Q = S = Y = d = u = w = y = => "(\\d+)"
+    u = => "([-\\d]+)"
+    D = Q = S = Y = d = w = y = => "(\\d+)"
     J = x = => "([\\d.]+)"
     for key, f of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].regex = f @dic[key].list
@@ -277,7 +278,7 @@ export class FancyDate
       month: {}
     for size in years
       a = Array.from month_divs
-      idx = month_divs.indexOf 0
+      idx = month_divs.indexOf null
       a[idx] = size - month_sum
       range.month[size] = a
 
@@ -288,9 +289,6 @@ export class FancyDate
 
     @table = { range, msec: { month } }
 
-  def_table_by_season: ->
-    @table = { range: {}, msec: {} }
-
   def_table: ->
     if @is_table_leap
       @def_table_by_leap_day()
@@ -298,7 +296,7 @@ export class FancyDate
       if @is_table_month
         @def_table_by_leap_month()
       else
-        @def_table_by_season()
+        @table = { range: {}, msec: {} }
 
   def_idx: ->
     if @is_table_leap
@@ -335,20 +333,19 @@ export class FancyDate
 
     # 単純のため平気法。
     season = @dic.sunny[1] + zero_size "Z", "season" # 立春点
-    { since } = to_tempo_bare @calc.msec.year, start_at, season
+    { since, last_at } = to_tempo_bare @calc.msec.year, start_at, season
     season = since + zero_size "y", "year"
 
     if @is_table_leap
       year_size = Math.floor @calc.msec.day * @table.range.year[ @calc.idx.y %% @calc.divs.period ]
-      zero_size_M_month = - (@table.msec.month[year_size][ @calc.idx.M - 1 ] || 0)
-      zero_size_y_year  = - (@table.msec.year[             @calc.idx.y - 1 ] || 0)
-
-      month  = day   + zero_size_M_month
-      year   = month + zero_size_y_year
+      month  = day   - (@table.msec.month[year_size][ @calc.idx.M - 1 ] || 0)
+      year   = month - (@table.msec.year[             @calc.idx.y - 1 ] || 0)
       period = year  + zero_size "p", "period"
 
       season += zero_size "p", "period"
     else
+      { last_at } = to_tempo_bare @calc.msec.year, last_at, start_at
+      season += last_at
 
     # 元号
     era = @dic.eras[0]?[1] || Infinity
@@ -626,9 +623,14 @@ K   = @dic.earthy[2] / 360
       M = drill_down u, "month"
       d = drill_down M, "day"
     else
-      u = Zu
-      M = Nn
-      d = N.dup utc
+      if @is_table_month
+        u = to_tempo_floor Zz, "day"
+        M = drill_down u, "month"
+        d = drill_down M, "day"
+      else
+        u = Zu
+        M = Nn
+        d = N.dup utc
 
     # hour minute second  in day
     if @dic.is_solor
