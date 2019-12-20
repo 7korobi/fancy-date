@@ -211,26 +211,40 @@ export class FancyDate
     list.push Infinity
     @table.msec.era = list
 
-  def_table_by_leap_day: ->
-    day = @calc.msec.day
+  def_year_table: ->
+    { range, msec } = @table
     upto = (src)->
-      msec = 0
+      x = 0
       for i in src
-        msec += i * day
+        x += i * day
+
+    day = @calc.msec.day
 
     [...leaps, period] = @dic.leaps
-
-    range =
-      year:
-        for idx in [0...period]
-          is_leap = 0
-          for div, mode in leaps
-            continue if idx % div
-            is_leap = ! mode % 2
-          @calc.range.year[is_leap]
+    range.year =
+      for idx in [0...period]
+        is_leap = 0
+        for div, mode in leaps
+          continue if idx % div
+          is_leap = ! mode % 2
+        @calc.range.year[is_leap]
     range.year[0] = @calc.range.year[1]
-    years = @calc.range.year
 
+    msec.year = upto range.year
+    period = msec.year[msec.year.length - 1]
+    period = daily_define period, day
+    calc_set.call @, "msec", { period }
+
+  def_month_table: ->
+    { range, msec } = @table
+    upto = (src)->
+      x = 0
+      for i in src
+        x += i * day
+
+    day = @calc.msec.day
+
+    years = @calc.range.year
     { month_divs } = @dic
     unless month_divs
       month_divs =
@@ -248,55 +262,21 @@ export class FancyDate
       a[idx] = size - month_sum
       range.month[size] = a
 
-    year = upto range.year
-    period = year[year.length - 1]
-    period = daily_define period, day
-    calc_set.call @, "msec", { period }
-
-    month = {}
+    msec.month = {}
     for size in years
       year_size = Math.floor day * size
-      month[year_size] = upto range.month[size]
-
-    @table = { range, msec: { year, month } }
-
-  def_table_by_leap_month: ->
-    day = @calc.msec.day
-    upto = (src)->
-      msec = 0
-      for i in src
-        msec += i * day
-
-    years = @calc.range.year
-
-    { month_divs } = @dic
-    month_sum = 0
-    for i in month_divs
-      month_sum += i
-
-    range =
-      month: {}
-    for size in years
-      a = Array.from month_divs
-      idx = month_divs.indexOf null
-      a[idx] = size - month_sum
-      range.month[size] = a
-
-    month = {}
-    for size in years
-      year_size = Math.floor day * size
-      month[year_size] = upto range.month[size]
-
-    @table = { range, msec: { month } }
+      msec.month[year_size] = upto range.month[size]
 
   def_table: ->
+    @table =
+      range: {}
+      msec: {}
     if @is_table_leap
-      @def_table_by_leap_day()
+      @def_month_table()
+      @def_year_table()
     else
       if @is_table_month
-        @def_table_by_leap_month()
-      else
-        @table = { range: {}, msec: {} }
+        @def_month_table()
 
   def_idx: ->
     if @is_table_leap
