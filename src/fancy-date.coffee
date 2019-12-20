@@ -229,14 +229,17 @@ export class FancyDate
     day = @calc.msec.day
 
     [...leaps, period] = @dic.leaps
-    range.year =
-      for idx in [0...period]
-        is_leap = 0
-        for div, mode in leaps
-          continue if idx % div
-          is_leap = ! mode % 2
-        @calc.range.year[is_leap]
-    range.year[0] = @calc.range.year[1]
+    if period
+      range.year =
+        for idx in [0...period]
+          is_leap = 0
+          for div, mode in leaps
+            continue if idx % div
+            is_leap = ! mode % 2
+          @calc.range.year[is_leap]
+      range.year[0] = @calc.range.year[1]
+    else
+      range.year = [@calc.range.year[0]]
 
     msec.year = upto range.year
     period = msec.year[msec.year.length - 1]
@@ -289,7 +292,7 @@ export class FancyDate
   def_idx: ->
     if @is_table_leap
       [..., period] = @dic.leaps
-      @calc.divs.period = period
+      @calc.divs.period = period || 1
 
     o = @index ...@dic.start
     o.Z = @dic.Z.length * 1 / 8
@@ -320,7 +323,7 @@ export class FancyDate
     day    = hour   + zero_size "d", "day"
 
     if @is_table_leap
-      year_size = Math.floor @calc.msec.day * @table.range.year[ @calc.idx.y %% @calc.divs.period ]
+      year_size = Math.floor @calc.msec.day * @table.range.year[ @calc.idx.y ]
       month  = day   - (@table.msec.month[year_size][ @calc.idx.M - 1 ] || 0)
       year   = month - (@table.msec.year[             @calc.idx.y - 1 ] || 0)
       period = year  + zero_size "p", "period"
@@ -334,8 +337,12 @@ export class FancyDate
         year  = month + zero_size "y", "year"
 
     # 単純のため平気法。
-    season = @dic.sunny[1] + zero_size "Z", "season" # 立春点
-    { last_at } = to_tempo_bare @calc.msec.year, season, period || year
+    春分 = @dic.sunny[1]
+    { last_at } = to_tempo_bare @calc.msec.year, 春分, period || year
+    spring = last_at
+
+    立春 = @dic.sunny[1] + zero_size "Z", "season"
+    { last_at } = to_tempo_bare @calc.msec.year, 立春, period || year
     season = last_at
 
     # 元号
@@ -366,7 +373,7 @@ export class FancyDate
     day10 = day + zero_size("C", "day")
     day12 = day + zero_size("B", "day")
     day60 = day + zero_size("A", "day")
-    Object.assign @calc.zero, { period, era, week, season, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
+    Object.assign @calc.zero, { period, era, week, season, spring, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
 
   bless: (o)->
     for key, val of o when val && @dic[key]
@@ -616,7 +623,8 @@ K   = @dic.earthy[2] / 360
       d = drill_down M, "day"
     else
       if @is_table_month
-        u = to_tempo_floor Zz, "day"
+        u = to_tempo_bare @calc.msec.year, @calc.zero.spring, utc # 
+        u = to_tempo_floor u, "day"
         M = drill_down u, "month"
         d = drill_down M, "day"
       else
@@ -767,9 +775,12 @@ K   = @dic.earthy[2] / 360
       ( @table.msec.year[y - 1] || 0 ) +
       ( @table.msec.month[year_size][M - 1] || 0 )
     else
-      @calc.zero.season +
+      @calc.zero.spring +
       ( y * @calc.msec.year) +
-      ( M * @calc.msec.month )
+        if @is_table_month
+          ( Object.values(@table.msec.month)[0][M - 1] || 0 )
+        else
+          ( M * @calc.msec.month )
 
   format_by: ( tempos, str = default_format_format )->
     str.match reg_token
