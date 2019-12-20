@@ -20,12 +20,12 @@ sub_define = (msec, size)->
   { range, msec }
 
 daily_define = (msec, day)->
-  range = [Math.floor(msec / day)]
+  range = [msec // day]
   msec = range[0] * day
   { range, msec }
 
 daily_measure = (msec, day)->
-  range = [Math.floor(msec / day), Math.ceil(msec / day)]
+  range = [msec // day, Math.ceil(msec / day)]
   msec = msec
   { range, msec }
 
@@ -113,6 +113,23 @@ export class FancyDic
     @
 
 export class FancyDate
+  yeary_table:   (utc)-> @to_table utc, 'y', 'M', true
+  monthry_table: (utc)-> @to_table utc, 'M', 'd', true
+  weekly_table:  (utc)-> @to_table utc, 'w', 'd', true
+  time_table:    (utc)-> @to_table utc, 'd', 'H'
+
+  succ_index: ( diff, str = default_parse_format )-> @get_diff diff, str, 'to_succ'
+  back_index: ( diff, str = default_parse_format )-> @get_diff diff, str, 'to_back'
+  index: ( tgt, str = default_parse_format )-> @get_dic tgt, str
+
+  succ: ( utc, diff, str = default_parse_format )-> @slide_by utc, @succ_index diff, str
+  back: ( utc, diff, str = default_parse_format )-> @slide_by utc, @back_index diff, str
+
+  parse: ( tgt, str )-> @parse_by @index tgt, str
+  format: ( utc, str )-> @format_by @to_tempos(utc), str
+
+  dup: -> new @constructor @
+
   constructor: (o)->
     if o
       { @dic, @calc } = _.cloneDeep o
@@ -131,9 +148,6 @@ export class FancyDate
         a = b = c = d = f = m = p = s = u = w = x = y = []
         for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
           @dic[key] = new Indexer val
-
-  dup: ->
-    new @constructor @
 
   spot: ( moon_data, ...geo )->
     [earth_data, moony] = moon_data
@@ -190,7 +204,7 @@ export class FancyDate
     calc_set.call @, "range", { year }
     calc_set.call @, "msec",  { year, moon, day }
     @is_table_leap = leaps?
-    @is_table_month = month_divs?
+    @is_table_month = @is_table_leap || month_divs?
     @strategy =
       if leaps?
         "SolarTable"
@@ -202,6 +216,7 @@ export class FancyDate
 
     @def_regex()
     @def_to_idx()
+    @def_to_diff()
     @def_to_label()
     @def_calc()
 
@@ -235,6 +250,15 @@ export class FancyDate
     J = S = Y = u = x = y = (s)-> s - 0
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_idx = val
+
+  def_to_diff: ->
+    A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = (s)-> s - 0
+    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+      @dic[key].to_succ = val
+
+    A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = (s)-> 0 - s
+    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+      @dic[key].to_back = val
 
   def_to_label: ->
     at = ->
@@ -320,11 +344,14 @@ export class FancyDate
 
     years = @calc.range.year
     { month_divs } = @dic
+
+    # auto month table.
     unless month_divs
       month_divs =
         for str, idx in @dic.M
           @calc.range.month[1 - idx % 2]
       month_divs[1] = null
+
     month_sum = 0
     for i in month_divs
       month_sum += i
@@ -345,19 +372,19 @@ export class FancyDate
     @table =
       range: {}
       msec: {}
-    if @is_table_leap
+
+    if @is_table_month
       @def_month_table()
+
+    if @is_table_leap
       @def_year_table()
-    else
-      if @is_table_month
-        @def_month_table()
 
   def_idx: ->
     if @is_table_leap
       [..., period] = @dic.leaps
       @calc.divs.period = period || 1
 
-    o = @index ...@dic.start
+    o = @index ...@dic.start[0..1]
     o.Z = @dic.Z.length * 1 / 8
     year = (period || 0) * o.p + o.y
     year_s = year - o.f
@@ -393,10 +420,10 @@ export class FancyDate
     else
       if @is_table_month
         month = day   - (Object.values(@table.msec.month)[0][ @calc.idx.M - 1 ] || 0)
-        year  = month + zero_size "y", "year"
       else
         month = day   + zero_size "M", "moon"
-        year  = month + zero_size "y", "year"
+
+      year  = month + zero_size "y", "year"
 
     # 単純のため平気法。
     春分 = @dic.sunny[1]
@@ -445,7 +472,7 @@ export class FancyDate
     o
 
   precision: ->
-    is_just = (x, n)-> n == Math.floor( n / x ) * x
+    is_just = (x, n)-> n == n // x * x
     gaps = [( @calc.msec.year / @calc.msec.day ) - @calc.range.year[0]]
     if @dic.leaps
       for v, idx in @dic.leaps
@@ -544,7 +571,7 @@ K   = @dic.earthy[2] / 360
     }
 
   雑節: (utc, { Zz, u, d } = @to_tempos(utc))->
-    d0 = d.dup Zz.zero
+    d0 = d.reset Zz.zero
     [                   立春, 入梅,
       春分, 半夏生, 夏土用, 立夏,
       夏至,       秋土用, 立秋,
@@ -670,10 +697,10 @@ K   = @dic.earthy[2] / 360
     switch Zs.now_idx >> 1
       when -1
         # 太陽年初に0月が出てしまう。昨年末にする。
-        Zu = Zz.dup Zs.last_at
+        Zu = Zz.reset Zs.last_at
       when @dic.Z.length >> 1
         # 太陽年末に13月が出てしまう。年初にする。
-        Zu = Zz.dup Zs.next_at
+        Zu = Zz.reset Zs.next_at
       else
         Zu = Zz
     Nn.now_idx = ( Zs.now_idx %% @dic.Z.length ) >> 1
@@ -693,7 +720,7 @@ K   = @dic.earthy[2] / 360
       else
         u = Zu
         M = Nn
-        d = N.dup utc
+        d = N.reset utc
 
     # hour minute second  in day
     if @dic.is_solor
@@ -708,13 +735,13 @@ K   = @dic.earthy[2] / 360
 
     G = {}
     if @table.msec.era?
-      era_base = to_tempo_by @table.msec.era, @calc.zero.era, utc
-      era = @calc.eras[era_base.now_idx]
+      G = to_tempo_by @table.msec.era, @calc.zero.era, utc
+      era = @calc.eras[G.now_idx]
       if era?[0]
         u.now_idx += 1 - era[2]
         G.label = era[0]
 
-    y = Object.assign {}, u
+    y = u.copy()
     if y.now_idx < 1
       G.label = "紀元前"
       y.now_idx = 1 - y.now_idx
@@ -741,7 +768,7 @@ K   = @dic.earthy[2] / 360
     f = now_idx: ( u.now_idx - @calc.zero.year_s ) %% @dic.f.length
 
     # 月不断
-    Q = now_idx: Math.floor 4 * M.now_idx / @dic.M.length
+    Q = now_idx: 4 * M.now_idx // @dic.M.length
 
     # 日不断
     A = to_tempo_bare @calc.msec.day, @calc.zero.day60, utc
@@ -759,37 +786,49 @@ K   = @dic.earthy[2] / 360
     else
       E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
 
-    @bless { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+    { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
-  index: (tgt, str = default_parse_format)->
+  get_dic_base: (tgt, mode, tokens, reg)->
     data = null
     do =>
       A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = 0
       data = { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
-    tokens = str.match reg_token
-    reg = @regex tokens
 
     items = tgt.match(reg)[1..]
     for s, p in items
       token = tokens[p][0]
       if dic = @dic[token]
-        val = dic.to_idx s
+        val = dic[mode] s
         data[token] = val
-        switch token
-          when 'a'
-            [,c,b] = s.match @regex ['c','b']
-            data.c = @dic.c.to_idx c
-            data.b = @dic.b.to_idx b
-          when 'A'
-            [,C,B] = s.match @regex ['C','B']
-            data.C = @dic.C.to_idx C
-            data.B = @dic.B.to_idx B
+    data
+
+  get_diff: (tgt, str, mode)->
+    tokens = str.match reg_token
+    data = @get_dic_base tgt, mode, tokens, @regex_diff tokens
+
+
+  get_dic: (tgt, str)->
+    tokens = str.match reg_token
+    data = @get_dic_base tgt, "to_idx", tokens, @regex tokens
 
     if @is_table_leap
-      data.p = Math.floor( data.y / @calc.divs.period )
+      data.p = data.y // @calc.divs.period
       data.y = data.y - data.p * @calc.divs.period
+    data.c = data.a %% @dic.c.length
+    data.b = data.a %% @dic.b.length
+    data.C = data.A %% @dic.C.length
+    data.B = data.A %% @dic.B.length
     data
+
+  regex_diff: (tokens)->
+    reg = "^" + tokens.map (token)=>
+      if val = @dic[token[0]]
+        "(\\d+)"
+      else
+        "(#{token.replace(/([\\\[\]().*?])/g,"\\$1")})"
+    .join("")
+    new RegExp reg
 
   regex: (tokens)->
     reg = "^" + tokens.map (token)=>
@@ -802,6 +841,7 @@ K   = @dic.earthy[2] / 360
 
   to_table: (utc, bk, ik, has_notes = false)->
     o = @to_tempos utc
+    @bless o
 
     if has_notes
       雑節 = @雑節 utc, o
@@ -812,40 +852,66 @@ K   = @dic.earthy[2] / 360
     else
       o[bk].to_list o[ik]
 
-  yeary_table:   (utc)-> @to_table utc, 'y', 'M', true
-  monthry_table: (utc)-> @to_table utc, 'M', 'd', true
-  weekly_table:  (utc)-> @to_table utc, 'w', 'd', true
-  time_table:    (utc)-> @to_table utc, 'd', 'H'
-
-  parse: (tgt, str = default_parse_format)->
-    { G, p,y,M,d,H,m,s,S, J } = @index tgt, str
-    unless @calc.eras[G]
-      console.error tgt, str
-    y += @calc.eras[G][2] - 1
+  parse_by: ({ G, p,y,M,d,H,m,s,S, J })->
     if J
       return @calc.zero.jd + J * @calc.msec.day 
 
-    ( d * @calc.msec.day ) +
-    ( H * @calc.msec.hour ) +
-    ( m * @calc.msec.minute ) +
-    ( s * @calc.msec.second ) +
-    ( S ) +
-    if @is_table_leap
-      year_size = Math.floor @calc.msec.day * @table.range.year[y]
+    if G < 0
+      G = 0
+    if @calc.eras.length <= G
+      G = @calc.eras.length - 1
+    y += @calc.eras[G][2] - 1
 
+    if @is_table_month
+      month_range = @dic.M.length
+      unless 0 < M <= month_range
+        y += M // month_range
+        M %%= month_range
+
+    if @is_table_leap
+      year_range = @calc.divs.period
+      unless 0 < y <= year_range
+        p += y // year_range
+        y %%= year_range
+
+    utc =
+      ( d * @calc.msec.day ) +
+      ( H * @calc.msec.hour ) +
+      ( m * @calc.msec.minute ) +
+      ( s * @calc.msec.second ) +
+      ( S )
+
+
+    if @is_table_leap
+      utc +=
       @calc.zero.period +
       ( p * @calc.msec.period ) +
-      ( @table.msec.year[y - 1] || 0 ) +
-      ( @table.msec.month[year_size][M - 1] || 0 )
+      ( @table.msec.year[y - 1] || 0 )
+
+      year_size = Math.floor @calc.msec.day * @table.range.year[y]
+
     else
+      utc +=
       @calc.zero.spring +
-      ( y * @calc.msec.year) +
-        if @is_table_month
-          ( Object.values(@table.msec.month)[0][M - 1] || 0 )
-        else
-          ( M * @calc.msec.month )
+      ( y * @calc.msec.year)
+
+      year_size =
+        to_tempo_bare @calc.msec.year, @calc.zero.spring, utc
+        .floor @calc.msec.day, @calc.zero.day
+        .size
+
+    if @is_table_month
+      utc +=
+      ( @table.msec.month[year_size][M - 1] || 0 )
+
+    else
+      utc +=
+      ( M * @calc.msec.month )
+
+    utc
 
   format_by: ( tempos, str = default_format_format )->
+    @bless tempos
     str.match reg_token
     .map (token)=>
       val = tempos[token[0]]
@@ -855,6 +921,13 @@ K   = @dic.earthy[2] / 360
         token
     .join("")
 
-  format: ( utc, str )->
-    @format_by @to_tempos(utc), str
+  slide_by: ( utc, diff )->
+    o = @to_tempos utc
+    o.p?.now_idx = 0
+    ret = {}
+    for key, val of o when val
+      ret[key] = val.now_idx + ( diff[key] || 0 )
+    unless diff.J
+      ret.J = null
+    @parse_by ret
 

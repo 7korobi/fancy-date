@@ -78,6 +78,53 @@ describe "define", =>
     return
   return
 
+describe "calculate", =>
+  test "succ 10/10/10", =>
+    msec = g.parse "2年2月2日"
+    expect g.format g.succ msec, "10年10月10日"
+    .toEqual "西暦12年12月12日(水)0時0分0秒"
+    return
+  test "succ 11/11/11", =>
+    msec = g.parse "2年2月2日"
+    expect g.format g.succ msec, "11年11月11日"
+    .toEqual "西暦14年1月13日(月)0時0分0秒"
+    return
+
+  test "back 1/1/1", =>
+    msec = g.parse "2年2月2日"
+    expect g.format g.back msec, "1年1月1日"
+    .toEqual "西暦1年1月1日(月)0時0分0秒"
+    return
+  test "back 5/5/5", =>
+    msec = g.parse "2年2月2日"
+    expect g.format g.back msec, "5年5月5日"
+    .toEqual "紀元前5年8月28日(水)0時0分0秒"
+    return
+  test "back 10/10/10", =>
+    msec = g.parse "401年1月1日"
+    expect g.format g.back msec, "10年", 'y年'
+    .toEqual "西暦391年1月1日(火)0時0分0秒"
+    return
+
+  test "succ 昭和 ⇒ 平成", =>
+    msec = 平気法.parse "昭和10年神無月10日","Gy年Md日"
+    expect 平気法.format 平気法.succ(msec, "2", "G"), "Gy年Md日(E)Hm"
+    .toEqual "平成10年神無月10日"
+  return
+
+
+describe "Dr.Stone", =>
+  test 'T = 0', =>
+    msec = g.parse("5738年4月1日")
+    { 日の出 } = g.solor msec, 6
+    note = g.note msec
+    expect g.format 日の出, "yyyy/MM/dd(E) HH:mm Z #{ note }"
+    .toEqual("5738/04/01(火) 04:20 春分 春")
+    expect( msec ).toEqual 118914361200000
+    expect( 日の出 ).toEqual 118914376828906
+    return
+  return
+
 describe "同時性", =>
   test '春分', =>
     msec = g.parse("1年3月22日")

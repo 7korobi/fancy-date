@@ -116,8 +116,8 @@ export class Tempo {
   is_cover( at: number ) { return this.last_at <= at && at < this.next_at }
   is_hit( that: Tempo ) { return( this.last_at <= that.next_at && that.last_at < this.next_at )}
   to_list( step: Tempo ) {
-    const a = step.dup( this.last_at )
-    const b = step.dup( this.next_at - 1 )
+    const a = step.reset( this.last_at )
+    const b = step.reset( this.next_at - 1 )
     return a.upto(b)
   }
 
@@ -154,8 +154,16 @@ export class Tempo {
     }
   }
 
-  copy(now: number = Date.now()) { return this.dup(now) }
-  dup(now: number = Date.now()): Tempo {
+  copy() { return new Tempo(
+    this.zero,
+    this.now_idx,
+    this.write_at,
+    this.last_at,
+    this.next_at,
+    this.table,
+  )}
+
+  reset(now: number = Date.now()): Tempo {
     if ( this.table ) {
       return to_tempo_by(this.table, this.zero, now)
     } else {
@@ -166,7 +174,7 @@ export class Tempo {
   tick() {
     const now = Date.now()
     if ( this.next_at <= now ) {
-      return this.dup(now)
+      return this.reset(now)
     } else {
       return null
     }
