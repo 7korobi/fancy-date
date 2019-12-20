@@ -96,6 +96,14 @@ export class FancyDate
     Object.assign @dic, { month_divs, leaps, start }
     @is_table_leap = leaps?
     @is_table_month = month_divs?
+    @strategy =
+      if leaps?
+        "SolarTable"
+      else
+        if month_divs?
+          "SeasonTable"
+        else
+          "SolarLunar"
     @
 
   algo: (o)->
@@ -377,6 +385,7 @@ export class FancyDate
         else
           gap -= 1 / v
         gaps.push gap
+    strategy: @strategy
     year: [[@dic.M.length], @calc.range.month ]
     day: [ @calc.range.hour, @calc.range.minute, @calc.range.second ]
     leap: gaps.map (i)=> parseInt 1 / i

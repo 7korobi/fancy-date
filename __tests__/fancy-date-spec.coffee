@@ -85,6 +85,7 @@ describe "平気法", =>
       leap: [4]
       year: [[12],[30,31]]
       day: [[12],[2],[3600]]
+      strategy: "SolarLunar"
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
@@ -134,6 +135,7 @@ describe "Gregorian", =>
       leap: [4, -128, 456, -3217]
       year: [[12],[30,31]]
       day: [[24],[60],[60]]
+      strategy: "SolarTable"
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
@@ -237,6 +239,7 @@ describe "火星", =>
       leap: [1,-7,73,-1554]
       year: [[20],[33,34]]
       day: [[24],[60],[60]]
+      strategy: "SolarTable"
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
@@ -278,6 +281,7 @@ describe "木星", =>
       leap: [1]
       year: [[260],[40,41]]
       day: [[10],[60],[60]]
+      strategy: "SolarLunar"
       is_legal_solor: false
       is_legal_eto: true
       is_legal_ETO: true
@@ -341,6 +345,7 @@ describe "フランス革命歴", =>
       leap: [4, -128, 456, -3217]
       year: [[13],[28,29]]
       day: [[10],[100],[100]]
+      strategy: "SolarTable"
       is_legal_solor: false
       is_legal_eto: true
       is_legal_ETO: true
@@ -381,6 +386,7 @@ describe "ロムルス歴", =>
       leap: [4]
       year: [[11],[33,34]]
       day: [[24],[60],[60]]
+      strategy: "SeasonTable"
       is_legal_solor: true
       is_legal_eto: true
       is_legal_ETO: true
