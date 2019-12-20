@@ -4,13 +4,17 @@ format = require "date-fns/format"
 locale = require "date-fns/locale/ja"
 _ = require 'lodash'
 
-
-g = FancyDate.Gregorian
-mg = FancyDate.MarsGregorian
-jg = FancyDate.Jupiter
-rg = FancyDate.Romulus
-fg = FancyDate.フランス革命暦
-平気法 = FancyDate.平気法
+calendars = [
+  [utc = FancyDate.UTC, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [g = FancyDate.Gregorian, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [fg = FancyDate.フランス革命暦, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [j = FancyDate.Julian, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [rg = FancyDate.Romulus, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [平気法 = FancyDate.平気法, "J Z aA yyyy年MMdd日(E) Hm ssss:S G"]
+  [b = FancyDate.Beat, "J Z a-A yyyy年MM月dd日(E) H:m G"]
+  [mg = FancyDate.MarsGregorian, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
+  [jg = FancyDate.Jupiter, "J Z a-A yyyy年MMM月dd日(E) HH:mm:ss:SS G"]
+]
 
 to_graph = (c, msec, str = "Gyyyy-MM-dd HH:mm a-Z-E")->
   { PI } = Math
@@ -71,6 +75,15 @@ describe "define", =>
     .toEqual 12622780800000
     expect g.table.msec.year[-1..]
     .toEqual [12622780800000]
+    return
+  return
+
+describe "同時性", =>
+  test '春分', =>
+    msec = g.parse("1年3月22日")
+    expect calendars.map ([c, str])=>
+      c.format msec, str
+    .toMatchSnapshot()
     return
   return
 
@@ -300,13 +313,13 @@ describe "木星", =>
       jg.format  -10000000000000, str
     ].join("\n")
     .toEqual [
-      "西暦194年180月07日(木)04時 乙丑丑乙"
-      "西暦172年35月23日(月)08時 癸卯卯癸"
+      "西暦194年180月07日(木)05時 乙丑丑乙"
+      "西暦172年35月23日(月)09時 癸卯卯癸"
       "西暦168年01月39日(木)00時 己亥亥己"
-      "西暦167年255月01日(水)04時 戊戌戌戊"
-      "西暦167年248月03日(金)08時 戊戌戌戊"
-      "西暦165年80月20日(月)07時 丙申申丙"
-      "西暦141年68月35日(木)04時 壬申申壬"
+      "西暦167年255月01日(水)05時 戊戌戌戊"
+      "西暦167年248月03日(金)09時 戊戌戌戊"
+      "西暦165年80月20日(月)08時 丙申申丙"
+      "西暦141年68月35日(木)05時 壬申申壬"
     ].join("\n")
     return
 

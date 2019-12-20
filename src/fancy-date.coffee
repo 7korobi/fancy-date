@@ -46,6 +46,72 @@ class Indexer
       unless zero.length
         @zero = zero
 
+export class FancyDic
+  constructor: (o)->
+    if o
+      { @dic, @calc } = _.cloneDeep o
+    else
+      @dic = {}
+      @calc =
+        eras: []
+        divs: {}
+        idx:  {}
+        zero: {}
+        msec: {}
+        range: {}
+      do =>
+        G = []
+        A = B = C = D = E = F = H = J = K = M = N = Q = S = Y = Z = []
+        a = b = c = d = f = m = p = s = u = w = x = y = []
+        for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+          @dic[key] = new Indexer val
+
+  spot: ( moon_data, ...geo )->
+    [earth_data, moony] = moon_data
+    [sun_data, sunny, earthy] = earth_data
+    Object.assign @dic, { sunny, moony, earthy, geo }
+    @
+
+  era: ( era, past, eras = [] )->
+    all_eras = [past, ...eras.map(([s,])=> s)]
+    @dic.G = new Indexer [all_eras]
+    Object.assign @dic, { era, eras }
+    @
+
+  calendar: (start = ["1970-1-1 0:0:0","y-M-d H:m:s", 0], leaps = null, month_divs = null )->
+    Object.assign @dic, { month_divs, leaps, start }
+    @
+
+  algo: (o)->
+    for key, val of o
+      @dic[key] = new Indexer val
+
+    # A B C a b c 日の不断、年の不断を構築
+    if o.C?[0]?.length && o.B?[0]?.length
+      @dic.c = new Indexer o.C
+      @dic.b = new Indexer o.B
+      @dic.C.zero = @dic.B.zero = @dic.A.zero
+      @dic.c.zero = @dic.b.zero = @dic.a.zero
+
+    if @dic.C.list && @dic.B.list
+      @dic.A.list = @dic.a.list =
+        for idx in [0...@dic.A.length]
+          c = @dic.C.list[idx % @dic.C.length]
+          b = @dic.B.list[idx % @dic.B.length]
+          "#{c}#{b}"
+
+    if @dic.C.rubys && @dic.B.rubys
+      @dic.A.rubys = @dic.a.rubys =
+        for idx in [0...@dic.a.length]
+          c = @dic.C.rubys[idx % @dic.C.length]
+          b = @dic.B.rubys[idx % @dic.B.length]
+          "#{"#{c.replace /と$/,"との" }#{b}"}"
+    @
+
+  daily: (is_solor = false)->
+    @dic.is_solor = is_solor
+    @
+
 export class FancyDate
   constructor: (o)->
     if o
@@ -60,7 +126,7 @@ export class FancyDate
         msec: {}
         range: {}
       do =>
-        G = ["紀元前"]
+        G = []
         A = B = C = D = E = F = H = J = K = M = N = Q = S = Y = Z = []
         a = b = c = d = f = m = p = s = u = w = x = y = []
         for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
@@ -69,41 +135,20 @@ export class FancyDate
   dup: ->
     new @constructor @
 
-  planet: (
-    sunny
-    moony
-    earthy
-    geo
-  )->
-    year = daily_measure sunny[0], earthy[0]
-    day = daily_define earthy[0], earthy[0]
-    if moony
-      moon = daily_measure moony[0], earthy[0]
-
-    calc_set.call @, "range", { year }
-    calc_set.call @, "msec",  { year, moon, day }
-
+  spot: ( moon_data, ...geo )->
+    [earth_data, moony] = moon_data
+    [sun_data, sunny, earthy] = earth_data
     Object.assign @dic, { sunny, moony, earthy, geo }
     @
 
-  era: ( era, eras = [] )->
-    all_eras = ["紀元前", ...eras.map(([s,])=> s)]
+  era: ( era, past, eras = [] )->
+    all_eras = [past, ...eras.map(([s,])=> s)]
     @dic.G = new Indexer [all_eras]
     Object.assign @dic, { era, eras }
     @
 
   calendar: (start = ["1970-1-1 0:0:0","y-M-d H:m:s", 0], leaps = null, month_divs = null )->
     Object.assign @dic, { month_divs, leaps, start }
-    @is_table_leap = leaps?
-    @is_table_month = month_divs?
-    @strategy =
-      if leaps?
-        "SolarTable"
-      else
-        if month_divs?
-          "SeasonTable"
-        else
-          "SolarLunar"
     @
 
   algo: (o)->
@@ -137,6 +182,24 @@ export class FancyDate
     @
 
   init: ->
+    { sunny, moony, earthy, leaps, month_divs } = @dic
+    year = daily_measure sunny[0], earthy[0]
+    day = daily_define earthy[0], earthy[0]
+    if moony
+      moon = daily_measure moony[0], earthy[0]
+    calc_set.call @, "range", { year }
+    calc_set.call @, "msec",  { year, moon, day }
+    @is_table_leap = leaps?
+    @is_table_month = month_divs?
+    @strategy =
+      if leaps?
+        "SolarTable"
+      else
+        if month_divs?
+          "SeasonTable"
+        else
+          "SolarLunar"
+
     @def_regex()
     @def_to_idx()
     @def_to_label()
@@ -309,10 +372,9 @@ export class FancyDate
     zero_size = (idx_path, path)=>
       0 - @calc.idx[idx_path] * @calc.msec[path]
 
-    timezone = @calc.msec.day * (@dic.geo[2] || @dic.geo[1]) / 360
-    @dic.x.tempo = 
-      x = to_tempo_bare @calc.msec.hour / 4, -@calc.msec.hour / 8, timezone
-    x.now_idx /= 4
+    timezone = @calc.msec.day * (if @dic.geo[2]? then @dic.geo[2] else @dic.geo[1]) / 360
+    @dic.x.tempo = x = to_tempo_bare @calc.msec.hour, -0.5 * @calc.msec.hour, timezone
+    x.now_idx = timezone
 
     start_at = @dic.start[2]
     zero   = start_at - x.center_at
@@ -348,14 +410,15 @@ export class FancyDate
     # 元号
     era = @dic.eras[0]?[1] || Infinity
     @calc.eras = []
-    if @is_table_leap
-      if period < era
-        era = period + @table.msec.year[0]
-        @calc.eras = [[@dic.era, era, 1]]
-    else
-      if season < era
-        era = season + @calc.msec.year
-        @calc.eras = [[@dic.era, era, 1]]
+    era_tgt =
+      if @is_table_leap
+        period + @table.msec.year[0]
+      else
+        season + @calc.msec.year
+
+    if era_tgt < era
+      era = era_tgt
+      @calc.eras = [[@dic.era, era, 1]]
 
     if @dic.moony
       moon = 0 - @dic.moony[1]
@@ -623,7 +686,7 @@ K   = @dic.earthy[2] / 360
       d = drill_down M, "day"
     else
       if @is_table_month
-        u = to_tempo_bare @calc.msec.year, @calc.zero.spring, utc # 
+        u = to_tempo_bare @calc.msec.year, @calc.zero.spring, utc
         u = to_tempo_floor u, "day"
         M = drill_down u, "month"
         d = drill_down M, "day"
