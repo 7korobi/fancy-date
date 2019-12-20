@@ -331,21 +331,24 @@ export class FancyDate
     hour   = minute + zero_size "H", "hour"
     day    = hour   + zero_size "d", "day"
 
-    # 単純のため平気法。
-    season = @dic.sunny[1] + zero_size "Z", "season" # 立春点
-    { since, last_at } = to_tempo_bare @calc.msec.year, start_at, season
-    season = since + zero_size "y", "year"
-
     if @is_table_leap
       year_size = Math.floor @calc.msec.day * @table.range.year[ @calc.idx.y %% @calc.divs.period ]
       month  = day   - (@table.msec.month[year_size][ @calc.idx.M - 1 ] || 0)
       year   = month - (@table.msec.year[             @calc.idx.y - 1 ] || 0)
       period = year  + zero_size "p", "period"
 
-      season += zero_size "p", "period"
     else
-      { last_at } = to_tempo_bare @calc.msec.year, last_at, start_at
-      season += last_at
+      if @is_table_month
+        month = day   - (Object.values(@table.msec.month)[0][ @calc.idx.M - 1 ] || 0)
+        year  = month + zero_size "y", "year"
+      else
+        month = day   + zero_size "M", "moon"
+        year  = month + zero_size "y", "year"
+
+    # 単純のため平気法。
+    season = @dic.sunny[1] + zero_size "Z", "season" # 立春点
+    { last_at } = to_tempo_bare @calc.msec.year, season, period || year
+    season = last_at
 
     # 元号
     era = @dic.eras[0]?[1] || Infinity
