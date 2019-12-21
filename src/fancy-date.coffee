@@ -435,8 +435,8 @@ export class FancyDate
       year  = month + zero_size "y", "year"
 
     # 単純のため平気法。
-    春分 = @dic.sunny[1]
-    { last_at } = to_tempo_bare @calc.msec.year, 春分, period || year
+    啓蟄 = @dic.sunny[1] - (1 / 6 - 1 / 8) * @dic.Z.length * @calc.msec.season
+    { last_at } = to_tempo_bare @calc.msec.year, 啓蟄, period || year
     spring = last_at
 
     立春 = @dic.sunny[1] + zero_size "Z", "season"
