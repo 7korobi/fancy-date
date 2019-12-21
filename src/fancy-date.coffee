@@ -228,7 +228,16 @@ export class FancyDate
     @
 
   def_regex: ->
-    A = B = C = E = F = G = H = M = N = Z = a = b = c = f = m = p = s = (list)=>
+    M = (list)=>
+      if list
+        if list.join
+          "(閏?(?:#{ list.join("|") }))"
+        else
+          "(閏?[#{list}])"
+      else
+        "(閏?\\d+)"
+
+    A = B = C = E = F = G = H = N = Z = a = b = c = f = m = p = s = (list)=>
       if list
         if list.join
           "(#{ list.join("|") })"
@@ -799,8 +808,13 @@ K   = @dic.earthy[2] / 360
     for s, p in items
       token = tokens[p][0]
       if dic = @dic[token]
+        if 'M' == token && '閏' == s[0]
+          data.M_is_leap = true
+          s = s[1..]
         val = dic[mode] s
         data[token] = val
+
+
     data
 
   get_diff: (tgt, str, mode)->
@@ -852,7 +866,7 @@ K   = @dic.earthy[2] / 360
     else
       o[bk].to_list o[ik]
 
-  parse_by: ({ G, p,y,M,d,H,m,s,S, J })->
+  parse_by: ({ M_is_leap, G, p,y,M,d,H,m,s,S, J })->
     if J
       return @calc.zero.jd + J * @calc.msec.day 
 
@@ -881,7 +895,7 @@ K   = @dic.earthy[2] / 360
       ( s * @calc.msec.second ) +
       ( S )
 
-
+    # year section
     if @is_table_leap
       utc +=
       @calc.zero.period +
@@ -891,22 +905,32 @@ K   = @dic.earthy[2] / 360
       year_size = Math.floor @calc.msec.day * @table.range.year[y]
 
     else
-      utc +=
-      @calc.zero.spring +
-      ( y * @calc.msec.year)
+      if @is_table_month
+        zero = @calc.zero.spring
+      else
+        zero = @calc.zero.season
 
-      year_size =
-        to_tempo_bare @calc.msec.year, @calc.zero.spring, utc
+      { size, last_at } =
+        to_tempo_bare @calc.msec.year, zero, zero + ( y * @calc.msec.year )
         .floor @calc.msec.day, @calc.zero.day
-        .size
+      year_size = size
+      utc += last_at
 
+    # month section
     if @is_table_month
       utc +=
       ( @table.msec.month[year_size][M - 1] || 0 )
 
     else
-      utc +=
-      ( M * @calc.msec.month )
+      base = last_at
+      M_utc = base + ( ( 1 + M * 2 ) * @calc.msec.season )
+      if M_is_leap
+        M_utc += @calc.msec.season - @calc.msec.moon
+
+      { last_at } =
+        to_tempo_bare @calc.msec.moon, @calc.zero.moon, M_utc
+        .floor @calc.msec.day, @calc.zero.day
+      utc += last_at - base
 
     utc
 
