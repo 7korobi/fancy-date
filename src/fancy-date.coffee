@@ -29,6 +29,9 @@ daily_measure = (msec, day)->
   msec = msec
   { range, msec }
 
+to_indexs = (zero)->
+  A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = zero
+  { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
 class Indexer
   constructor: ([list, rubys, ... , zero ])->
@@ -60,10 +63,7 @@ export class FancyDic
         msec: {}
         range: {}
       do =>
-        G = []
-        A = B = C = D = E = F = H = J = K = M = N = Q = S = Y = Z = []
-        a = b = c = d = f = m = p = s = u = w = x = y = []
-        for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+        for key, val of to_indexs []
           @dic[key] = new Indexer val
 
   spot: ( moon_data, ...geo )->
@@ -798,12 +798,7 @@ K   = @dic.earthy[2] / 360
     { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
   get_dic_base: (tgt, mode, tokens, reg)->
-    data = null
-    do =>
-      A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = 0
-      data = { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
-
-
+    data = to_indexs 0
     items = tgt.match(reg)[1..]
     for s, p in items
       token = tokens[p][0]
@@ -813,8 +808,6 @@ K   = @dic.earthy[2] / 360
           s = s[1..]
         val = dic[mode] s
         data[token] = val
-
-
     data
 
   get_diff: (tgt, str, mode)->
@@ -866,9 +859,20 @@ K   = @dic.earthy[2] / 360
     else
       o[bk].to_list o[ik]
 
-  parse_by: ({ M_is_leap, G, p,y,M,d,H,m,s,S, J })->
+  parse_by: (o)->
+    data = to_indexs 0
+    Object.assign data, o
+    { M_is_leap, G, p,y,M,d,H,m,s,S, J, A,B,C,D,E,F,Y,Z, a,b,c,f,u,w } = data
+
     if J
       return @calc.zero.jd + J * @calc.msec.day 
+
+    ###
+    if ! y
+      y = a || b || c || f || u
+    if ! d
+      d = A || B || C || E || F
+    ###
 
     if G < 0
       G = 0
@@ -923,9 +927,11 @@ K   = @dic.earthy[2] / 360
 
     else
       base = last_at
-      M_utc = base + ( ( 1 + M * 2 ) * @calc.msec.season )
-      if M_is_leap
-        M_utc += @calc.msec.season - @calc.msec.moon
+      M_utc =
+        if M_is_leap
+          base + @calc.msec.season * ( M * 2 + 2 ) - @calc.msec.moon
+        else
+          base + @calc.msec.season * ( M * 2 + 1 )
 
       { last_at } =
         to_tempo_bare @calc.msec.moon, @calc.zero.moon, M_utc
