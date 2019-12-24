@@ -6,7 +6,21 @@
 } = require "./time"
 _ = require "lodash"
 
-reg_token = /([ABCabcGuYyMdHmsSEQZNDwJ])(o|\1*)|''|'(''|[^'])+('|$)|./g
+単位系 =
+  元: 'G'
+  年: 'y'
+  月: 'M'
+  季: 'Z'
+  節: 'Z'
+  週: 'w'
+  日: 'd'
+  時: 'H'
+  分: 'm'
+  秒: 's'
+
+
+diff_token = /(\d+)(?:([ABCDEFGHJMNQSYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
+reg_token = /([ABCDEFGHJMNQSYZabcdfmpsuwxy])(o|\1*)|''|'(''|[^'])+('|$)|./g
 default_parse_format  = "y年M月d日"
 default_format_format = "Gy年M月d日(E)H時m分s秒"
 
@@ -33,6 +47,14 @@ to_indexs = (zero)->
   A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = zero
   { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
+shift_up = (a, b, size)->
+  if 0 <= b <= size
+    return arguments
+  a += b // size
+  b %%= size
+  [a,b]
+
+
 class Indexer
   constructor: ([list, rubys, ... , zero ])->
     if list?
@@ -49,81 +71,18 @@ class Indexer
       unless zero.length
         @zero = zero
 
-export class FancyDic
-  constructor: (o)->
-    if o
-      { @dic, @calc } = _.cloneDeep o
-    else
-      @dic = {}
-      @calc =
-        eras: []
-        divs: {}
-        idx:  {}
-        zero: {}
-        msec: {}
-        range: {}
-      do =>
-        for key, val of to_indexs []
-          @dic[key] = new Indexer val
-
-  spot: ( moon_data, ...geo )->
-    [earth_data, moony] = moon_data
-    [sun_data, sunny, earthy] = earth_data
-    Object.assign @dic, { sunny, moony, earthy, geo }
-    @
-
-  era: ( era, past, eras = [] )->
-    all_eras = [past, ...eras.map(([s,])=> s)]
-    @dic.G = new Indexer [all_eras]
-    Object.assign @dic, { era, eras }
-    @
-
-  calendar: (start = ["1970-1-1 0:0:0","y-M-d H:m:s", 0], leaps = null, month_divs = null )->
-    Object.assign @dic, { month_divs, leaps, start }
-    @
-
-  algo: (o)->
-    for key, val of o
-      @dic[key] = new Indexer val
-
-    # A B C a b c 日の不断、年の不断を構築
-    if o.C?[0]?.length && o.B?[0]?.length
-      @dic.c = new Indexer o.C
-      @dic.b = new Indexer o.B
-      @dic.C.zero = @dic.B.zero = @dic.A.zero
-      @dic.c.zero = @dic.b.zero = @dic.a.zero
-
-    if @dic.C.list && @dic.B.list
-      @dic.A.list = @dic.a.list =
-        for idx in [0...@dic.A.length]
-          c = @dic.C.list[idx % @dic.C.length]
-          b = @dic.B.list[idx % @dic.B.length]
-          "#{c}#{b}"
-
-    if @dic.C.rubys && @dic.B.rubys
-      @dic.A.rubys = @dic.a.rubys =
-        for idx in [0...@dic.a.length]
-          c = @dic.C.rubys[idx % @dic.C.length]
-          b = @dic.B.rubys[idx % @dic.B.length]
-          "#{"#{c.replace /と$/,"との" }#{b}"}"
-    @
-
-  daily: (is_solor = false)->
-    @dic.is_solor = is_solor
-    @
-
 export class FancyDate
   yeary_table:   (utc)-> @to_table utc, 'y', 'M', true
   monthry_table: (utc)-> @to_table utc, 'M', 'd', true
   weekly_table:  (utc)-> @to_table utc, 'w', 'd', true
   time_table:    (utc)-> @to_table utc, 'd', 'H'
 
-  succ_index: ( diff, str = default_parse_format )-> @get_diff diff, str, 'to_succ'
-  back_index: ( diff, str = default_parse_format )-> @get_diff diff, str, 'to_back'
+  succ_index: ( diff )-> @get_diff diff, (n)=> n - 0
+  back_index: ( diff )-> @get_diff diff, (n)=> 0 - n
   index: ( tgt, str = default_parse_format )-> @get_dic tgt, str
 
-  succ: ( utc, diff, str = default_parse_format )-> @slide_by utc, @succ_index diff, str
-  back: ( utc, diff, str = default_parse_format )-> @slide_by utc, @back_index diff, str
+  succ: ( utc, diff )-> @slide_by utc, @succ_index diff
+  back: ( utc, diff )-> @slide_by utc, @back_index diff
 
   parse: ( tgt, str )-> @parse_by @index tgt, str
   format: ( utc, str )-> @format_by @to_tempos(utc), str
@@ -143,10 +102,7 @@ export class FancyDate
         msec: {}
         range: {}
       do =>
-        G = []
-        A = B = C = D = E = F = H = J = K = M = N = Q = S = Y = Z = []
-        a = b = c = d = f = m = p = s = u = w = x = y = []
-        for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+        for key, val of to_indexs　[]
           @dic[key] = new Indexer val
 
   spot: ( moon_data, ...geo )->
@@ -216,7 +172,6 @@ export class FancyDate
 
     @def_regex()
     @def_to_idx()
-    @def_to_diff()
     @def_to_label()
     @def_calc()
 
@@ -260,15 +215,6 @@ export class FancyDate
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_idx = val
 
-  def_to_diff: ->
-    A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = (s)-> s - 0
-    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
-      @dic[key].to_succ = val
-
-    A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = (s)-> 0 - s
-    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
-      @dic[key].to_back = val
-
   def_to_label: ->
     at = ->
       if @list
@@ -283,15 +229,19 @@ export class FancyDate
       _.padStart(num, size, '0') + sub
 
     G = -> @label
-    S = ( size )-> "#{ @now_idx }"[1..]
-    M = ( size )-> "#{ if @is_leap then "閏" else "" }#{ at.call(@) ? num_1.call(@, size) }"
-    H = m = s = ( size )-> at.call(@) ? num_0.call @, size
-    A = B = C = E = F = N = Z = a = b = c = d = f = ( size )-> at.call(@) ? num_1.call @, size
-    D = Q = p = w = num_1
-    Y = u = y = num_0
+    M = ( size )-> "#{ if @is_leap then "閏" else "" }#{ num_1.call @, size }"
+    H = m = s = S = Y = u = y = num_0
+    A = B = C = E = F = Z = a = b = c = f = ( size )-> at.call(@) ? num_1.call @, size
+    D = N = Q = d = p = w = num_1
     J = x = f_0
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_label = val
+
+    M = -> "#{ if @is_leap then "閏" else "" }#{ at.call @ }"
+    H = m = s = ( size )-> at.call(@) ? num_0.call @, size
+    N = Q = d = ( size )-> at.call(@) ? num_1.call @, size
+    for key, val of { H,M,N,Q,d,m,s }
+      @dic[key].to_label_o = val
 
   def_calc: ->
     season = sub_define    @calc.msec.year, @dic.Z.length
@@ -477,7 +427,6 @@ export class FancyDate
   bless: (o)->
     for key, val of o when val && @dic[key]
       val.list     = @dic[key].list
-      val.to_label = @dic[key].to_label
     o
 
   precision: ->
@@ -797,27 +746,35 @@ K   = @dic.earthy[2] / 360
 
     { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
-  get_dic_base: (tgt, mode, tokens, reg)->
+  get_dic_base: (tgt, tokens, reg)->
     data = to_indexs 0
     items = tgt.match(reg)[1..]
     for s, p in items
-      token = tokens[p][0]
-      if dic = @dic[token]
-        if 'M' == token && '閏' == s[0]
+      token = tokens[p]
+      top = token[0]
+      if dic = @dic[token] || @dic[top]
+        if 'M' == top && '閏' == s[0]
           data.M_is_leap = true
           s = s[1..]
-        val = dic[mode] s
-        data[token] = val
+        data[top] = dic.to_idx s
     data
 
-  get_diff: (tgt, str, mode)->
-    tokens = str.match reg_token
-    data = @get_dic_base tgt, mode, tokens, @regex_diff tokens
+  get_diff: ( src, f )->
+    data = to_indexs 0
+    src.replace diff_token, (full, num, unit, 単位, 半, offset)=>
+      if num = f num
+        if 単位
+          if 半
+            num += 0.5
+          unit = 単位系[単位]
+        if unit
+          data[unit] = num
+    data 
 
 
-  get_dic: (tgt, str)->
+  get_dic: (src, str)->
     tokens = str.match reg_token
-    data = @get_dic_base tgt, "to_idx", tokens, @regex tokens
+    data = @get_dic_base src, tokens, @regex tokens
 
     if @is_table_leap
       data.p = data.y // @calc.divs.period
@@ -828,19 +785,11 @@ K   = @dic.earthy[2] / 360
     data.B = data.A %% @dic.B.length
     data
 
-  regex_diff: (tokens)->
-    reg = "^" + tokens.map (token)=>
-      if val = @dic[token[0]]
-        "(\\d+)"
-      else
-        "(#{token.replace(/([\\\[\]().*?])/g,"\\$1")})"
-    .join("")
-    new RegExp reg
-
   regex: (tokens)->
     reg = "^" + tokens.map (token)=>
-      if val = @dic[token[0]]
-        val.regex
+      top = token[0]
+      if dic = @dic[token] || @dic[top]
+        dic.regex
       else
         "(#{token.replace(/([\\\[\]().*?])/g,"\\$1")})"
     .join("")
@@ -862,17 +811,14 @@ K   = @dic.earthy[2] / 360
   parse_by: (o)->
     data = to_indexs 0
     Object.assign data, o
-    { M_is_leap, G, p,y,M,d,H,m,s,S, J, A,B,C,D,E,F,Y,Z, a,b,c,f,u,w } = data
+    { M_is_leap, G, p,y,M,d,H,m,s,S, J, D,Y,Z, u,w } = data
 
     if J
       return @calc.zero.jd + J * @calc.msec.day 
 
-    ###
-    if ! y
-      y = a || b || c || f || u
-    if ! d
-      d = A || B || C || E || F
-    ###
+    if w
+      d += w * @dic.E.length
+      w = 0
 
     if G < 0
       G = 0
@@ -880,17 +826,15 @@ K   = @dic.earthy[2] / 360
       G = @calc.eras.length - 1
     y += @calc.eras[G][2] - 1
 
+    [m, s] = shift_up m, s, @dic.s.length
+    [H, m] = shift_up H, m, @dic.m.length
+    [d, H] = shift_up d, H, @dic.H.length
+
     if @is_table_month
-      month_range = @dic.M.length
-      unless 0 < M <= month_range
-        y += M // month_range
-        M %%= month_range
+      [y, M] = shift_up y, M, @dic.M.length
 
     if @is_table_leap
-      year_range = @calc.divs.period
-      unless 0 < y <= year_range
-        p += y // year_range
-        y %%= year_range
+      [p, y] = shift_up p, y, @calc.divs.period
 
     utc =
       ( d * @calc.msec.day ) +
@@ -944,9 +888,14 @@ K   = @dic.earthy[2] / 360
     @bless tempos
     str.match reg_token
     .map (token)=>
-      val = tempos[token[0]]
-      if val?.to_label?
-        val.to_label token.length
+      [top, mode] = token
+      if val = tempos[top]
+        cb =
+          if 'o' == mode
+            @dic[top].to_label_o
+          else
+            @dic[top].to_label
+        cb.call val, token.length
       else
         token
     .join("")
@@ -954,6 +903,7 @@ K   = @dic.earthy[2] / 360
   slide_by: ( utc, diff )->
     o = @to_tempos utc
     o.p?.now_idx = 0
+    o.w?.now_idx = 0
     ret = {}
     for key, val of o when val
       ret[key] = val.now_idx + ( diff[key] || 0 )
