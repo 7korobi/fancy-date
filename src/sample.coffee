@@ -465,6 +465,10 @@ FancyDate.Julian = g.dup()
   .init()
 
 FancyDate.平気法 = g.dup()
+  .lang(
+    "Gy年Mod日"
+    'Gy年Mod日(E)Homo'
+  )
   .spot ...東京
   .era "皇紀", "紀元前", 元号
   .calendar(
@@ -488,7 +492,7 @@ FancyDate.Romulus = g.dup()
   .spot ...Romus
   .era "ロムルス暦", "紀元前"
   .calendar(
-    ["754年1月1日(A) 辛酉-己亥",'y年M月d日(E) a-A', g.parse("1年3月22日")]
+    ["754年1月16日(H) 辛酉-己亥",'y年M月d日(E) a-A', g.parse("1年3月22日")]
     null
     [31,30,31,30,31,30,30,31,30,30, null]
   )

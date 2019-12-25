@@ -10,7 +10,7 @@ calendars = [
   [fg = FancyDate.フランス革命暦, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
   [j = FancyDate.Julian, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
   [rg = FancyDate.Romulus, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
-  [平気法 = FancyDate.平気法, "J Z aA yyyy年MModd日(E) Hm ssss:S G"]
+  [平気法 = FancyDate.平気法, "J Z aA yyyy年MM月dd日(E) Homo ssss:S G"]
   [b = FancyDate.Beat, "J Z a-A yyyy年MM月dd日(E) H:m G"]
   [mg = FancyDate.MarsGregorian, "J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G"]
   [jg = FancyDate.Jupiter, "J Z a-A yyyy年MMM月dd日(E) HH:mm:ss:SS G"]
@@ -110,42 +110,42 @@ describe "Gregorio calculate", =>
 describe "平気法 calculate", =>
   test "succ...", =>
     tgt = "明治9年神無月10日 暁九ツ"
-    ret = 平気法.parse tgt,"Gy年Mod日"
+    ret = 平気法.parse tgt
 
     expect [
-      平気法.format 平気法.back(ret, "5M"), 'Gy年Mod日 Homo'
-      平気法.format 平気法.parse("明治9年閏水無月10日", 'Gy年Mod日'), 'Gy年Mod日 Homo'
-      平気法.format 平気法.back(ret, "4M"), 'Gy年Mod日 Homo'
+      平気法.format 平気法.back(ret, "5ヶ月")
+      平気法.format 平気法.parse("明治9年閏水無月10日")
+      平気法.format 平気法.back(ret, "4ヶ月")
     ]
     .toEqual [
-      "明治9年皐月10日 暁九ツ"
-      "明治9年閏水無月10日 暁九ツ"
-      "明治9年水無月10日 暁九ツ"
+      "明治9年皐月10日(友引)暁九ツ"
+      "明治9年閏水無月10日(先負)暁九ツ"
+      "明治9年水無月10日(先負)暁九ツ"
     ]
     return
 
   test "succ...", =>
     tgt = "明治9年神無月10日 暁九ツ"
-    ret = 平気法.parse tgt,"Gy年Mod日"
+    ret = 平気法.parse tgt
 
     expect [
-      平気法.back(ret, "6M")
-      平気法.back(ret, "5M")
-      # 閏月
-      平気法.back(ret, "4M")
-      平気法.back(ret, "3M")
-      平気法.back(ret, "2M")
-      平気法.back(ret, "1M")
+      平気法.back(ret, "6ヶ月")
+      平気法.back(ret, "5ヶ月")
+      # 平気法.back(ret, "5N") # 閏月
+      平気法.back(ret, "4ヶ月")
+      平気法.back(ret, "3ヶ月")
+      平気法.back(ret, "2ヶ月")
+      平気法.back(ret, "1ヶ月")
       ret
-      平気法.succ(ret, "1M")
-      平気法.succ(ret, "2M")
-      平気法.succ(ret, "3M")
-      平気法.succ(ret, "4M")
+      平気法.succ(ret, "1ヶ月")
+      平気法.succ(ret, "2ヶ月")
+      平気法.succ(ret, "3ヶ月")
+      平気法.succ(ret, "4ヶ月")
     ]
     .toEqual [
       -2969690400000 - 7 * 2592000000 + 4 * 86400000
       -2969690400000 - 6 * 2592000000 + 3 * 86400000
-      # 閏月
+      # -2969690400000 - 5 * 2592000000 + 3 * 86400000 # 閏月
       -2969690400000 - 4 * 2592000000 + 2 * 86400000
       -2969690400000 - 3 * 2592000000 + 2 * 86400000
       -2969690400000 - 2 * 2592000000 + 1 * 86400000
@@ -159,49 +159,49 @@ describe "平気法 calculate", =>
     return
 
   test "base", =>
-    tgt = "明治9年神無月10日 暁九ツ"
-    ret = 平気法.parse tgt,"Gy年Mod日"
+    tgt = "明治9年神無月10日(先勝)暁九ツ"
+    ret = 平気法.parse tgt
 
-    expect 平気法.format ret, 'Gy年Mod日 Homo'
+    expect 平気法.format ret
     .toEqual tgt
     return
 
   test "1月,1年", =>
     tgt  = "明治10年長月10日 暁九ツ"
-    goal = 平気法.parse tgt,"Gy年Mod日"
+    goal = 平気法.parse tgt
 
-    msec = 平気法.parse "明治10年神無月10日","Gy年Mod日"
+    msec = 平気法.parse "明治10年神無月10日"
     expect [
-      平気法.format 平気法.back(msec, "1年"), 'Gy年Mod日 Homo'
-      平気法.format 平気法.back(msec, "1月"), 'Gy年Mod日 Homo'
-      平気法.format 平気法.succ(msec, "1月"), 'Gy年Mod日 Homo'
-      平気法.format 平気法.succ(msec, "1年"), 'Gy年Mod日 Homo'
+      平気法.format 平気法.back(msec, "1年")
+      平気法.format 平気法.back(msec, "1月")
+      平気法.format 平気法.succ(msec, "1月")
+      平気法.format 平気法.succ(msec, "1年")
     ]
     .toEqual [
-      "明治9年神無月10日 暁九ツ"
-      "明治10年長月10日 暁九ツ"
-      "明治10年霜月10日 暁九ツ"
-      "明治11年神無月10日 暁九ツ"
+      "明治9年神無月10日(先勝)暁九ツ"
+      "明治10年長月10日(赤口)暁九ツ"
+      "明治10年霜月10日(友引)暁九ツ"
+      "明治11年神無月10日(先勝)暁九ツ"
     ]
     return
 
   test "back 昭和 ⇒ 明治", =>
-    tgt  = "明治10年神無月10日 暁九ツ"
-    goal = 平気法.parse tgt,"Gy年Mod日"
+    tgt  = "明治10年神無月10日(先勝)暁九ツ"
+    goal = 平気法.parse tgt
 
-    msec = 平気法.parse "昭和10年神無月10日","Gy年Mod日"
+    msec = 平気法.parse "昭和10年神無月10日"
     ret  = 平気法.back msec, "2G"
-    expect [(ret - goal)/86400000, (ret - goal), 平気法.format ret, 'Gy年Mod日 Homo']
+    expect [(ret - goal)/86400000, (ret - goal), 平気法.format ret]
     .toEqual [0,0, tgt]
     return
 
   test "succ 昭和 ⇒ 令和", =>
-    tgt  = "令和10年神無月10日 暁九ツ"
-    goal = 平気法.parse tgt,"Gy年Mod日"
+    tgt  = "令和10年神無月10日(先勝)暁九ツ"
+    goal = 平気法.parse tgt
 
-    msec = 平気法.parse "昭和10年神無月10日","Gy年Mod日"
+    msec = 平気法.parse "昭和10年神無月10日"
     ret  = 平気法.succ msec, "2G"
-    expect [(ret - goal)/86400000, (ret - goal), 平気法.format ret, 'Gy年Mod日 Homo']
+    expect [(ret - goal)/86400000, (ret - goal), 平気法.format ret]
     .toEqual [0,0, tgt]
     return
   return

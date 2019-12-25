@@ -18,11 +18,13 @@ _ = require "lodash"
   分: 'm'
   秒: 's'
 
+core_tokens = "GHMSdmpsy"
+main_tokens = "ABCEFabcfx" + core_tokens
+sub_tokens = "DJNQYZuw"
+all_tokens = main_tokens + sub_tokens
 
 diff_token = /(\d+)(?:([ABCDEFGHJMNQSYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
-reg_token = /([HMNQdms]o|([ABCDEFGHJMNQSYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
-default_parse_format  = "y年M月d日"
-default_format_format = "Gy年M月d日(E)H時m分s秒"
+reg_token = /([EHMNQdms][or]|([ABCDEFGHJMNQSYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
 
 calc_set = (path, o)->
   for key, val of o
@@ -79,7 +81,6 @@ export class FancyDate
 
   succ_index: ( diff )-> @get_diff diff, (n)=> n - 0
   back_index: ( diff )-> @get_diff diff, (n)=> 0 - n
-  index: ( tgt, str = default_parse_format )-> @get_dic tgt, str
 
   succ: ( utc, diff )-> @slide_by utc, @succ_index diff
   back: ( utc, diff )-> @slide_by utc, @back_index diff
@@ -93,7 +94,10 @@ export class FancyDate
     if o
       { @dic, @calc } = _.cloneDeep o
     else
-      @dic = {}
+      @dic =
+        parse: "y年M月d日"
+        format: "Gy年M月d日(E)H時m分s秒"
+
       @calc =
         eras: []
         divs: {}
@@ -102,8 +106,12 @@ export class FancyDate
         msec: {}
         range: {}
       do =>
-        for key, val of to_indexs　[]
-          @dic[key] = new Indexer val
+        for key in all_tokens
+          @dic[key] = new Indexer []
+
+  lang: ( parse, format )->
+    Object.assign @dic, { parse, format }
+    @
 
   spot: ( moon_data, ...geo )->
     [earth_data, moony] = moon_data
@@ -223,11 +231,6 @@ export class FancyDate
       @dic[key].to_idx = val
 
   def_to_label: ->
-    at = (list, val)->
-      if list
-        s = list[val.now_idx]
-        if s?
-          s
     num_0 = (__, val, size)-> _.padStart val.now_idx    , size, '0'
     num_1 = (__, val, size)-> _.padStart val.now_idx + 1, size, '0'
     f_0 = (__, val, size)->
@@ -238,16 +241,21 @@ export class FancyDate
     G = (__, val)-> val.label
     M = (__, val, size)-> "#{ if val.is_leap then "閏" else "" }#{ num_1 null, val, size }"
     H = m = s = S = Y = u = y = num_0
-    A = B = C = E = F = Z = a = b = c = f = ( list, val, size)-> at(list, val) ? num_1 null, val, size
     D = N = Q = d = p = w = num_1
     J = x = f_0
+    A = B = C = E = F = Z = a = b = c = f = (list, val, size)-> at(list, val) ? num_1 null, val, size
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_label = val
 
+    at = (list, val)->
+      if list
+        s = list[val.now_idx]
+        if s?
+          s
     M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at list, val }"
     H = m = s = (list, val, size)-> at(list, val) ? num_0 null, val, size
     N = Q = d = (list, val, size)-> at(list, val) ? num_1 null, val, size
-    for key, val of { H,M,N,Q,d,m,s }
+    for key, val of { A,B,C,E,F,Z,a,b,c,f, H,M,N,Q,d,m,s }
       @dic[key].to_label_o = val
 
   def_calc: ->
@@ -430,11 +438,6 @@ export class FancyDate
     day12 = day + zero_size("B", "day")
     day60 = day + zero_size("A", "day")
     Object.assign @calc.zero, { period, era, week, season, spring, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
-
-  bless: (o)->
-    for key, val of o when val && @dic[key]
-      val.list     = @dic[key].list
-    o
 
   precision: ->
     is_just = (x, n)-> n == n // x * x
@@ -753,7 +756,7 @@ K   = @dic.earthy[2] / 360
 
     { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
-  get_dic_base: (tgt, tokens, reg)->
+  get_dic: (tgt, tokens, reg)->
     data = to_indexs 0
     unless items = tgt.match(reg)
       return null
@@ -780,9 +783,9 @@ K   = @dic.earthy[2] / 360
     data 
 
 
-  get_dic: (src, str)->
+  index: ( src, str = @dic.parse )->
     tokens = str.match reg_token
-    unless data = @get_dic_base src, tokens, @regex tokens
+    unless data = @get_dic src, tokens, @regex tokens
       return null
 
     if @is_table_leap
@@ -798,7 +801,7 @@ K   = @dic.earthy[2] / 360
     reg = "^" + tokens.map (token)=>
       [top, mode] = token
       if dic = @dic[top]
-        if 'o' == mode
+        if 'or'.includes mode
           dic.regex_o
         else
           dic.regex
@@ -809,24 +812,36 @@ K   = @dic.earthy[2] / 360
 
   to_table: (utc, bk, ik, has_notes = false)->
     o = @to_tempos utc
-    @bless o
 
     if has_notes
       雑節 = @雑節 utc, o
-      for a in o[bk].to_list o[ik]
+      for a in @dic[bk].to_list o[ik]
         a.notes =
           for k, t of 雑節 when t.is_hit a
             k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].filter(s => s)
     else
-      o[bk].to_list o[ik]
+      @dic[bk].to_list o[ik]
 
-  parse_by: (o)->
-    data = to_indexs 0
-    Object.assign data, o
-    { M_is_leap, G, p,y,M,d,H,m,s,S, J, D,Y,Z, u,w } = data
+  parse_by: (data, diff = {})->
+    unless data
+      return null
+    for key in main_tokens
+      data[key] = ( diff[key] || 0 ) + ( data[key] || 0 )
+    for key in sub_tokens
+      data[key] = ( diff[key] || 0 )
+    { M_is_leap, G, p,y,M,d,H,m,s,S, J, D,Y,Z,N,Q, u,w } = data
+
+    utc =
+      ( H * @calc.msec.hour ) +
+      ( m * @calc.msec.minute ) +
+      ( s * @calc.msec.second ) +
+      ( S )
 
     if J
-      return @calc.zero.jd + J * @calc.msec.day 
+      return @calc.zero.jd + J * @calc.msec.day + utc
+
+    if Q
+      [y, Q] = shift_up y, Q, 4
 
     if w
       d += w * @dic.E.length
@@ -848,12 +863,10 @@ K   = @dic.earthy[2] / 360
     if @is_table_leap
       [p, y] = shift_up p, y, @calc.divs.period
 
-    utc =
-      ( d * @calc.msec.day ) +
-      ( H * @calc.msec.hour ) +
-      ( m * @calc.msec.minute ) +
-      ( s * @calc.msec.second ) +
-      ( S )
+    utc +=
+      ( Z * @calc.msec.season ) +
+      ( N * @calc.msec.moon ) +
+      ( d * @calc.msec.day )
 
     # year section
     if @is_table_leap
@@ -893,33 +906,32 @@ K   = @dic.earthy[2] / 360
         to_tempo_bare @calc.msec.moon, @calc.zero.moon, M_utc
         .floor @calc.msec.day, @calc.zero.day
       utc += last_at - base
-
     utc
 
-  format_by: ( tempos, str = default_format_format )->
+  format_by: ( tempos, str = @dic.format )->
     str.match reg_token
     .map (token)=>
       [top, mode] = token
       if val = tempos[top]
         dic = @dic[top]
         cb =
-          if 'o' == mode
-            dic.to_label_o
-          else
-            dic.to_label
-        cb dic.list, val, token.length
+          switch mode
+            when 'o'
+              dic.to_label_o dic.list, val, token.length
+            when 'r'
+              dic.to_label_o dic.rubys, val, token.length
+            else
+              dic.to_label dic.list, val, token.length
       else
         token
     .join("")
 
   slide_by: ( utc, diff )->
     o = @to_tempos utc
-    o.p?.now_idx = 0
-    o.w?.now_idx = 0
     ret = {}
-    for key, val of o when val
-      ret[key] = val.now_idx + ( diff[key] || 0 )
-    unless diff.J
-      ret.J = null
-    @parse_by ret
+    for key in main_tokens when val = o[key]
+      ret[key] = val.now_idx
+    ret.p = 0
+    ret.M_is_leap = o.M.is_leap
+    @parse_by ret, diff
 
