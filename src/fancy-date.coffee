@@ -82,6 +82,9 @@ export class FancyDate
   succ_index: ( diff )-> @get_diff diff, (n)=> n - 0
   back_index: ( diff )-> @get_diff diff, (n)=> 0 - n
 
+  succ_msec: ( utc, diff )-> @succ(utc, diff) - utc
+  back_msec: ( utc, diff )-> @back(utc, diff) - utc
+
   succ: ( utc, diff )-> @slide_by utc, @succ_index diff
   back: ( utc, diff )-> @slide_by utc, @back_index diff
 
@@ -100,7 +103,6 @@ export class FancyDate
 
       @calc =
         eras: []
-        divs: {}
         idx:  {}
         zero: {}
         msec: {}
@@ -356,7 +358,7 @@ export class FancyDate
   def_idx: ->
     if @is_table_leap
       [..., period] = @dic.leaps
-      @calc.divs.period = period || 1
+      @dic.p.length = period || 1
 
     o = @index ...@dic.start[0..1]
     o.Z = @dic.Z.length * 1 / 8
@@ -676,7 +678,7 @@ K   = @dic.earthy[2] / 360
     if @is_table_leap
       p = to_tempo 'period'
       u = drill_down p, "year"
-      u.now_idx += p.now_idx * @calc.divs.period
+      u.now_idx += p.now_idx * @dic.p.length
       M = drill_down u, "month"
       d = drill_down M, "day"
     else
@@ -789,8 +791,8 @@ K   = @dic.earthy[2] / 360
       return null
 
     if @is_table_leap
-      data.p = data.y // @calc.divs.period
-      data.y = data.y - data.p * @calc.divs.period
+      data.p = data.y // @dic.p.length
+      data.y = data.y - data.p * @dic.p.length
     data.c = data.a %% @dic.c.length
     data.b = data.a %% @dic.b.length
     data.C = data.A %% @dic.C.length
@@ -812,15 +814,16 @@ K   = @dic.earthy[2] / 360
 
   to_table: (utc, bk, ik, has_notes = false)->
     o = @to_tempos utc
+    dic = @dic[bk]
 
     if has_notes
       雑節 = @雑節 utc, o
-      for a in @dic[bk].to_list o[ik]
+      for a in dic.to_list o[ik]
         a.notes =
           for k, t of 雑節 when t.is_hit a
             k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].filter(s => s)
     else
-      @dic[bk].to_list o[ik]
+      dic.to_list o[ik]
 
   parse_by: (data, diff = {})->
     unless data
@@ -840,28 +843,20 @@ K   = @dic.earthy[2] / 360
     if J
       return @calc.zero.jd + J * @calc.msec.day + utc
 
-    if Q
-      [y, Q] = shift_up y, Q, 4
-
-    if w
-      d += w * @dic.E.length
-      w = 0
-
-    if G < 0
-      G = 0
-    if @calc.eras.length <= G
-      G = @calc.eras.length - 1
+    d += D if D
+    d += w * @dic.E.length if w
     y += @calc.eras[G][2] - 1
+    y += u if u
+    y += Y if Y
+    G = 0 if G < 0
+    G = @calc.eras.length - 1 if @calc.eras.length <= G
 
     [m, s] = shift_up m, s, @dic.s.length
     [H, m] = shift_up H, m, @dic.m.length
     [d, H] = shift_up d, H, @dic.H.length
-
-    if @is_table_month
-      [y, M] = shift_up y, M, @dic.M.length
-
-    if @is_table_leap
-      [p, y] = shift_up p, y, @calc.divs.period
+    [y, M] = shift_up y, M, @dic.M.length if @is_table_month
+    [y, Q] = shift_up y, Q, 4 if Q
+    [p, y] = shift_up p, y, @dic.p.length if @is_table_leap
 
     utc +=
       ( Z * @calc.msec.season ) +

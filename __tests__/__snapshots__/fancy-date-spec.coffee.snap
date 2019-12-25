@@ -2,9 +2,6 @@
 
 exports[`Gregorian calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 400,
-  },
   "eras": Array [
     Array [
       "西暦",
@@ -1787,9 +1784,6 @@ Array [
 
 exports[`フランス革命歴 calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 400,
-  },
   "eras": Array [
     Array [
       "革命暦",
@@ -3338,9 +3332,6 @@ Array [
 
 exports[`ロムルス歴 calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 400,
-  },
   "eras": Array [
     Array [
       "ロムルス暦",
@@ -4899,9 +4890,6 @@ Array [
 
 exports[`平気法 calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 400,
-  },
   "eras": Array [
     Array [
       "皇紀",
@@ -5679,11 +5667,6 @@ Object {
       1990,
     ],
     Array [
-      "元弘",
-      -20142378000000,
-      1992,
-    ],
-    Array [
       "正慶",
       -20120346000000,
       1993,
@@ -5692,46 +5675,6 @@ Object {
       "建武",
       -20064099600000,
       1995,
-    ],
-    Array [
-      "延元",
-      -19997744400000,
-      1997,
-    ],
-    Array [
-      "興国",
-      -19867712400000,
-      2001,
-    ],
-    Array [
-      "正平",
-      -19657674000000,
-      2007,
-    ],
-    Array [
-      "建徳",
-      -18913856400000,
-      2031,
-    ],
-    Array [
-      "文中",
-      -18859942800000,
-      2033,
-    ],
-    Array [
-      "天授",
-      -18760496400000,
-      2036,
-    ],
-    Array [
-      "弘和",
-      -18580784400000,
-      2042,
-    ],
-    Array [
-      "元中",
-      -18479782800000,
-      2045,
     ],
     Array [
       "暦応",
@@ -7188,9 +7131,6 @@ Array [
 
 exports[`木星 calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 400,
-  },
   "eras": Array [
     Array [
       "西暦",
@@ -9754,9 +9694,6 @@ Array [
 
 exports[`火星 calc 1`] = `
 Object {
-  "divs": Object {
-    "period": 70,
-  },
   "eras": Array [
     Array [
       "西暦",
