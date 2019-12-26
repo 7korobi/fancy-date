@@ -20,11 +20,11 @@ _ = require "lodash"
 
 core_tokens = "GHMSdmpsy"
 main_tokens = "ABCEFabcfx" + core_tokens
-sub_tokens = "DJNQYZuw"
+sub_tokens = "DJNQVYZuw"
 all_tokens = main_tokens + sub_tokens
 
-diff_token = /(\d+)(?:([ABCDEFGHJMNQSYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
-reg_token = /([EHMNQdms][or]|([ABCDEFGHJMNQSYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
+diff_token = /(\d+)(?:([ABCDEFGHJMNQSVYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
+reg_token = /([ABCEFHMNQVZabcdfms][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
 
 calc_set = (path, o)->
   for key, val of o
@@ -46,7 +46,7 @@ daily_measure = (msec, day)->
   { range, msec }
 
 to_indexs = (zero)->
-  A = B = C = D = E = F = G = H = J = M = N = Q = S = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = zero
+  A = B = C = D = E = F = G = H = J = M = N = Q = S = V = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = zero
   { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
 shift_up = (a, b, size)->
@@ -202,15 +202,15 @@ export class FancyDate
       else
         "(\\d+)"
 
-    A = B = C = E = F = G = H = N = Z = a = b = c = f = m = p = s = strategy
+    A = B = C = E = F = G = H = N = V = Z = a = b = c = f = m = p = s = strategy
     M = => "(閏?\\d+)"
     u = => "([-\\d]+)"
     D = Q = S = Y = d = w = y = => "(\\d+)"
     J = x = => "([\\d.]+)"
-    for key, f of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+    for key, f of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].regex = f @dic[key].list
 
-    H = N = Q = d = m = s = strategy
+    H = N = Q = V = d = m = s = strategy
     M = (list)=>
       if list
         if list.join
@@ -220,16 +220,16 @@ export class FancyDate
       else
         "(閏?\\d+)"
 
-    for key, f of { H,M,N,Q,d,m,s }
+    for key, f of { H,M,N,Q,V,Z,d,m,s }
       @dic[key].regex_o = f @dic[key].list
 
   def_to_idx: ->
     G = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 0 else idx
     H = m = s = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 0 else idx
-    A = B = C = E = F = M = N = Z = a = b = c = d = f = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 1 else idx
+    A = B = C = E = F = M = N = V = Z = a = b = c = d = f = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 1 else idx
     D = Q = p = w = (s)-> s - 1
     J = S = Y = u = x = y = (s)-> s - 0
-    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_idx = val
 
   def_to_label: ->
@@ -245,8 +245,8 @@ export class FancyDate
     H = m = s = S = Y = u = y = num_0
     D = N = Q = d = p = w = num_1
     J = x = f_0
-    A = B = C = E = F = Z = a = b = c = f = (list, val, size)-> at(list, val) ? num_1 null, val, size
-    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+    A = B = C = E = F = V = Z = a = b = c = f = (list, val, size)-> at(list, val) ? num_1 null, val, size
+    for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_label = val
 
     at = (list, val)->
@@ -257,7 +257,7 @@ export class FancyDate
     M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at list, val }"
     H = m = s = (list, val, size)-> at(list, val) ? num_0 null, val, size
     N = Q = d = (list, val, size)-> at(list, val) ? num_1 null, val, size
-    for key, val of { A,B,C,E,F,Z,a,b,c,f, H,M,N,Q,d,m,s }
+    for key, val of { A,B,C,E,F,V,Z,a,b,c,f, H,M,N,Q,d,m,s }
       @dic[key].to_label_o = val
 
   def_calc: ->
@@ -434,12 +434,13 @@ export class FancyDate
     mjd = to_tempo_bare(@calc.msec.day, day_utc,   -3506716800000).last_at   #   -40587   * 86400000
 
     # 干支、九星、週
-    day_s = day + zero_size("F", "day")
     week  = day + zero_size("E", "day")
+    day_9 = day + zero_size("F", "day")
     day10 = day + zero_size("C", "day")
     day12 = day + zero_size("B", "day")
     day60 = day + zero_size("A", "day")
-    Object.assign @calc.zero, { period, era, week, season, spring, moon, day, jd,ld,mjd,cjd, day10, day12, day60, day_s }
+    day28 = day + zero_size("V", "day")
+    Object.assign @calc.zero, { period, era, week, season, spring, moon, day, jd,ld,mjd,cjd, day_9, day10, day12, day28, day60 }
 
   precision: ->
     is_just = (x, n)-> n == n // x * x
@@ -540,16 +541,28 @@ K   = @dic.earthy[2] / 360
       真夜中, 日の出, 南中時刻, 日の入
     }
 
-  節句: (utc, { M, d } = @to_tempos(utc))->
-    [人日,上巳,端午,七夕,重陽] = [
-      [ 1, 7]
-      [ 3, 3]
-      [ 5, 5]
-      [ 7, 7]
-      [ 9, 9]
-    ].map ([tM,td])=>
-      if M.now_idx == tM && d.now_idx == td
-    { 人日,上巳,端午,七夕,重陽 }
+  節句: (utc, { M, d, B, E } = @to_tempos(utc))->
+    # M,d,B,E
+    カトリック:
+      万聖節: [11, 1]
+      万霊節: [11, 2]
+    節句:
+      人日: [ 1, 7]
+      初午: [ 2,  ,7]
+      上巳: [ 3, 3]
+      端午: [ 5, 5]
+      七夕: [ 7, 7]
+      重陽: [ 9, 9]
+    仏教:
+      灌仏会: [ 4, 8]
+      盂蘭盆会: [ 7,15]
+    風習:
+      小正月: [ 1,15]
+      十五夜: [ 8,15]
+      十三夜: [ 9,13]
+      七五三: [11,15]
+      正月事始め: [12,13]
+
 
   雑節: (utc, { Zz, u, d } = @to_tempos(utc))->
     d0 = d.reset Zz.zero
@@ -634,8 +647,13 @@ K   = @dic.earthy[2] / 360
     list = []
     for k, t of arg1 when t.is_cover tempos.d.center_at
       list.push k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
-    for k, b of arg2 when b
-      list.push k
+    for root, arg3 of arg2
+      for k, [M,d,B,E] of arg3
+        continue if M && M != tempos.M.now_idx
+        continue if d && d != tempos.d.now_idx 
+        continue if B && B != tempos.B.now_idx
+        continue if E && E != tempos.E.now_idx
+        list.push k
     list
 
   to_tempos: (utc)->
@@ -760,7 +778,8 @@ K   = @dic.earthy[2] / 360
     B = to_tempo_bare @calc.msec.day, @calc.zero.day12, utc
     C = to_tempo_bare @calc.msec.day, @calc.zero.day10, utc
     E = to_tempo_bare @calc.msec.day, @calc.zero.week,  utc
-    F = to_tempo_bare @calc.msec.day, @calc.zero.day_s, utc
+    F = to_tempo_bare @calc.msec.day, @calc.zero.day_9, utc
+    V = to_tempo_bare @calc.msec.day, @calc.zero.day28, utc
 
     A.now_idx %%= @dic.A.length
     B.now_idx %%= @dic.B.length
@@ -768,10 +787,12 @@ K   = @dic.earthy[2] / 360
     F.now_idx %%= @dic.F.length
     if @is_table_leap # 旧暦では、週は月初にリセットする。
       E.now_idx %%= @dic.E.length
+      V.now_idx %%= @dic.V.length
     else
       E.now_idx = ( M.now_idx + d.now_idx ) %% @dic.E.length
+      V.now_idx = ( [11,13,15,17,19,21,24,0,2,4,7,9][M.now_idx] + d.now_idx ) %% @dic.V.length
 
-    { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+    { Zz, A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
 
   get_dic: (tgt, tokens, reg)->
     data = to_indexs 0
