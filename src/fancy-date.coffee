@@ -540,6 +540,17 @@ K   = @dic.earthy[2] / 360
       真夜中, 日の出, 南中時刻, 日の入
     }
 
+  節句: (utc, { M, d } = @to_tempos(utc))->
+    [人日,上巳,端午,七夕,重陽] = [
+      [ 1, 7]
+      [ 3, 3]
+      [ 5, 5]
+      [ 7, 7]
+      [ 9, 9]
+    ].map ([tM,td])=>
+      if M.now_idx == tM && d.now_idx == td
+    { 人日,上巳,端午,七夕,重陽 }
+
   雑節: (utc, { Zz, u, d } = @to_tempos(utc))->
     d0 = d.reset Zz.zero
     [                   立春, 入梅,
@@ -619,9 +630,13 @@ K   = @dic.earthy[2] / 360
     list.push ...tails.reverse()
     to_tempo_by list, day.last_at, utc
 
-  note: (utc, tempos = @to_tempos(utc), o = @雑節(utc, tempos))->
-    for k, t of o when t.is_cover tempos.d.center_at
-      k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
+  note: (utc, tempos = @to_tempos(utc), arg1 = @雑節(utc, tempos), arg2 = @節句(utc, tempos))->
+    list = []
+    for k, t of arg1 when t.is_cover tempos.d.center_at
+      list.push k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].join("")
+    for k, b of arg2 when b
+      list.push k
+    list
 
   to_tempos: (utc)->
     drill_down = (base, path, at = utc)=>

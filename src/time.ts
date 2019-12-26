@@ -72,6 +72,7 @@ export class Tempo {
 
   succ( n = 1 ) { return this.slide(+n) }
   back( n = 1 ) { return this.slide(-n) }
+  slide_to( n: number ) { return this.slide( n - this.now_idx ) }
 
   round(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
     let { last_at, write_at, next_at, now_idx, zero } = this;
@@ -173,7 +174,7 @@ export class Tempo {
   slide( n: number ) {
     if ( this.table ) {
       const now_idx = this.now_idx + n
-      const idx = now_idx % this.table.length
+      const idx = modulo(now_idx, this.table.length)
 
       const new_table_idx = Math.floor(      now_idx / this.table.length )
       const now_table_idx = Math.floor( this.now_idx / this.table.length )
