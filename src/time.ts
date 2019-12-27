@@ -75,12 +75,13 @@ export class Tempo {
   slide_to( n: number ) { return this.slide( n - this.now_idx ) }
 
   round(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, zero } = this;
+    let { last_at, write_at, next_at, now_idx, size } = this;
 
     (()=>{
       const do2 = subf(sub1, sub2, last_at)
       if ( write_at < do2.center_at ) {
-        const do3 = subf(sub1, sub2, this.slide(-1).last_at)
+        ({ last_at, size } = this.slide(-1))
+        const do3 = subf(sub1, sub2, last_at)
         next_at = do2.center_at
         last_at = do3.center_at
         now_idx--
@@ -89,7 +90,8 @@ export class Tempo {
 
       const do1 = subf(sub1, sub2, next_at)
       if ( do1.center_at <= write_at ) {
-        const do3 = subf(sub1, sub2, this.slide(1).next_at)
+        ({ next_at, size } = this.slide(1))
+        const do3 = subf(sub1, sub2, next_at)
         last_at = do1.center_at
         next_at = do3.center_at
         now_idx++
@@ -100,6 +102,7 @@ export class Tempo {
       last_at = do2.center_at
     })();
 
+    const zero = last_at - now_idx * size
     return new Tempo(
       zero,
       now_idx,
@@ -110,11 +113,12 @@ export class Tempo {
   }
 
   ceil(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, zero } = this
+    let { last_at, write_at, next_at, now_idx, size } = this
     const do2 = subf(sub1, sub2, last_at)
 
     if ( write_at < do2.next_at ) {
-      const do3 = subf(sub1, sub2, this.slide(-1).last_at)
+      ({ last_at, size } = this.slide(-1))
+      const do3 = subf(sub1, sub2, last_at)
       next_at = do2.next_at
       last_at = do3.next_at
       now_idx--
@@ -123,6 +127,7 @@ export class Tempo {
       next_at = do1.next_at
       last_at = do2.next_at
     }
+    const zero = last_at - now_idx * size
     return new Tempo(
       zero,
       now_idx,
@@ -133,11 +138,12 @@ export class Tempo {
   }
 
   floor(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, zero } = this
+    let { last_at, write_at, next_at, now_idx, size } = this
     const do2 = subf(sub1, sub2, next_at)
 
     if ( do2.last_at <= write_at ) {
-      const do3 = subf(sub1, sub2, this.slide(1).next_at)
+      ({ next_at, size } = this.slide(1))
+      const do3 = subf(sub1, sub2, next_at)
       last_at = do2.last_at
       next_at = do3.last_at
       now_idx++
@@ -146,6 +152,7 @@ export class Tempo {
       last_at = do1.last_at
       next_at = do2.last_at
     }
+    const zero = last_at - now_idx * size
     return new Tempo(
       zero,
       now_idx,
@@ -272,7 +279,6 @@ export function to_tempo_bare(size: number, zero: number, write_at: number) {
   const now_idx = Math.floor((write_at - zero) / size)
   const last_at = (now_idx + 0) * size + zero
   const next_at = (now_idx + 1) * size + zero
-
   return new Tempo(
     zero,
     now_idx,

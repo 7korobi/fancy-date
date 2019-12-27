@@ -85,8 +85,9 @@ export class FancyDate
   succ_msec: ( utc, diff )-> @succ(utc, diff) - utc
   back_msec: ( utc, diff )-> @back(utc, diff) - utc
 
-  succ: ( utc, diff )-> @slide_by utc, @succ_index diff
-  back: ( utc, diff )-> @slide_by utc, @back_index diff
+  succ: ( utc, diff )-> @slide utc, @succ_index diff
+  back: ( utc, diff )-> @slide utc, @back_index diff
+  slide: ( utc, diff )-> @slide_by @to_tempos(utc), diff
 
   parse: ( tgt, str )-> @parse_by @index tgt, str
   format: ( utc, str )-> @format_by @to_tempos(utc), str
@@ -254,9 +255,9 @@ export class FancyDate
         s = list[val.now_idx]
         if s?
           s
-    M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at list, val }"
-    H = m = s = (list, val, size)-> at(list, val) ? num_0 null, val, size
-    N = Q = d = (list, val, size)-> at(list, val) ? num_1 null, val, size
+    M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at(list, val) || '' }"
+    H = m = s = at
+    N = Q = d = at
     for key, val of { A,B,C,E,F,V,Z,a,b,c,f, H,M,N,Q,d,m,s }
       @dic[key].to_label_o = val
 
@@ -672,23 +673,16 @@ K   = @dic.earthy[2] / 360
     to_tempo = (path, write_at = utc)=>
       to_tempo_bare @calc.msec[path], @calc.zero[path], write_at
 
-    to_tempo_floor = (o, sub)=>
-      o.floor @calc.msec[sub], @calc.zero[sub]
-
     J = to_tempo_bare @calc.msec.day, @calc.zero.jd, utc # ユリウス日
 
     # season in year_of_planet
     Zz = to_tempo_bare @calc.msec.year, @calc.zero.season, utc # 太陽年
     Z  = drill_down Zz, "season" # 太陽年の二十四節気
 
-    # 正月中気と正月
-    N0_p = Zz.last_at + @calc.msec.season
-    N0 = to_tempo "moon", N0_p
-    N0 = to_tempo_floor N0, "day"
-
     # 今月と中気
-    Nn = to_tempo "moon"
-    Nn = to_tempo_floor Nn, "day"
+    Nn =
+      to_tempo "moon"
+      .floor @calc.msec.day,  @calc.zero.day
     N  = drill_down Nn, 'day'
 
     Zs = drill_down Zz, "season", Nn.last_at
@@ -696,16 +690,6 @@ K   = @dic.earthy[2] / 360
       Zs = drill_down Zz, "season", Nn.next_at
       unless Nn.is_cover Zs.moderate_at
         Nn.is_leap = true
-
-    switch Zs.now_idx >> 1
-      when -1
-        # 太陽年初に0月が出てしまう。昨年末にする。
-        Zu = Zz.reset Zs.last_at
-      when @dic.Z.length >> 1
-        # 太陽年末に13月が出てしまう。年初にする。
-        Zu = Zz.reset Zs.next_at
-      else
-        Zu = Zz
     Nn.now_idx = ( Zs.now_idx %% @dic.Z.length ) >> 1
 
     if @is_table_leap
@@ -716,14 +700,18 @@ K   = @dic.earthy[2] / 360
       d = drill_down M, "day"
     else
       if @is_table_month
-        u = to_tempo_bare @calc.msec.year, @calc.zero.spring, utc
-        u = to_tempo_floor u, "day"
+        u =
+          to_tempo_bare @calc.msec.year, @calc.zero.spring, utc
+          .floor @calc.msec.day,  @calc.zero.day
         M = drill_down u, "month"
         d = drill_down M, "day"
       else
-        u = Zu
+        u =
+          to_tempo_bare @calc.msec.year, @calc.zero.season + @calc.msec.season, utc
+          .floor @calc.msec.moon, @calc.zero.moon
+          .floor @calc.msec.day,  @calc.zero.day
         M = Nn
-        d = N.reset utc
+        d = N
 
     # hour minute second  in day
     if @dic.is_solor
@@ -849,17 +837,30 @@ K   = @dic.earthy[2] / 360
     new RegExp reg
 
   to_table: (utc, bk, ik, has_notes = false)->
+    dic = @dic[ik]
     o = @to_tempos utc
-    dic = @dic[bk]
+    arg1 = @雑節(utc, o)
+    arg2 = @節句(utc, o)
+    { last_at } = o[bk]
 
-    if has_notes
-      雑節 = @雑節 utc, o
-      for a in dic.to_list o[ik]
-        a.notes =
-          for k, t of 雑節 when t.is_hit a
-            k.match(/.(彼岸|社日|節分|土用)|(.+)/)[1...].filter(s => s)
-    else
-      dic.to_list o[ik]
+    o = @to_tempos last_at
+    anker = o[bk].now_idx
+    list = []
+    loop
+      o = @to_tempos last_at
+      last_at = o[ik].succ().last_at
+      break unless anker == o[bk].now_idx
+
+      item = o[ik]
+      list.push [
+        @format last_at
+        dic.to_label null, item, 0
+        dic.to_label_o dic.list, item, 0
+        dic.to_label_o dic.rubys, item, 0
+        if has_notes
+          @note last_at, @to_tempos(last_at), arg1, arg2
+      ]
+    list
 
   parse_by: (data, diff = {})->
     unless data
@@ -957,8 +958,7 @@ K   = @dic.earthy[2] / 360
         token
     .join("")
 
-  slide_by: ( utc, diff )->
-    o = @to_tempos utc
+  slide_by: ( o, diff )->
     ret = {}
     for key in main_tokens when val = o[key]
       ret[key] = val.now_idx
