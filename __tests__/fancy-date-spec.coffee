@@ -80,12 +80,25 @@ describe "define", =>
     return
   return
 
+describe "moon phase", =>
+  test "2019/12/26", =>
+    expect g.format 1577310360000, "N No Nr"
+    .toEqual "0 朔 さく"
+    return
+  
+  test "2020/01/06", =>
+    expect g.format 1578300000000, "N No Nr"
+    .toEqual "11 上弦 じょうげん"
+    return
+  return
+
 describe "Gregorio calculate", =>
   test "succ 10/10/10", =>
     msec = g.parse "2年2月2日"
     expect g.format g.succ msec, "10年10月10日"
     .toEqual "西暦12年12月12日(水)0時0分0秒"
     return
+
   test "succ 11/11/11", =>
     msec = g.parse "2年2月2日"
     expect g.format g.succ msec, "11年11月11日"
@@ -97,11 +110,13 @@ describe "Gregorio calculate", =>
     expect g.format g.back msec, "1年1月1日"
     .toEqual "西暦1年1月1日(月)0時0分0秒"
     return
+
   test "back 5/5/5", =>
     msec = g.parse "2年2月2日"
     expect g.format g.back msec, "5年5月5日"
     .toEqual "紀元前5年8月28日(水)0時0分0秒"
     return
+
   test "back 10/10/10", =>
     msec = g.parse "401年1月1日"
     expect g.format g.back msec, "10年"
@@ -110,53 +125,41 @@ describe "Gregorio calculate", =>
   return
 
 describe "平気法 calculate", =>
-  test "succ...", =>
-    tgt = "明治9年神無月10日 暁九ツ"
+  test "閏月をまたぐback", =>
+    tgt = "明治9年文月1日 暁九ツ"
     ret = 平気法.parse tgt
 
     expect [
-      平気法.format 平気法.back(ret, "5ヶ月")
-      平気法.format 平気法.parse("明治9年閏水無月10日")
-      平気法.format 平気法.back(ret, "4ヶ月")
+      平気法.format ret
+      平気法.format 平気法.parse("明治9年閏文月1日")
+      平気法.format 平気法.back(ret, "1ヶ月")
+      平気法.format 平気法.back(ret, "2ヶ月")
     ]
     .toEqual [
-      "明治9年皐月10日(友引)暁九ツ"
-      "明治9年閏水無月10日(先負)暁九ツ"
-      "明治9年水無月10日(先負)暁九ツ"
+      "明治9年文月1日(先勝)暁九ツ"
+      "明治9年閏文月1日(先勝)暁九ツ"
+      "明治9年水無月1日(赤口)暁九ツ"
+      "明治9年皐月1日(大安)暁九ツ"
     ]
     return
 
-  test "succ...", =>
-    tgt = "明治9年神無月10日 暁九ツ"
+  test "閏月をまたぐback 2", =>
+    tgt = "明治9年文月1日 暁九ツ"
     ret = 平気法.parse tgt
 
     expect [
-      平気法.back(ret, "6ヶ月")
-      平気法.back(ret, "5ヶ月")
-      # 平気法.back(ret, "5N") # 閏月
-      平気法.back(ret, "4ヶ月")
-      平気法.back(ret, "3ヶ月")
       平気法.back(ret, "2ヶ月")
       平気法.back(ret, "1ヶ月")
+      平気法.back(ret, "1N") # 閏月
       ret
       平気法.succ(ret, "1ヶ月")
-      平気法.succ(ret, "2ヶ月")
-      平気法.succ(ret, "3ヶ月")
-      平気法.succ(ret, "4ヶ月")
     ]
     .toEqual [
-      -2969690400000 - 7 * 2592000000 + 4 * 86400000
-      -2969690400000 - 6 * 2592000000 + 3 * 86400000
-      # -2969690400000 - 5 * 2592000000 + 3 * 86400000 # 閏月
-      -2969690400000 - 4 * 2592000000 + 2 * 86400000
-      -2969690400000 - 3 * 2592000000 + 2 * 86400000
-      -2969690400000 - 2 * 2592000000 + 1 * 86400000
-      -2969690400000 - 1 * 2592000000 + 1 * 86400000
-      -2969690400000
-      -2969690400000 + 1 * 2592000000
-      -2969690400000 + 2 * 2592000000 - 1 * 86400000
-      -2969690400000 + 3 * 2592000000 - 1 * 86400000
-      -2969690400000 + 4 * 2592000000 - 2 * 86400000
+      -2946448800000 - 3 * 2592000000 + 1 * 86400000
+      -2946448800000 - 2 * 2592000000 + 1 * 86400000
+      -2946448800000 - 1 * 2551442889
+      -2946448800000
+      -2946448800000 + 1 * 2592000000
     ]
     return
 
@@ -234,6 +237,7 @@ describe "平気法", =>
   test 'calc', =>
     expect 平気法.calc
     .toMatchSnapshot()
+    return
 
   test 'precision', =>
     expect 平気法.precision()
@@ -247,6 +251,7 @@ describe "平気法", =>
       is_legal_ETO: true
     expect mg.table.month
     .toMatchSnapshot()
+    return
 
   test '雑節', =>
     expect [
@@ -284,6 +289,7 @@ describe "Gregorian", =>
   test 'calc', =>
     expect g.calc
     .toMatchSnapshot()
+    return
 
   test 'precision', =>
     expect g.precision()
@@ -297,6 +303,7 @@ describe "Gregorian", =>
       is_legal_ETO: true
     expect g.table.range.month
     .toMatchSnapshot()
+    return
 
   test '雑節', =>
     expect [
@@ -360,6 +367,7 @@ describe "Gregorian", =>
       "西暦5138年11月16日(水)0時0分0秒"
     ].join("\n")
     return
+
   test '太陽の動き', =>
     dst = []
     for msec in earth_msecs
@@ -401,6 +409,7 @@ describe "火星", =>
       is_legal_ETO: true
     expect mg.table.month
     .toMatchSnapshot()
+    return
 
   test '太陽の動き', =>
     dst = []
@@ -443,6 +452,7 @@ describe "木星", =>
       is_legal_ETO: true
     expect jg.table.month
     .toMatchSnapshot()
+    return
 
   test 'format', =>
     str = "Gy年MM月dd日(E)HH時 abc"
@@ -494,6 +504,7 @@ describe "フランス革命歴", =>
   test 'calc', =>
     expect fg.calc
     .toMatchSnapshot()
+    return
 
   test 'precision', =>
     expect fg.precision()
@@ -507,6 +518,7 @@ describe "フランス革命歴", =>
       is_legal_ETO: true
     expect fg.table.range.month
     .toMatchSnapshot()
+    return
 
   test '太陽の動き', =>
     dst = []
@@ -535,6 +547,7 @@ describe "ロムルス歴", =>
   test 'calc', =>
     expect rg.calc
     .toMatchSnapshot()
+    return
 
   test 'precision', =>
     expect rg.precision()
@@ -548,6 +561,7 @@ describe "ロムルス歴", =>
       is_legal_ETO: true
     expect rg.table.range.month
     .toMatchSnapshot()
+    return
 
   test '太陽の動き', =>
     dst = []

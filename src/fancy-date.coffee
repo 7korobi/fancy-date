@@ -226,8 +226,8 @@ export class FancyDate
 
   def_to_idx: ->
     G = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 0 else idx
-    H = m = s = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 0 else idx
-    A = B = C = E = F = M = N = V = Z = a = b = c = d = f = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 1 else idx
+    H = N = m = s = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 0 else idx
+    A = B = C = E = F = M = V = Z = a = b = c = d = f = (s)-> if ! @list || (idx = @list.indexOf(s)) < 0 then s - 1 else idx
     D = Q = p = w = (s)-> s - 1
     J = S = Y = u = x = y = (s)-> s - 0
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
@@ -243,8 +243,8 @@ export class FancyDate
 
     G = (__, val)-> val.label
     M = (__, val, size)-> "#{ if val.is_leap then "閏" else "" }#{ num_1 null, val, size }"
-    H = m = s = S = Y = u = y = num_0
-    D = N = Q = d = p = w = num_1
+    H = N = m = s = S = Y = u = y = num_0
+    D = Q = d = p = w = num_1
     J = x = f_0
     A = B = C = E = F = V = Z = a = b = c = f = (list, val, size)-> at(list, val) ? num_1 null, val, size
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
@@ -256,8 +256,8 @@ export class FancyDate
         if s?
           s
     M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at(list, val) || '' }"
-    H = m = s = at
-    N = Q = d = at
+    H = N = m = s = at
+    Q = d = at
     for key, val of { A,B,C,E,F,V,Z,a,b,c,f, H,M,N,Q,d,m,s }
       @dic[key].to_label_o = val
 
@@ -425,7 +425,7 @@ export class FancyDate
       @calc.eras = [[@dic.era, era, 1]]
 
     if @dic.moony
-      moon = 0 - @dic.moony[1]
+      moon = @dic.moony[1]
 
     # JD
     day_utc = day + x.center_at
@@ -681,7 +681,7 @@ K   = @dic.earthy[2] / 360
 
     # 今月と中気
     Nn =
-      to_tempo "moon"
+      to_tempo_bare @calc.msec.moon, @calc.zero.moon, utc
       .floor @calc.msec.day,  @calc.zero.day
     N  = drill_down Nn, 'day'
 
