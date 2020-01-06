@@ -658,6 +658,8 @@ K   = @dic.earthy[2] / 360
     list
 
   to_tempos: (utc)->
+    unless utc?
+      throw new Error "invalid timestamp #{utc}"
     drill_down = (base, path, at = utc)=>
       data = @table.msec[path]
       table = data?[base.size] || data
@@ -785,7 +787,7 @@ K   = @dic.earthy[2] / 360
   get_dic: (tgt, tokens, reg)->
     data = to_indexs 0
     unless items = tgt.match(reg)
-      return null
+      throw new Error "invalid match #{tgt} #{reg}"
     for s, p in items[1..]
       token = tokens[p]
       [top, mode] = token
@@ -811,8 +813,7 @@ K   = @dic.earthy[2] / 360
 
   index: ( src, str = @dic.parse )->
     tokens = str.match reg_token
-    unless data = @get_dic src, tokens, @regex tokens
-      return null
+    data = @get_dic src, tokens, @regex tokens
 
     if @is_table_leap
       data.p = data.y // @dic.p.length
@@ -882,6 +883,7 @@ K   = @dic.earthy[2] / 360
 
     d += D if D
     d += w * @dic.E.length if w
+    M += Q * @dic.M.length / 4 if Q
     y += @calc.eras[G][2] - 1
     y += u if u
     y += Y if Y
@@ -892,7 +894,6 @@ K   = @dic.earthy[2] / 360
     [H, m] = shift_up H, m, @dic.m.length
     [d, H] = shift_up d, H, @dic.H.length
     [y, M] = shift_up y, M, @dic.M.length if @is_table_month
-    [y, Q] = shift_up y, Q, 4 if Q
     [p, y] = shift_up p, y, @dic.p.length if @is_table_leap
 
     utc +=

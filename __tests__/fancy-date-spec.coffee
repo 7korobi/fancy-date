@@ -71,14 +71,6 @@ jupiter_msecs = deploy( jg,
   season_zero = to_tempo_bare( jg.calc.msec.season, jg.calc.zero.season, new Date("2018-01-01") - 0 ).last_at
 )
 
-describe "define", =>
-  test 'data', =>
-    expect g.calc.msec.period
-    .toEqual 12622780800000
-    expect g.table.msec.year[-1..]
-    .toEqual [12622780800000]
-    return
-  return
 
 describe "moon phase", =>
   test "2019/12/26", =>
@@ -93,6 +85,13 @@ describe "moon phase", =>
   return
 
 describe "Gregorio calculate", =>
+  test 'data', =>
+    expect g.calc.msec.period
+    .toEqual 12622780800000
+    expect g.table.msec.year[-1..]
+    .toEqual [12622780800000]
+    return
+
   test "succ 10/10/10", =>
     msec = g.parse "2年2月2日"
     expect g.format g.succ msec, "10年10月10日"
@@ -117,10 +116,20 @@ describe "Gregorio calculate", =>
     .toEqual "紀元前5年8月28日(水)0時0分0秒"
     return
 
-  test "back 10/10/10", =>
+  test "back 10y", =>
     msec = g.parse "401年1月1日"
     expect g.format g.back msec, "10年"
     .toEqual "西暦391年1月1日(火)0時0分0秒"
+    return
+  
+  test "parse", =>
+    return
+    expect [
+      g.format g.parse "2000年夏至", "y年Z"
+    ]
+    .toEqual [
+      "123"
+    ]
     return
   return
 
