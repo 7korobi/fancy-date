@@ -234,34 +234,45 @@ export class FancyDate
       @dic[key].to_idx = val
 
   def_to_label: ->
-    num_0 = (__, val, size)-> _.padStart val.now_idx    , size, '0'
-    num_1 = (__, val, size)-> _.padStart val.now_idx + 1, size, '0'
-    f_0 = (__, val, size)->
+    integer = (idx)-> (__, val, size)->
+      _.padStart val.now_idx + idx , size, '0'
+
+    float = (__, val, size)->
       num = parseInt val.now_idx
       sub = "#{val.now_idx % 1}"[1...]
       _.padStart(num, size, '0') + sub
-    at = (cb)-> (list, val, size = 1)->
-      if list && val.now_idx?
-        s = list[val.now_idx]
-        if s?
-          s
-      else
-        cb null, val, size
+
+    at = (cb)-> (list, val, size)->
+      if list
+        if val.now_idx?
+          s = list[val.now_idx]
+          if s?
+            return s
+      cb list, val, size
+
+    month = (cb)-> (list, val, size)->
+      "#{ if val.is_leap then "閏" else "" }#{ cb list, val, size }"
 
     G = (__, val)-> val.label
-    M = (__, val, size)-> "#{ if val.is_leap then "閏" else "" }#{ num_1 null, val, size }"
-    H = N = m = s = S = Y = u = y = num_0
-    D = Q = d = p = w = num_1
-    J = x = f_0
-    A = B = C = E = F = V = Z = a = b = c = f = (list, val, size)-> at(num_1)(list, val, size)
+    M = month integer 1
+    H = N = m = s = S = Y = u = y = integer 0
+    D = Q = d = p = w = integer 1
+    J = x = float
+    A = B = C = E = F = V = Z = a = b = c = f = at integer 1
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
+      @dic[key].to_value = val
+
+    M = month at integer 1
+    H = N = m = s = at integer 0
+    A = B = C = E = F = Q = V = Z = a = b = c = d = f = at integer 1
+    for key, val of { A,B,C,E,F,H,M,N,Q,V,Z, a,b,c,d,f,m,s }
       @dic[key].to_label = val
 
-    M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at(num_0)(list, val) }"
-    H = N = m = s = at(num_0)
-    A = B = C = E = F = Q = V = Z = a = b = c = d = f = at(num_1)
+    cut = -> ""
+    M = month at cut
+    A = B = C = E = F = H = N = Q = V = Z = a = b = c = d = f = m = s = at cut
     for key, val of { A,B,C,E,F,H,M,N,Q,V,Z, a,b,c,d,f,m,s }
-      @dic[key].to_label_o = val
+      @dic[key].to_ruby = val
 
   def_calc: ->
     season = sub_define    @calc.msec.year, @dic.Z.length
@@ -857,9 +868,9 @@ K   = @dic.earthy[2] / 360
       item = o[ik]
       list.push [
         @format last_at
-        dic.to_label null, item, 0
-        dic.to_label_o dic.list, item, 0
-        dic.to_label_o dic.rubys, item, 0
+        dic.to_value null, item, 0
+        dic.to_label dic.list, item, 0
+        dic.to_ruby dic.rubys, item, 0
         if has_notes
           @note last_at, @to_tempos(last_at), arg1, arg2
       ]
@@ -949,14 +960,14 @@ K   = @dic.earthy[2] / 360
       [top, mode] = token
       if val = tempos[top]
         dic = @dic[top]
-        cb =
-          switch mode
-            when 'o'
-              dic.to_label_o dic.list, val, token.length
-            when 'r'
-              dic.to_label_o dic.rubys, val, token.length
-            else
-              dic.to_label dic.list, val, token.length
+
+        switch mode
+          when 'r'
+            dic.to_ruby dic.rubys, val, token.length
+          when 'o'
+            dic.to_label dic.list, val, token.length
+          else
+            dic.to_value dic.list, val, token.length
       else
         token
     .join("")
