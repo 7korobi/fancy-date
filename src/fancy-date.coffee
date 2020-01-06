@@ -240,25 +240,27 @@ export class FancyDate
       num = parseInt val.now_idx
       sub = "#{val.now_idx % 1}"[1...]
       _.padStart(num, size, '0') + sub
+    at = (cb)-> (list, val, size = 1)->
+      if list && val.now_idx?
+        s = list[val.now_idx]
+        if s?
+          s
+      else
+        cb null, val, size
 
     G = (__, val)-> val.label
     M = (__, val, size)-> "#{ if val.is_leap then "閏" else "" }#{ num_1 null, val, size }"
     H = N = m = s = S = Y = u = y = num_0
     D = Q = d = p = w = num_1
     J = x = f_0
-    A = B = C = E = F = V = Z = a = b = c = f = (list, val, size)-> at(list, val) ? num_1 null, val, size
+    A = B = C = E = F = V = Z = a = b = c = f = (list, val, size)-> at(num_1)(list, val, size)
     for key, val of { A,B,C,D,E,F,G,H,J,M,N,Q,S,V,Y,Z, a,b,c,d,f,m,p,s,u,w,x,y }
       @dic[key].to_label = val
 
-    at = (list, val)->
-      if list
-        s = list[val.now_idx]
-        if s?
-          s
-    M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at(list, val) || '' }"
-    H = N = m = s = at
-    Q = d = at
-    for key, val of { A,B,C,E,F,V,Z,a,b,c,f, H,M,N,Q,d,m,s }
+    M = (list, val)-> "#{ if val.is_leap then "閏" else "" }#{ at(num_0)(list, val) }"
+    H = N = m = s = at(num_0)
+    A = B = C = E = F = Q = V = Z = a = b = c = d = f = at(num_1)
+    for key, val of { A,B,C,E,F,H,M,N,Q,V,Z, a,b,c,d,f,m,s }
       @dic[key].to_label_o = val
 
   def_calc: ->
