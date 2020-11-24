@@ -5,6 +5,3 @@
 ```shell
 yarn add fancy-date
 ```
-
-
-

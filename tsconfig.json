@@ -1,7 +1,25 @@
 {
   "compilerOptions": {
-    "target": "ESNext",    // esnextに変換する
-    "module": "CommonJS",  // commonjs方式のモジュールシステム(import/export)を使う
-    "noImplicitAny": true, // TypeScriptでは型定義がない変数はany型になる(暗黙のany型)のでこれを禁止する
-  }
+    "target": "es2019",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "jsx": "react",
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "./lib/",
+    "strict": true,
+    "importHelpers": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": ["src"]
 }

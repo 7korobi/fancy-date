@@ -1,10 +1,11 @@
-  
+_ = require "lodash"
 {
   Tempo
   to_tempo_by
   to_tempo_bare
 } = require "./time"
-_ = require "lodash"
+{ jpn, old_jpn } = require "./number"
+
 
 単位系 =
   元: 'G'
@@ -980,3 +981,9 @@ K   = @dic.earthy[2] / 360
     ret.M_is_leap = o.M.is_leap
     @parse_by ret, diff
 
+  tree: ->
+    { y,M,d, H,m,s, A,B,C,E,F,V, a,b,c,f } = @dic
+    yyyy = [[a,b,c,f,y],['ao ar','bo br','co cr','fo fr','Gy']]
+    eeee = [[A,B,C,E,F,V],['Ao Ar','Bo Br','Co Cr','Fo Fr','Vo Vr']]
+    [yyyy, M,d, eeee, H,m,s]
+    

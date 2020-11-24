@@ -1,17 +1,9 @@
-const { is_windows } = require("./os");
-
-let testRegex = "/__tests__/.*spec.coffee$";
-if (is_windows) {
-  testRegex = "\\\\__tests__\\\\.*spec.coffee$";
-}
+const { is_windows } = require('./os')
 
 module.exports = {
-  testRegex,
-  moduleFileExtensions: ["coffee", "js"],
-  moduleDirectories: ["node_modules", "."],
+  testMatch: ['<rootDir>/__tests__/*.+(js)'],
+  moduleFileExtensions: ['js', 'yml'],
   transform: {
-    "^.+\\.coffee$": "<rootDir>/config/coffee-jest.js",
-    "^.+\\.js$": "babel-jest",
-    "^.+\\.yml$": "yaml-jest"
-  }
-};
+    '^.+\\.yml$': 'yaml-jest',
+  },
+}
