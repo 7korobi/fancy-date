@@ -1,22 +1,61 @@
 require('../lib/sample')
 const { FancyDate } = require('../lib/fancy-date')
-const { Calendar } = require('../lib/sample')
-const { to_msec, to_tempo_bare } = require('../lib/time')
-const format = require('date-fns/format')
-const locale = require('date-fns/locale/ja')
-const _ = require('lodash')
+const { Calendar, mayaHaab, mayaLongCount, mayaTzolkin, 太陽, 地球, 月, 東京 } = require('../lib/sample')
+const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
+const { format } = require('date-fns')
+const { ja: locale } = require('date-fns/locale/ja')
+
+function sortedUniq(list) {
+  const result = []
+  for (const item of list) {
+    if (result[result.length - 1] !== item) {
+      result.push(item)
+    }
+  }
+  return result
+}
 
 const utc = Calendar.UTC
 const g = Calendar.Gregorian
 const fg = Calendar.フランス革命暦
 const j = Calendar.Julian
 const rg = Calendar.Romulus
+const ga = Calendar.GregorianAstronomical
 const 平気法 = Calendar.平気法
 const am = Calendar.アマンタ
 const pm = Calendar.プールニマンタ
 const b = Calendar.Beat
 const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
+
+function mod(value, by) {
+  return ((value % by) + by) % by
+}
+
+function shiftedMeanOrbital(source, shiftMsec) {
+  const [periodMsec, epochMsec] = source
+  const phaseEpochMsec = epochMsec + shiftMsec
+  return {
+    periodMsec,
+    epochMsec,
+    phaseAt(utc) {
+      return mod((utc - phaseEpochMsec) / periodMsec, 1)
+    },
+    timeOfPhase(phase, near) {
+      if (phase < 0 || 1 <= phase) {
+        throw new Error(`phase out of range ${phase}`)
+      }
+      const cycle = Math.round((near - phaseEpochMsec) / periodMsec - phase)
+      return phaseEpochMsec + (cycle + phase) * periodMsec
+    },
+  }
+}
+
+function solarShiftCalendar(shiftMsec) {
+  const shiftedEarth = [太陽, shiftedMeanOrbital(地球[1], shiftMsec), 地球[2]]
+  const shiftedMoon = [shiftedEarth, 月[1], 月[2]]
+  return g.dup().spot(shiftedMoon, 東京[1], 東京[2], 東京[3]).init()
+}
 
 const calendars = [
   [utc, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
@@ -38,9 +77,9 @@ function to_graph(c, msec, str = 'Gyyyy-MM-dd HH:mm a-Z-E') {
   const { 方向, 時角, 真夜中, 日の出, 南中時刻, 日の入 } = c.solor(msec)
   return `${c.format(msec, str)}  真夜中.${c.format(真夜中, 'HH:mm')} 日の出.${c.format(
     日の出,
-    'HH:mm'
+    'HH:mm',
   )} 南中時刻.${c.format(南中時刻, 'HH:mm')} 日の入.${c.format(日の入, 'HH:mm')} 方向.${Math.floor(
-    方向 / deg_to_rad
+    方向 / deg_to_rad,
   )} 時角.${Math.floor(時角 / deg_to_rad)}`
 }
 
@@ -62,7 +101,7 @@ function deploy(c, moon_zero, season_zero) {
     list.push(next_at - 1)
     list.push(next_at)
   }
-  return _.sortedUniq(list.sort())
+  return sortedUniq(list.sort())
 }
 
 const write_at_src = new Date('2018-01-01').getTime()
@@ -70,20 +109,44 @@ const write_at_src = new Date('2018-01-01').getTime()
 const earth_msecs = deploy(
   g,
   to_tempo_bare(g.calc.msec.moon, g.calc.zero.moon, write_at_src).last_at,
-  to_tempo_bare(g.calc.msec.season, g.calc.zero.season, write_at_src).last_at
+  to_tempo_bare(g.calc.msec.season, g.calc.zero.season, write_at_src).last_at,
 )
 
 const mars_msecs = deploy(
   mg,
   to_tempo_bare(mg.calc.msec.moon, mg.calc.zero.moon, write_at_src).last_at,
-  to_tempo_bare(mg.calc.msec.season, mg.calc.zero.season, write_at_src).last_at
+  to_tempo_bare(mg.calc.msec.season, mg.calc.zero.season, write_at_src).last_at,
 )
 
 const jupiter_msecs = deploy(
   jg,
   to_tempo_bare(jg.calc.msec.moon, jg.calc.zero.moon, write_at_src).last_at,
-  to_tempo_bare(jg.calc.msec.season, jg.calc.zero.season, write_at_src).last_at
+  to_tempo_bare(jg.calc.msec.season, jg.calc.zero.season, write_at_src).last_at,
 )
+
+describe('time duration', () => {
+  test('to_msec keeps loose parsing by default', () => {
+    expect(to_msec('abc')).toBe(0)
+    expect(to_msec('1d abc 2h')).toBe(to_msec('1d2h'))
+  })
+
+  test('to_msec can reject unconsumed input in strict mode', () => {
+    expect(to_msec('1d2h', { strict: true })).toBe(to_msec('1d2h'))
+    expect(() => to_msec('abc', { strict: true })).toThrow('invalid duration abc')
+    expect(() => to_msec('1d abc 2h', { strict: true })).toThrow('invalid duration 1d abc 2h')
+    expect(() => to_sec('1s!', { strict: true })).toThrow('invalid duration 1s!')
+  })
+
+  test('to_msec rejects variable-length months', () => {
+    expect(() => to_msec('1月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1ヶ月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1ヵ月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1か月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1カ月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1ケ月')).toThrow('variable-length unit 月')
+    expect(() => to_msec('1箇月')).toThrow('variable-length unit 月')
+  })
+})
 
 describe('moon phase', () => {
   test('2019/12/26', () => {
@@ -129,6 +192,29 @@ describe('Gregorio calculate', () => {
   test('parse', () => {
     return
     expect([g.format(g.parse('2000年夏至', 'y年Z'))]).toEqual(['123'])
+  })
+
+  test('find day cycle in range', () => {
+    const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
+    const found = g.find('d', between, [{ Ao: '甲子' }])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual([
+      '2020年01月22日 甲子',
+    ])
+  })
+
+  test('find note in range', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年4月1日')]
+    const found = g.find('d', between, [{ note: '春分' }])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2020年03月20日'])
+  })
+
+  test('find with regexp condition', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年10月1日')]
+    const found = g.find('d', between, [{ note: /春分|秋分/ }])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual([
+      '2020年03月20日',
+      '2020年09月19日',
+    ])
   })
 })
 
@@ -219,7 +305,7 @@ describe('Dr.Stone', () => {
     const { 日の出 } = g.solor(msec, 6)
     const note = g.note(msec)
     expect(g.format(日の出, `yyyy/MM/dd(E) HH:mm Z ${note}`)).toEqual(
-      '5738/04/01(火) 04:20 春分 春'
+      '5738/04/01(火) 04:20 春分 春',
     )
     expect(msec).toEqual(118914361200000)
     expect(日の出).toEqual(118914376828906)
@@ -232,7 +318,7 @@ describe('同時性', () => {
     expect(
       calendars.map(([c, str]) => {
         return c.format(msec, str)
-      })
+      }),
     ).toMatchSnapshot()
   })
 })
@@ -264,13 +350,7 @@ describe('平気法', () => {
   test('雑節', () => {
     expect(
       [
-        100000000000000,
-        10000000000000,
-        1556636400000,
-        1000000000000,
-        100000000000,
-        10000000000,
-        0,
+        100000000000000, 10000000000000, 1556636400000, 1000000000000, 100000000000, 10000000000, 0,
       ].map((utc) => {
         const o = 平気法.to_tempos(utc)
         const z = 平気法.雑節(utc, o)
@@ -281,14 +361,14 @@ describe('平気法', () => {
             result.push(
               `${平気法.format(val.last_at, 'J Gyy年Modd日')} ～ ${平気法.format(
                 val.next_at - 1,
-                `Modd日 ${key}`
-              )}`
+                `Modd日 ${key}`,
+              )}`,
             )
           }
           return result
         })()
-        return [..._.flattenDepth(list, 2).sort(), 平気法.note(utc, o, z).join('')]
-      })
+        return [...list.flat(2).sort(), 平気法.note(utc, o, z).join('')]
+      }),
     ).toMatchSnapshot()
   })
 
@@ -297,8 +377,8 @@ describe('平気法', () => {
       (msec) =>
         `${g.format(msec, 'yyyy a-A Z-E HH:mm')} ${平気法.format(
           msec,
-          'a-A f-F Z-E Gy年Modd日 Hm ssss秒'
-        )}`
+          'a-A f-F Z-E Gy年Modd日 Hm ssss秒',
+        )}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -331,13 +411,7 @@ describe('Gregorian', () => {
   test('雑節', () => {
     expect(
       [
-        100000000000000,
-        10000000000000,
-        1556636400000,
-        1000000000000,
-        100000000000,
-        10000000000,
-        0,
+        100000000000000, 10000000000000, 1556636400000, 1000000000000, 100000000000, 10000000000, 0,
       ].map((utc) => {
         const o = g.to_tempos(utc)
         const z = g.雑節(utc, o)
@@ -348,14 +422,14 @@ describe('Gregorian', () => {
             result.push(
               `${g.format(val.last_at, 'J yyyy/MM/dd')} ～ ${g.format(
                 val.next_at - 1,
-                `MM/dd ${key}`
-              )}`
+                `MM/dd ${key}`,
+              )}`,
             )
           }
           return result
         })()
-        return [..._.flattenDepth(list, 2).sort(), g.note(utc, o, z).join('')]
-      })
+        return [...list.flat(2).sort(), g.note(utc, o, z).join('')]
+      }),
     ).toMatchSnapshot()
   })
 
@@ -371,7 +445,7 @@ describe('Gregorian', () => {
         g.format(10000000000, str),
         g.format(0, str),
         g.format(g.calc.zero.period, str),
-      ].join('\n')
+      ].join('\n'),
     ).toEqual(
       [
         '西暦5138年11月16日(水)18時 立冬',
@@ -382,7 +456,7 @@ describe('Gregorian', () => {
         '西暦1970年04月27日(月)02時 穀雨',
         '西暦1970年01月01日(木)09時 冬至',
         '紀元前1年01月01日(土)00時 冬至',
-      ].join('\n')
+      ].join('\n'),
     )
   })
 
@@ -396,7 +470,7 @@ describe('Gregorian', () => {
         g.format(g.parse('2001年9月9日'), str),
         g.format(g.parse('2286年11月21日'), str),
         g.format(g.parse('5138年11月16日'), str),
-      ].join('\n')
+      ].join('\n'),
     ).toEqual(
       [
         '紀元前1年04月01日(土)0時0分0秒',
@@ -405,7 +479,7 @@ describe('Gregorian', () => {
         '西暦2001年09月09日(日)0時0分0秒',
         '西暦2286年11月21日(日)0時0分0秒',
         '西暦5138年11月16日(水)0時0分0秒',
-      ].join('\n')
+      ].join('\n'),
     )
   })
 
@@ -419,9 +493,53 @@ describe('Gregorian', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${g.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`
+        })} ${g.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
+  })
+
+  test('astronomical phase helper uses high precision model opt-in', () => {
+    const term = ga.solar_term(g.parse('2020年3月20日'), 0)
+    expect(ga.format(term.last_at, 'yyyy年MM月dd日 HH:mm')).toEqual('2020年03月20日 00:00')
+    expect(ga.format(ga.solar_phase(0, g.parse('2020年3月20日')), 'yyyy年MM月dd日 HH:mm')).toEqual(
+      '2020年03月20日 12:49',
+    )
+  })
+
+  test('phase based solar terms preserve mean calendar and expose astronomical dates', () => {
+    const utc = g.parse('2020年3月22日')
+    const mean = g.雑節(utc)
+    const terms = ga.solar_terms(utc)
+    const phase = ga.雑節_by_phase(utc)
+    expect(ga.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
+    expect(g.format(mean.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月19日')
+    expect(ga.format(phase.春分.last_at, 'yyyy年MM月dd日')).toEqual(
+      g.format(mean.春分.last_at, 'yyyy年MM月dd日'),
+    )
+    expect(ga.format(phase.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月22日')
+  })
+
+  test('custom orbital model shifts only opt-in phase based solar terms', () => {
+    const shifted = solarShiftCalendar(to_msec('2d'))
+    const utc = g.parse('2020年3月23日')
+    const mean = shifted.雑節(utc)
+    const terms = shifted.solar_terms(utc)
+    const phase = shifted.雑節_by_phase(utc)
+
+    expect(shifted.dic.sunny.epochMsec).toBe(ga.dic.sunny.epochMsec)
+    expect(shifted.calc.zero.season).toBe(ga.calc.zero.season)
+    expect(shifted.format(mean.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
+    expect(shifted.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
+    expect(shifted.format(phase.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
+  })
+})
+
+describe('Maya', () => {
+  test('2012-12-21 GMT correlation anchor', () => {
+    const utc = Calendar.UTC.parse('2012年12月21日')
+    expect(mayaLongCount(utc)).toBe('13.0.0.0.0')
+    expect(mayaTzolkin(utc)).toBe('4 Ajaw')
+    expect(mayaHaab(utc)).toBe('3 Kankin')
   })
 })
 
@@ -459,8 +577,8 @@ describe('火星', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd HH:mm', { locale })}\t${g.format(msec, 'a-Z-E')} ${mg.format(
           msec,
-          'a-Z-E\tGyy/MMM/dd HH:mm:ss'
-        )}`
+          'a-Z-E\tGyy/MMM/dd HH:mm:ss',
+        )}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -501,7 +619,7 @@ describe('木星', () => {
         jg.format(-10000000000, str),
         jg.format(-1000000000000, str),
         jg.format(-10000000000000, str),
-      ].join('\n')
+      ].join('\n'),
     ).toEqual(
       [
         '西暦194年180月07日(木)05時 乙丑丑乙',
@@ -511,7 +629,7 @@ describe('木星', () => {
         '西暦167年248月03日(金)09時 戊戌戌戊',
         '西暦165年80月20日(月)08時 丙申申丙',
         '西暦141年68月35日(木)05時 壬申申壬',
-      ].join('\n')
+      ].join('\n'),
     )
   })
 
@@ -525,8 +643,8 @@ describe('木星', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd HH:mm', { locale })}\t${g.format(msec, 'a-Z-E')} ${jg.format(
           msec,
-          'a-ZZZ-E\tGyy/MMM/dd HH:mm:ss'
-        )}`
+          'a-ZZZ-E\tGyy/MMM/dd HH:mm:ss',
+        )}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -566,7 +684,7 @@ describe('フランス革命歴', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${fg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`
+        })} ${fg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -606,7 +724,7 @@ describe('ロムルス歴', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${rg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`
+        })} ${rg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
   })
