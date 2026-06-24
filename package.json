@@ -33,6 +33,8 @@
     "format:check": "prettier --no-semi --single-quote --print-width 100 --check \"**/*.{ts,tsx,js,jsx,md}\"",
     "jest": "jest --config config/jest.js --rootDir .",
     "jest:update": "jest -u --config config/jest.js --rootDir .",
+    "metrics:mean": "bun run compile && node scripts/mean-metrics.js",
+    "metrics:naoj": "bun run compile && node scripts/naoj-metrics.js",
     "compile": "bun run compile:ts",
     "compile:ts": "tsc -p .",
     "type": "tsc -p . --noEmit"

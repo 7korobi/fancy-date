@@ -1,4 +1,30 @@
-import type { OrbitalModel, PLANET, ROTATION, SATELLITE, STAR } from './fancy-date'
+import type {
+  LunarEquatorialCoordinates,
+  LunarEventModel,
+  LunarHorizontalCoordinates,
+  LunarObservation,
+  LunarObservationOptions,
+  OrbitalModel,
+  PLANET,
+  ROTATION,
+  SATELLITE,
+  SolarEquatorialCoordinates,
+  SolarEventModel,
+  SolarHorizontalCoordinates,
+  SolarObservation,
+  SolarObservationOptions,
+  STAR,
+} from './orbital-model'
+export type {
+  LunarEquatorialCoordinates,
+  LunarHorizontalCoordinates,
+  LunarObservation,
+  LunarObservationOptions,
+  SolarEquatorialCoordinates,
+  SolarHorizontalCoordinates,
+  SolarObservation,
+  SolarObservationOptions,
+} from './orbital-model'
 
 // 国立天文台 暦要項 fixture と分単位で合うように調整したモデル。
 // 国立天文台の公式アルゴリズムではなく、二十四節気は VSOP87 項、朔弦望は Meeus 系の式を使う。
@@ -16,6 +42,9 @@ export type EarthMoonOrbitalOptions = {
 const DEG_TO_RAD = Math.PI / 180
 const RAD_TO_DEG = 180 / Math.PI
 const MSEC_PER_DAY = 86400000
+const MSEC_PER_MINUTE = 60000
+const EARTH_EQUATORIAL_RADIUS_KM = 6378.14
+const SOLAR_HOUR_ANGLE_DEG_PER_DAY = 360.98564736629
 
 const EARTH_L_TERMS = [
   [
@@ -159,6 +188,132 @@ const EARTH_L_TERMS = [
   [[1, 3.14, 0]],
 ] as const
 
+const MOON_LR_TERMS = [
+  [0, 0, 1, 0, 6288774, -20905355],
+  [2, 0, -1, 0, 1274027, -3699111],
+  [2, 0, 0, 0, 658314, -2955968],
+  [0, 0, 2, 0, 213618, -569925],
+  [0, 1, 0, 0, -185116, 48888],
+  [0, 0, 0, 2, -114332, -3149],
+  [2, 0, -2, 0, 58793, 246158],
+  [2, -1, -1, 0, 57066, -152138],
+  [2, 0, 1, 0, 53322, -170733],
+  [2, -1, 0, 0, 45758, -204586],
+  [0, 1, -1, 0, -40923, -129620],
+  [1, 0, 0, 0, -34720, 108743],
+  [0, 1, 1, 0, -30383, 104755],
+  [2, 0, 0, -2, 15327, 10321],
+  [0, 0, 1, 2, -12528, 0],
+  [0, 0, 1, -2, 10980, 79661],
+  [4, 0, -1, 0, 10675, -34782],
+  [0, 0, 3, 0, 10034, -23210],
+  [4, 0, -2, 0, 8548, -21636],
+  [2, 1, -1, 0, -7888, 24208],
+  [2, 1, 0, 0, -6766, 30824],
+  [1, 0, -1, 0, -5163, -8379],
+  [1, 1, 0, 0, 4987, -16675],
+  [2, -1, 1, 0, 4036, -12831],
+  [2, 0, 2, 0, 3994, -10445],
+  [4, 0, 0, 0, 3861, -11650],
+  [2, 0, -3, 0, 3665, 14403],
+  [0, 1, -2, 0, -2689, -7003],
+  [2, 0, -1, 2, -2602, 0],
+  [2, -1, -2, 0, 2390, 10056],
+  [1, 0, 1, 0, -2348, 6322],
+  [2, -2, 0, 0, 2236, -9884],
+  [0, 1, 2, 0, -2120, 5751],
+  [0, 2, 0, 0, -2069, 0],
+  [2, -2, -1, 0, 2048, -4950],
+  [2, 0, 1, -2, -1773, 4130],
+  [2, 0, 0, 2, -1595, 0],
+  [4, -1, -1, 0, 1215, -3958],
+  [0, 0, 2, 2, -1110, 0],
+  [3, 0, -1, 0, -892, 3258],
+  [2, 1, 1, 0, -810, 2616],
+  [4, -1, -2, 0, 759, -1897],
+  [0, 2, -1, 0, -713, -2117],
+  [2, 2, -1, 0, -700, 2354],
+  [2, 1, -2, 0, 691, 0],
+  [2, -1, 0, -2, 596, 0],
+  [4, 0, 1, 0, 549, -1423],
+  [0, 0, 4, 0, 537, -1117],
+  [4, -1, 0, 0, 520, -1571],
+  [1, 0, -2, 0, -487, -1739],
+  [2, 1, 0, -2, -399, 0],
+  [0, 0, 2, -2, -381, -4421],
+  [1, 1, 1, 0, 351, 0],
+  [3, 0, -2, 0, -340, 0],
+  [4, 0, -3, 0, 330, 0],
+  [2, -1, 2, 0, 327, 0],
+  [0, 2, 1, 0, -323, 1165],
+  [1, 1, -1, 0, 299, 0],
+  [2, 0, 3, 0, 294, 0],
+  [2, 0, -1, -2, 0, 8752],
+] as const
+
+const MOON_B_TERMS = [
+  [0, 0, 0, 1, 5128122],
+  [0, 0, 1, 1, 280602],
+  [0, 0, 1, -1, 277693],
+  [2, 0, 0, -1, 173237],
+  [2, 0, -1, 1, 55413],
+  [2, 0, -1, -1, 46271],
+  [2, 0, 0, 1, 32573],
+  [0, 0, 2, 1, 17198],
+  [2, 0, 1, -1, 9266],
+  [0, 0, 2, -1, 8822],
+  [2, -1, 0, -1, 8216],
+  [2, 0, -2, -1, 4324],
+  [2, 0, 1, 1, 4200],
+  [2, 1, 0, -1, -3359],
+  [2, -1, -1, 1, 2463],
+  [2, -1, 0, 1, 2211],
+  [2, -1, -1, -1, 2065],
+  [0, 1, -1, -1, -1870],
+  [4, 0, -1, -1, 1828],
+  [0, 1, 0, 1, -1794],
+  [0, 0, 0, 3, -1749],
+  [0, 1, -1, 1, -1565],
+  [1, 0, 0, 1, -1491],
+  [0, 1, 1, 1, -1475],
+  [0, 1, 1, -1, -1410],
+  [0, 1, 0, -1, -1344],
+  [1, 0, 0, -1, -1335],
+  [0, 0, 3, 1, 1107],
+  [4, 0, 0, -1, 1021],
+  [4, 0, -1, 1, 833],
+  [0, 0, 1, -3, 777],
+  [4, 0, -2, 1, 671],
+  [2, 0, 0, -3, 607],
+  [2, 0, 2, -1, 596],
+  [2, -1, 1, -1, 491],
+  [2, 0, -2, 1, -451],
+  [0, 0, 3, -1, 439],
+  [2, 0, 2, 1, 422],
+  [2, 0, -3, -1, 421],
+  [2, 1, -1, 1, -366],
+  [2, 1, 0, 1, -351],
+  [4, 0, 0, 1, 331],
+  [2, -1, 1, 1, 315],
+  [2, -2, 0, -1, 302],
+  [0, 0, 1, 3, -283],
+  [2, 1, 1, -1, -229],
+  [1, 1, 0, -1, 223],
+  [1, 1, 0, 1, 223],
+  [0, 1, -2, -1, -220],
+  [2, 1, -1, -1, -220],
+  [1, 0, 1, 1, -185],
+  [2, -1, -2, -1, 181],
+  [0, 1, 2, 1, -177],
+  [4, 0, -2, -1, 176],
+  [4, -1, -1, -1, 166],
+  [1, 0, 1, -1, -164],
+  [4, 0, 1, -1, 132],
+  [1, 0, -1, -1, -119],
+  [4, -1, 0, -1, 115],
+  [2, -2, 0, 1, 107],
+] as const
+
 function mod(a: number, b: number) {
   a = +a
   b = +b
@@ -195,6 +350,82 @@ function cos_deg(deg: number) {
   return Math.cos(deg * DEG_TO_RAD)
 }
 
+function tan_deg(deg: number) {
+  return Math.tan(deg * DEG_TO_RAD)
+}
+
+function asin_deg(value: number) {
+  return Math.asin(Math.max(-1, Math.min(1, value))) * RAD_TO_DEG
+}
+
+function acos_deg(value: number) {
+  return Math.acos(Math.max(-1, Math.min(1, value))) * RAD_TO_DEG
+}
+
+function atan2_deg(y: number, x: number) {
+  return Math.atan2(y, x) * RAD_TO_DEG
+}
+
+function mean_obliquity_deg(jde: number) {
+  const T = (jde - 2451545.0) / 36525
+  const U = T / 100
+  const arcsec =
+    84381.448 -
+    4680.93 * U -
+    1.55 * U ** 2 +
+    1999.25 * U ** 3 -
+    51.38 * U ** 4 -
+    249.67 * U ** 5 -
+    39.05 * U ** 6 +
+    7.12 * U ** 7 +
+    27.87 * U ** 8 +
+    5.79 * U ** 9 +
+    2.45 * U ** 10
+  return arcsec / 3600
+}
+
+function true_obliquity_deg(jde: number) {
+  const T = (jde - 2451545.0) / 36525
+  const omega = 125.04 - 1934.136 * T
+  return mean_obliquity_deg(jde) + 0.00256 * cos_deg(omega)
+}
+
+function greenwich_apparent_sidereal_time_deg(utc: number) {
+  const jd = julian_day(utc)
+  const T = (jd - 2451545.0) / 36525
+  const gmst =
+    280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - (T * T * T) / 38710000
+  const jde = jd + delta_t_sec(utc) / 86400
+  const omega = 125.04 - 1934.136 * ((jde - 2451545.0) / 36525)
+  const nutationLongitudeDeg = -0.00478 * sin_deg(omega)
+  return mod(gmst + nutationLongitudeDeg * cos_deg(true_obliquity_deg(jde)), 360)
+}
+
+function local_horizontal_from_equatorial(
+  utc: number,
+  latitudeDeg: number,
+  longitudeDeg: number,
+  rightAscensionDeg: number,
+  declinationDeg: number,
+) {
+  const hourAngleDeg = signed_degree_diff(
+    greenwich_apparent_sidereal_time_deg(utc) + longitudeDeg,
+    rightAscensionDeg,
+  )
+  const altitudeDeg = asin_deg(
+    sin_deg(latitudeDeg) * sin_deg(declinationDeg) +
+      cos_deg(latitudeDeg) * cos_deg(declinationDeg) * cos_deg(hourAngleDeg),
+  )
+  const azimuthDeg = mod(
+    atan2_deg(
+      sin_deg(hourAngleDeg),
+      cos_deg(hourAngleDeg) * sin_deg(latitudeDeg) - tan_deg(declinationDeg) * cos_deg(latitudeDeg),
+    ) + 180,
+    360,
+  )
+  return { altitudeDeg, azimuthDeg, hourAngleDeg }
+}
+
 function jde_to_utc(jde: number) {
   let utc = (jde - 2440587.5) * MSEC_PER_DAY
   for (let i = 0; i < 3; i++) {
@@ -203,7 +434,7 @@ function jde_to_utc(jde: number) {
   return Math.round(utc)
 }
 
-export class EarthSolarOrbital implements OrbitalModel {
+export class EarthSolarOrbital implements SolarEventModel {
   static readonly sun: STAR = [null, null, null]
   static readonly meanSolarDayMsec = MSEC_PER_DAY
   static readonly rotationEpochMsec = 0
@@ -223,10 +454,17 @@ export class EarthSolarOrbital implements OrbitalModel {
   }
 
   static rotation(): ROTATION {
-    return [EarthSolarOrbital.meanSolarDayMsec, EarthSolarOrbital.rotationEpochMsec, EarthSolarOrbital.axialTiltDeg]
+    return [
+      EarthSolarOrbital.meanSolarDayMsec,
+      EarthSolarOrbital.rotationEpochMsec,
+      EarthSolarOrbital.axialTiltDeg,
+    ]
   }
 
-  static planet(center: STAR = EarthSolarOrbital.sun, options: EarthSolarOrbitalOptions = {}): PLANET {
+  static planet(
+    center: STAR = EarthSolarOrbital.sun,
+    options: EarthSolarOrbitalOptions = {},
+  ): PLANET {
     return [center, new EarthSolarOrbital(options), EarthSolarOrbital.rotation()]
   }
 
@@ -248,6 +486,134 @@ export class EarthSolarOrbital implements OrbitalModel {
     return mod((earthLongitude / 1e8) * RAD_TO_DEG + 180 - 0.00569 - 0.00478 * Math.sin(omega), 360)
   }
 
+  solarEquatorial(utc: number): SolarEquatorialCoordinates {
+    const jde = julian_day(utc) + delta_t_sec(utc) / 86400
+    const longitudeDeg = this.solarLongitudeDeg(utc)
+    const obliquityDeg = true_obliquity_deg(jde)
+    const rightAscensionDeg = mod(
+      atan2_deg(cos_deg(obliquityDeg) * sin_deg(longitudeDeg), cos_deg(longitudeDeg)),
+      360,
+    )
+    const declinationDeg = asin_deg(sin_deg(obliquityDeg) * sin_deg(longitudeDeg))
+    return { longitudeDeg, rightAscensionDeg, declinationDeg, obliquityDeg }
+  }
+
+  solarHorizontal(
+    utc: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+  ): SolarHorizontalCoordinates {
+    const equatorial = this.solarEquatorial(utc)
+    const horizontal = local_horizontal_from_equatorial(
+      utc,
+      latitudeDeg,
+      longitudeDeg,
+      equatorial.rightAscensionDeg,
+      equatorial.declinationDeg,
+    )
+    return { ...equatorial, ...horizontal }
+  }
+
+  solarEvents(utc: number, options: SolarObservationOptions): SolarObservation {
+    const { latitudeDeg, longitudeDeg, timezoneDeg = longitudeDeg, horizonDeg = -50 / 60 } = options
+    const timezoneMsec = (timezoneDeg / 360) * MSEC_PER_DAY
+    const dayStartUtc =
+      options.dayStartUtc ??
+      Math.floor((utc + timezoneMsec) / MSEC_PER_DAY) * MSEC_PER_DAY - timezoneMsec
+    const dayCenterUtc = options.dayCenterUtc ?? dayStartUtc + MSEC_PER_DAY / 2
+    const transitAt = this.timeOfSolarHourAngle(0, dayCenterUtc, latitudeDeg, longitudeDeg)
+    const midnightAt = this.timeOfSolarHourAngle(
+      180,
+      transitAt - MSEC_PER_DAY / 2,
+      latitudeDeg,
+      longitudeDeg,
+    )
+    const transit = this.solarHorizontal(transitAt, latitudeDeg, longitudeDeg)
+    const hourAngleDeg = this.riseSetHourAngleDeg(latitudeDeg, transit.declinationDeg, horizonDeg)
+    const riseAt = Number.isNaN(hourAngleDeg)
+      ? NaN
+      : this.timeOfSolarAltitude(
+          transitAt - (hourAngleDeg / SOLAR_HOUR_ANGLE_DEG_PER_DAY) * MSEC_PER_DAY,
+          latitudeDeg,
+          longitudeDeg,
+          horizonDeg,
+        )
+    const setAt = Number.isNaN(hourAngleDeg)
+      ? NaN
+      : this.timeOfSolarAltitude(
+          transitAt + (hourAngleDeg / SOLAR_HOUR_ANGLE_DEG_PER_DAY) * MSEC_PER_DAY,
+          latitudeDeg,
+          longitudeDeg,
+          horizonDeg,
+        )
+    const rise = Number.isNaN(riseAt)
+      ? undefined
+      : this.solarHorizontal(riseAt, latitudeDeg, longitudeDeg)
+    const set = Number.isNaN(setAt)
+      ? undefined
+      : this.solarHorizontal(setAt, latitudeDeg, longitudeDeg)
+    const directionDeg = rise?.azimuthDeg ?? NaN
+    return {
+      K: transit.obliquityDeg * DEG_TO_RAD,
+      lat: latitudeDeg * DEG_TO_RAD,
+      時角: hourAngleDeg * DEG_TO_RAD,
+      方向: directionDeg * DEG_TO_RAD,
+      高度: horizonDeg * DEG_TO_RAD,
+      真夜中: midnightAt,
+      日の出: riseAt,
+      南中時刻: transitAt,
+      日の入: setAt,
+      日の出方位: directionDeg * DEG_TO_RAD,
+      日の入方位: (set?.azimuthDeg ?? NaN) * DEG_TO_RAD,
+      南中高度: transit.altitudeDeg * DEG_TO_RAD,
+    }
+  }
+
+  private riseSetHourAngleDeg(latitudeDeg: number, declinationDeg: number, horizonDeg: number) {
+    const value =
+      (sin_deg(horizonDeg) - sin_deg(latitudeDeg) * sin_deg(declinationDeg)) /
+      (cos_deg(latitudeDeg) * cos_deg(declinationDeg))
+    if (value < -1 || 1 < value) return NaN
+    return acos_deg(value)
+  }
+
+  private timeOfSolarHourAngle(
+    targetDeg: number,
+    near: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+  ) {
+    let at = near
+    for (let i = 0; i < 8; i++) {
+      const { hourAngleDeg } = this.solarHorizontal(at, latitudeDeg, longitudeDeg)
+      const diff = signed_degree_diff(hourAngleDeg, targetDeg)
+      at -= (diff / SOLAR_HOUR_ANGLE_DEG_PER_DAY) * MSEC_PER_DAY
+      if (Math.abs(diff) < 1e-7) break
+    }
+    return Math.round(at)
+  }
+
+  private timeOfSolarAltitude(
+    near: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    altitudeDeg: number,
+  ) {
+    let at = near
+    for (let i = 0; i < 8; i++) {
+      const altitude = this.solarHorizontal(at, latitudeDeg, longitudeDeg).altitudeDeg
+      const diff = altitude - altitudeDeg
+      if (Math.abs(diff) < 1e-7) break
+      const before = this.solarHorizontal(at - 60000, latitudeDeg, longitudeDeg).altitudeDeg
+      const after = this.solarHorizontal(at + 60000, latitudeDeg, longitudeDeg).altitudeDeg
+      const rate = (after - before) / 120000
+      if (!Number.isFinite(rate) || Math.abs(rate) < 1e-10) break
+      const correction = Math.max(-7200000, Math.min(7200000, diff / rate))
+      at -= correction
+    }
+    return Math.round(at)
+  }
+
   phaseAt(utc: number) {
     return this.solarLongitudeDeg(utc) / 360
   }
@@ -264,7 +630,7 @@ export class EarthSolarOrbital implements OrbitalModel {
   }
 }
 
-export class EarthMoonOrbital implements OrbitalModel {
+export class EarthMoonOrbital implements LunarEventModel {
   static readonly meanSynodicMonthMsec = 2551442889
   static readonly newMoonEpochMsec = 1577310360000
   static readonly rotationAxialTiltDeg = 6.68
@@ -286,6 +652,264 @@ export class EarthMoonOrbital implements OrbitalModel {
 
   static satellite(center: PLANET, options: EarthMoonOrbitalOptions = {}): SATELLITE {
     return [center, new EarthMoonOrbital(options), EarthMoonOrbital.rotation()]
+  }
+
+  lunarEquatorial(utc: number): LunarEquatorialCoordinates {
+    const jde = julian_day(utc) + delta_t_sec(utc) / 86400
+    const T = (jde - 2451545.0) / 36525
+    const T2 = T * T
+    const T3 = T2 * T
+    const T4 = T3 * T
+    const Lp = mod(
+      218.3164477 + 481267.88123421 * T - 0.0015786 * T2 + T3 / 538841 - T4 / 65194000,
+      360,
+    )
+    const D = mod(
+      297.8501921 + 445267.1114034 * T - 0.0018819 * T2 + T3 / 545868 - T4 / 113065000,
+      360,
+    )
+    const M = mod(357.5291092 + 35999.0502909 * T - 0.0001536 * T2 + T3 / 24490000, 360)
+    const Mp = mod(
+      134.9633964 + 477198.8675055 * T + 0.0087414 * T2 + T3 / 69699 - T4 / 14712000,
+      360,
+    )
+    const F = mod(
+      93.272095 + 483202.0175233 * T - 0.0036539 * T2 - T3 / 3526000 + T4 / 863310000,
+      360,
+    )
+    const A1 = 119.75 + 131.849 * T
+    const A2 = 53.09 + 479264.29 * T
+    const A3 = 313.45 + 481266.484 * T
+    const E = 1 - 0.002516 * T - 0.0000074 * T2
+    let sigmaL = 0
+    let sigmaR = 0
+    for (const [d, m, mp, f, l, r] of MOON_LR_TERMS) {
+      const e = Math.abs(m) === 1 ? E : Math.abs(m) === 2 ? E * E : 1
+      const argument = d * D + m * M + mp * Mp + f * F
+      sigmaL += e * l * sin_deg(argument)
+      sigmaR += e * r * cos_deg(argument)
+    }
+    sigmaL += 3958 * sin_deg(A1) + 1962 * sin_deg(Lp - F) + 318 * sin_deg(A2)
+    let sigmaB = 0
+    for (const [d, m, mp, f, b] of MOON_B_TERMS) {
+      const e = Math.abs(m) === 1 ? E : Math.abs(m) === 2 ? E * E : 1
+      sigmaB += e * b * sin_deg(d * D + m * M + mp * Mp + f * F)
+    }
+    sigmaB +=
+      -2235 * sin_deg(Lp) +
+      382 * sin_deg(A3) +
+      175 * sin_deg(A1 - F) +
+      175 * sin_deg(A1 + F) +
+      127 * sin_deg(Lp - Mp) -
+      115 * sin_deg(Lp + Mp)
+    const longitudeDeg = mod(Lp + sigmaL / 1000000, 360)
+    const latitudeDeg = sigmaB / 1000000
+    const distanceKm = 385000.56 + sigmaR / 1000
+    const obliquityDeg = true_obliquity_deg(jde)
+    const rightAscensionDeg = mod(
+      atan2_deg(
+        sin_deg(longitudeDeg) * cos_deg(obliquityDeg) - tan_deg(latitudeDeg) * sin_deg(obliquityDeg),
+        cos_deg(longitudeDeg),
+      ),
+      360,
+    )
+    const declinationDeg = asin_deg(
+      sin_deg(latitudeDeg) * cos_deg(obliquityDeg) +
+        cos_deg(latitudeDeg) * sin_deg(obliquityDeg) * sin_deg(longitudeDeg),
+    )
+    const horizontalParallaxDeg = asin_deg(EARTH_EQUATORIAL_RADIUS_KM / distanceKm)
+    return {
+      longitudeDeg,
+      latitudeDeg,
+      distanceKm,
+      rightAscensionDeg,
+      declinationDeg,
+      horizontalParallaxDeg,
+      obliquityDeg,
+    }
+  }
+
+  lunarHorizontal(
+    utc: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM = 0,
+  ): LunarHorizontalCoordinates {
+    const equatorial = this.lunarEquatorial(utc)
+    const siderealDeg = greenwich_apparent_sidereal_time_deg(utc) + longitudeDeg
+    const hourAngleDeg = signed_degree_diff(siderealDeg, equatorial.rightAscensionDeg)
+    const u = Math.atan(0.99664719 * Math.tan(latitudeDeg * DEG_TO_RAD))
+    const heightKm = heightM / 1000
+    const rhoSinPhiPrime =
+      0.99664719 * Math.sin(u) + (heightKm / EARTH_EQUATORIAL_RADIUS_KM) * sin_deg(latitudeDeg)
+    const rhoCosPhiPrime = Math.cos(u) + (heightKm / EARTH_EQUATORIAL_RADIUS_KM) * cos_deg(latitudeDeg)
+    const parallaxRad = equatorial.horizontalParallaxDeg * DEG_TO_RAD
+    const hourAngleRad = hourAngleDeg * DEG_TO_RAD
+    const declinationRad = equatorial.declinationDeg * DEG_TO_RAD
+    const deltaAlphaRad = Math.atan2(
+      -rhoCosPhiPrime * Math.sin(parallaxRad) * Math.sin(hourAngleRad),
+      Math.cos(declinationRad) - rhoCosPhiPrime * Math.sin(parallaxRad) * Math.cos(hourAngleRad),
+    )
+    const topocentricRightAscensionDeg = mod(equatorial.rightAscensionDeg + deltaAlphaRad * RAD_TO_DEG, 360)
+    const topocentricDeclinationDeg = atan2_deg(
+      (Math.sin(declinationRad) - rhoSinPhiPrime * Math.sin(parallaxRad)) * Math.cos(deltaAlphaRad),
+      Math.cos(declinationRad) - rhoCosPhiPrime * Math.sin(parallaxRad) * Math.cos(hourAngleRad),
+    )
+    const horizontal = local_horizontal_from_equatorial(
+      utc,
+      latitudeDeg,
+      longitudeDeg,
+      topocentricRightAscensionDeg,
+      topocentricDeclinationDeg,
+    )
+    return {
+      ...equatorial,
+      ...horizontal,
+      topocentricRightAscensionDeg,
+      topocentricDeclinationDeg,
+    }
+  }
+
+  lunarEvents(utc: number, options: LunarObservationOptions): LunarObservation {
+    const {
+      latitudeDeg,
+      longitudeDeg,
+      timezoneDeg = longitudeDeg,
+      heightM = 0,
+      horizonDeg = -34 / 60,
+    } = options
+    const timezoneMsec = (timezoneDeg / 360) * MSEC_PER_DAY
+    const dayStartUtc =
+      options.dayStartUtc ?? Math.floor((utc + timezoneMsec) / MSEC_PER_DAY) * MSEC_PER_DAY - timezoneMsec
+    const samples = this.lunarSamples(dayStartUtc, latitudeDeg, longitudeDeg, heightM)
+    const moonrise = this.findAltitudeEvent(samples, horizonDeg, 1, horizonDeg, latitudeDeg, longitudeDeg, heightM)
+    const moonset = this.findAltitudeEvent(samples, horizonDeg, -1, horizonDeg, latitudeDeg, longitudeDeg, heightM)
+    const transit = this.findTransitEvent(samples, latitudeDeg, longitudeDeg, heightM)
+    const rise = Number.isNaN(moonrise) ? undefined : this.lunarHorizontal(moonrise, latitudeDeg, longitudeDeg, heightM)
+    const set = Number.isNaN(moonset) ? undefined : this.lunarHorizontal(moonset, latitudeDeg, longitudeDeg, heightM)
+    const transitHorizontal = Number.isNaN(transit)
+      ? undefined
+      : this.lunarHorizontal(transit, latitudeDeg, longitudeDeg, heightM)
+    return {
+      月の出: moonrise,
+      南中時刻: transit,
+      月の入: moonset,
+      月の出方位: (rise?.azimuthDeg ?? NaN) * DEG_TO_RAD,
+      月の入方位: (set?.azimuthDeg ?? NaN) * DEG_TO_RAD,
+      南中高度: (transitHorizontal?.altitudeDeg ?? NaN) * DEG_TO_RAD,
+    }
+  }
+
+  private lunarSamples(dayStartUtc: number, latitudeDeg: number, longitudeDeg: number, heightM: number) {
+    const samples: { at: number; altitudeDeg: number; hourAngleDeg: number }[] = []
+    for (let i = 0; i <= 24; i++) {
+      const at = dayStartUtc + i * 60 * MSEC_PER_MINUTE
+      const { altitudeDeg, hourAngleDeg } = this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM)
+      samples.push({ at, altitudeDeg, hourAngleDeg })
+    }
+    return samples
+  }
+
+  private findAltitudeEvent(
+    samples: { at: number; altitudeDeg: number }[],
+    targetDeg: number,
+    direction: 1 | -1,
+    horizonDeg: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM: number,
+  ) {
+    for (let i = 1; i < samples.length; i++) {
+      const prev = samples[i - 1]
+      const next = samples[i]
+      const prevAltitude = prev.altitudeDeg - targetDeg
+      const nextAltitude = next.altitudeDeg - targetDeg
+      if (prevAltitude === 0 || prevAltitude * nextAltitude <= 0) {
+        if (direction === 1 && nextAltitude < prevAltitude) continue
+        if (direction === -1 && prevAltitude < nextAltitude) continue
+        return this.timeOfLunarAltitude(
+          prev.at,
+          next.at,
+          horizonDeg,
+          latitudeDeg,
+          longitudeDeg,
+          heightM,
+        )
+      }
+    }
+    return NaN
+  }
+
+  private findTransitEvent(
+    samples: { at: number; hourAngleDeg: number }[],
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM: number,
+  ) {
+    for (let i = 1; i < samples.length; i++) {
+      const prev = samples[i - 1]
+      const next = samples[i]
+      if (prev.hourAngleDeg <= 0 && 0 < next.hourAngleDeg) {
+        return this.timeOfLunarHourAngle(prev.at, next.at, 0, latitudeDeg, longitudeDeg, heightM)
+      }
+    }
+    return NaN
+  }
+
+  private timeOfLunarAltitude(
+    from: number,
+    to: number,
+    altitudeDeg: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM: number,
+  ) {
+    let start = from
+    let end = to
+    let startAltitude = this.lunarHorizontal(start, latitudeDeg, longitudeDeg, heightM).altitudeDeg - altitudeDeg
+    for (let i = 0; i < 32; i++) {
+      const middle = (start + end) / 2
+      const middleAltitude = this.lunarHorizontal(middle, latitudeDeg, longitudeDeg, heightM).altitudeDeg - altitudeDeg
+      if (Math.abs(end - start) < 500) return Math.round(middle)
+      if (startAltitude * middleAltitude <= 0) {
+        end = middle
+      } else {
+        start = middle
+        startAltitude = middleAltitude
+      }
+    }
+    return Math.round((start + end) / 2)
+  }
+
+  private timeOfLunarHourAngle(
+    from: number,
+    to: number,
+    targetDeg: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM: number,
+  ) {
+    let start = from
+    let end = to
+    let startDiff = signed_degree_diff(
+      this.lunarHorizontal(start, latitudeDeg, longitudeDeg, heightM).hourAngleDeg,
+      targetDeg,
+    )
+    for (let i = 0; i < 32; i++) {
+      const middle = (start + end) / 2
+      const middleDiff = signed_degree_diff(
+        this.lunarHorizontal(middle, latitudeDeg, longitudeDeg, heightM).hourAngleDeg,
+        targetDeg,
+      )
+      if (Math.abs(end - start) < 500) return Math.round(middle)
+      if (startDiff * middleDiff <= 0) {
+        end = middle
+      } else {
+        start = middle
+        startDiff = middleDiff
+      }
+    }
+    return Math.round((start + end) / 2)
   }
 
   phaseAt(utc: number) {
@@ -312,13 +936,21 @@ export class EarthMoonOrbital implements OrbitalModel {
     const Mp = 201.5643 + 385.81693528 * k + 0.0107582 * T2 + 0.00001238 * T3 - 0.000000058 * T4
     const F = 160.7108 + 390.67050284 * k - 0.0016118 * T2 - 0.00000227 * T3 + 0.000000011 * T4
     const Omega = 124.7746 - 1.5637558 * k + 0.0020691 * T2 + 0.00000215 * T3
-    let jde = 2451550.09766 + 29.530588861 * k + 0.00015437 * T2 - 0.00000015 * T3 + 0.00000000073 * T4
+    let jde =
+      2451550.09766 + 29.530588861 * k + 0.00015437 * T2 - 0.00000015 * T3 + 0.00000000073 * T4
     jde += this.phaseCorrection(mod(k, 1), E, M, Mp, F, Omega)
     jde += this.additionalCorrection(k, T)
     return jde
   }
 
-  private phaseCorrection(phase: number, E: number, M: number, Mp: number, F: number, Omega: number) {
+  private phaseCorrection(
+    phase: number,
+    E: number,
+    M: number,
+    Mp: number,
+    F: number,
+    Omega: number,
+  ) {
     if (phase < 0.125 || 0.875 < phase) {
       return this.newOrFullCorrection(E, M, Mp, F, Omega, false)
     }
@@ -361,7 +993,14 @@ export class EarthMoonOrbital implements OrbitalModel {
     return phase < 0.5 ? correction + w : correction - w
   }
 
-  private newOrFullCorrection(E: number, M: number, Mp: number, F: number, Omega: number, isFullMoon: boolean) {
+  private newOrFullCorrection(
+    E: number,
+    M: number,
+    Mp: number,
+    F: number,
+    Omega: number,
+    isFullMoon: boolean,
+  ) {
     return (
       (isFullMoon ? -0.40614 : -0.4072) * sin_deg(Mp) +
       (isFullMoon ? 0.17302 : 0.17241) * E * sin_deg(M) +
@@ -408,7 +1047,10 @@ export class EarthMoonOrbital implements OrbitalModel {
       239.56 + 25.513099 * k,
       331.55 + 3.592518 * k,
     ]
-    const coefficients = [0.000325, 0.000165, 0.000164, 0.000126, 0.00011, 0.000062, 0.00006, 0.000056, 0.000047, 0.000042, 0.00004, 0.000037, 0.000035, 0.000023]
+    const coefficients = [
+      0.000325, 0.000165, 0.000164, 0.000126, 0.00011, 0.000062, 0.00006, 0.000056, 0.000047,
+      0.000042, 0.00004, 0.000037, 0.000035, 0.000023,
+    ]
     return angles.reduce((sum, angle, index) => sum + coefficients[index] * sin_deg(angle), 0)
   }
 }

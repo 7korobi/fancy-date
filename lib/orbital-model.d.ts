@@ -1,0 +1,106 @@
+export type STAR = readonly [center: null, orbital: null, rotation: null];
+export type PLANET = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION];
+export type SATELLITE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION];
+export type SKY_BODY = PLANET | SATELLITE;
+export type SPOT = readonly [
+    body: SKY_BODY,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    timezoneDeg: number
+];
+export type TIMEZONE = readonly [latitudeDeg: number, longitudeDeg: number, timezoneDeg: number];
+export type ORBITAL = readonly [periodMsec: number, epochMsec: number] | OrbitalModel;
+export type ROTATION = readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number] | RotationModel;
+export interface OrbitalModel {
+    periodMsec: number;
+    epochMsec: number;
+    phaseAt(utc: number): number;
+    timeOfPhase(phase: number, near: number): number;
+}
+export interface RotationModel {
+    periodMsec: number;
+    epochMsec: number;
+    axialTiltDeg: number;
+}
+export type SolarObservationOptions = {
+    latitudeDeg: number;
+    longitudeDeg: number;
+    timezoneDeg?: number;
+    horizonDeg?: number;
+    dayStartUtc?: number;
+    dayCenterUtc?: number;
+};
+export type SolarObservation = {
+    K: number;
+    lat: number;
+    時角: number;
+    方向: number;
+    高度: number;
+    真夜中: number;
+    日の出: number;
+    南中時刻: number;
+    日の入: number;
+    日の出方位: number;
+    日の入方位: number;
+    南中高度: number;
+};
+export type SolarEquatorialCoordinates = {
+    longitudeDeg: number;
+    rightAscensionDeg: number;
+    declinationDeg: number;
+    obliquityDeg: number;
+};
+export type SolarHorizontalCoordinates = SolarEquatorialCoordinates & {
+    altitudeDeg: number;
+    azimuthDeg: number;
+    hourAngleDeg: number;
+};
+export interface SolarPositionModel extends OrbitalModel {
+    solarLongitudeDeg(utc: number): number;
+    solarEquatorial(utc: number): SolarEquatorialCoordinates;
+    solarHorizontal(utc: number, latitudeDeg: number, longitudeDeg: number): SolarHorizontalCoordinates;
+}
+export interface SolarEventModel extends SolarPositionModel {
+    solarEvents(utc: number, options: SolarObservationOptions): SolarObservation;
+}
+export type LunarObservationOptions = {
+    latitudeDeg: number;
+    longitudeDeg: number;
+    timezoneDeg?: number;
+    heightM?: number;
+    horizonDeg?: number;
+    dayStartUtc?: number;
+};
+export type LunarObservation = {
+    月の出: number;
+    南中時刻: number;
+    月の入: number;
+    月の出方位: number;
+    月の入方位: number;
+    南中高度: number;
+};
+export type LunarEquatorialCoordinates = {
+    longitudeDeg: number;
+    latitudeDeg: number;
+    distanceKm: number;
+    rightAscensionDeg: number;
+    declinationDeg: number;
+    horizontalParallaxDeg: number;
+    obliquityDeg: number;
+};
+export type LunarHorizontalCoordinates = LunarEquatorialCoordinates & {
+    altitudeDeg: number;
+    azimuthDeg: number;
+    hourAngleDeg: number;
+    topocentricRightAscensionDeg: number;
+    topocentricDeclinationDeg: number;
+};
+export interface LunarPositionModel extends OrbitalModel {
+    lunarEquatorial(utc: number): LunarEquatorialCoordinates;
+    lunarHorizontal(utc: number, latitudeDeg: number, longitudeDeg: number, heightM?: number): LunarHorizontalCoordinates;
+}
+export interface LunarEventModel extends LunarPositionModel {
+    lunarEvents(utc: number, options: LunarObservationOptions): LunarObservation;
+}
+export declare function hasSolarEvents(model: OrbitalModel): model is SolarEventModel;
+export declare function hasLunarEvents(model: OrbitalModel | undefined): model is LunarEventModel;

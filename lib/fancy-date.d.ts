@@ -1,32 +1,10 @@
+import type { ORBITAL, OrbitalModel, ROTATION, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import { Tempo } from './time';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
+export * from './orbital-model';
 export type ERA = readonly [string, number, string?];
 export type ERA_WITH_YEAR = readonly [string, number, number];
-export type STAR = readonly [center: null, orbital: null, rotation: null];
-export type PLANET = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION];
-export type SATELLITE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION];
-export type SKY_BODY = PLANET | SATELLITE;
-export type SPOT = readonly [
-    body: SKY_BODY,
-    latitudeDeg: number,
-    longitudeDeg: number,
-    timezoneDeg: number
-];
-type TIMEZONE = readonly [latitudeDeg: number, longitudeDeg: number, timezoneDeg: number];
-export type ORBITAL = readonly [periodMsec: number, epochMsec: number] | OrbitalModel;
-export type ROTATION = readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number] | RotationModel;
-export interface OrbitalModel {
-    periodMsec: number;
-    epochMsec: number;
-    phaseAt(utc: number): number;
-    timeOfPhase(phase: number, near: number): number;
-}
-export interface RotationModel {
-    periodMsec: number;
-    epochMsec: number;
-    axialTiltDeg: number;
-}
 export declare class MeanOrbital implements OrbitalModel {
     readonly periodMsec: number;
     readonly epochMsec: number;
@@ -53,6 +31,24 @@ type TempoIdxs = TOKENS<ALL_DIC, number> & {
 };
 type TempoMonth = {
     is_leap: boolean;
+};
+type LunisolarPrincipalTerm = {
+    index: number;
+    longitudeDeg: number;
+    month: number;
+    at: number;
+};
+export type LunisolarDate = {
+    year: number;
+    month: number;
+    day: number;
+    is_leap: boolean;
+    day_start_at: number;
+    last_at: number;
+    next_at: number;
+    new_moon_at: number;
+    next_new_moon_at: number;
+    principal_term?: LunisolarPrincipalTerm;
 };
 type Tempos = {
     Zz: Tempo;
@@ -179,6 +175,12 @@ export declare class FancyDate {
     time_table(utc: number): [string, string, string, string, (string[] | undefined)?][];
     solar_phase(phase: number, near: number): number;
     lunar_phase(phase: number, near: number): number;
+    lunisolar(utc: number): LunisolarDate;
+    private lunisolar_months_around;
+    private assign_lunisolar_months;
+    private lunisolar_principal_term;
+    private local_day_start;
+    private local_timezone_msec;
     solar_term(utc: number, phase: number): Tempo;
     solar_phase_before(phase: number, utc: number): number;
     solar_terms(utc: number): {
@@ -230,22 +232,38 @@ export declare class FancyDate {
         is_legal_eto: boolean;
         is_legal_ETO: boolean;
     };
-    noon(utc: any, { last_at, center_at }?: Tempo): {
+    noon(utc: any, day?: Tempo): {
+        center_at: number;
         T0: Tempo;
         T1: Tempo;
         季節: number;
         南中差分: number;
         南中時刻: number;
         真夜中: number;
+        label?: string;
+        table?: number[];
+        zero: number;
+        write_at: number;
+        now_idx: number;
+        last_at: number;
+        next_at: number;
     };
-    solor(utc: any, idx?: number, { 季節, 南中時刻, 真夜中 }?: {
+    solor(utc: any, idx?: number, solarNoon?: {
+        center_at: number;
         T0: Tempo;
         T1: Tempo;
         季節: number;
         南中差分: number;
         南中時刻: number;
         真夜中: number;
-    }): {
+        label?: string;
+        table?: number[];
+        zero: number;
+        write_at: number;
+        now_idx: number;
+        last_at: number;
+        next_at: number;
+    }): import("./orbital-model").SolarObservation | {
         K: number;
         lat: number;
         時角: number;
@@ -256,6 +274,7 @@ export declare class FancyDate {
         南中時刻: number;
         日の入: number;
     };
+    lunar(utc: any, day?: Tempo): import("./orbital-model").LunarObservation;
     節句(utc: number, { M, d, B, E }?: Tempos): {
         カトリック: {
             万聖節: number[];
