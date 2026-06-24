@@ -1,5 +1,10 @@
 require('../lib/sample')
-const { Calendar } = require('../lib/sample')
+const { expectMetricsNotWorse, summarizeDifferences } = require('./helpers/naoj-metrics')
+const {
+  LUNAR_PHASE_DIFF_BASELINE,
+  LUNAR_PHASE_DIFF_FIELDS,
+  lunarPhaseDifferences,
+} = require('./helpers/naoj-differences')
 const {
   LUNAR_PHASES,
   NAOJ_LUNAR_PHASE_FIXTURES,
@@ -8,10 +13,6 @@ const {
 
 function fixtureKey({ year, name, jst }) {
   return `${year}:${name}:${jst}`
-}
-
-function minuteDiff(a, b) {
-  return Math.abs(a - b) / 60000
 }
 
 describe('NAOJ lunar phase fixtures', () => {
@@ -39,18 +40,14 @@ describe('NAOJ lunar phase fixtures', () => {
 describe('NAOJ lunar phase conformance target', () => {
   const conformanceTest = process.env.FANCY_DATE_RUN_NAOJ_LUNAR_CONFORMANCE === '1' ? test : test.skip
 
+  test('difference metrics do not exceed recorded baseline', () => {
+    const metrics = summarizeDifferences(lunarPhaseDifferences(), LUNAR_PHASE_DIFF_FIELDS)
+    expectMetricsNotWorse(metrics, LUNAR_PHASE_DIFF_BASELINE)
+  })
+
   conformanceTest('GregorianAstronomical lunar_phase matches published JST minute fixtures', () => {
     const toleranceMinutes = Number(process.env.FANCY_DATE_NAOJ_TOLERANCE_MINUTES ?? 2)
-    const misses = NAOJ_LUNAR_PHASE_FIXTURES.map((event) => {
-      const expectedAt = Date.parse(event.jst)
-      const actualAt = Calendar.GregorianAstronomical.lunar_phase(event.phase, expectedAt)
-      return {
-        key: fixtureKey(event),
-        expected: event.jst,
-        actual: Calendar.GregorianAstronomical.format(actualAt, 'yyyy-MM-dd HH:mm'),
-        diffMinutes: minuteDiff(actualAt, expectedAt),
-      }
-    }).filter(({ diffMinutes }) => toleranceMinutes < diffMinutes)
+    const misses = lunarPhaseDifferences().filter(({ diffMinutes }) => toleranceMinutes < diffMinutes)
 
     expect({ count: misses.length, samples: misses.slice(0, 5) }).toEqual({ count: 0, samples: [] })
   })

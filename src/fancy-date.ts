@@ -1,39 +1,23 @@
+import { hasLunarEvents, hasSolarEvents } from './orbital-model'
+import type {
+  ORBITAL,
+  OrbitalModel,
+  PLANET,
+  ROTATION,
+  RotationModel,
+  SATELLITE,
+  SKY_BODY,
+  SPOT,
+  TIMEZONE,
+} from './orbital-model'
 import { Tempo, to_tempo_by, to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
+export * from './orbital-model'
 
 export type ERA = readonly [string, number, string?]
 export type ERA_WITH_YEAR = readonly [string, number, number]
-export type STAR = readonly [center: null, orbital: null, rotation: null]
-export type PLANET = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION]
-export type SATELLITE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION]
-export type SKY_BODY = PLANET | SATELLITE
-export type SPOT = readonly [
-  body: SKY_BODY,
-  latitudeDeg: number,
-  longitudeDeg: number,
-  timezoneDeg: number,
-]
-
-type TIMEZONE = readonly [latitudeDeg: number, longitudeDeg: number, timezoneDeg: number]
-export type ORBITAL = readonly [periodMsec: number, epochMsec: number] | OrbitalModel
-export type ROTATION =
-  | readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number]
-  | RotationModel
-
-export interface OrbitalModel {
-  periodMsec: number
-  epochMsec: number
-  phaseAt(utc: number): number
-  timeOfPhase(phase: number, near: number): number
-}
-
-export interface RotationModel {
-  periodMsec: number
-  epochMsec: number
-  axialTiltDeg: number
-}
 
 export class MeanOrbital implements OrbitalModel {
   constructor(
@@ -158,6 +142,27 @@ type TempoIdxs = TOKENS<ALL_DIC, number> & {
 }
 type TempoMonth = {
   is_leap: boolean
+}
+type LunisolarPrincipalTerm = {
+  index: number
+  longitudeDeg: number
+  month: number
+  at: number
+}
+export type LunisolarDate = {
+  year: number
+  month: number
+  day: number
+  is_leap: boolean
+  day_start_at: number
+  last_at: number
+  next_at: number
+  new_moon_at: number
+  next_new_moon_at: number
+  principal_term?: LunisolarPrincipalTerm
+}
+type LunisolarMonth = Omit<LunisolarDate, 'year' | 'day' | 'day_start_at'> & {
+  year?: number
 }
 type TempoDrillDown = {
   length: number
@@ -562,6 +567,134 @@ export class FancyDate {
       throw new Error('lunar_phase requires a satellite orbital model')
     }
     return this.dic.moony.timeOfPhase(__mod__(phase, 1), near)
+  }
+
+  lunisolar(utc: number): LunisolarDate {
+    const months = this.lunisolar_months_around(utc)
+    const month = months.find(({ last_at, next_at }) => last_at <= utc && utc < next_at)
+    if (!month || month.year == null) {
+      throw new Error('failed to resolve lunisolar month')
+    }
+    const day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
+    return {
+      ...month,
+      year: month.year,
+      day: Math.floor((day.last_at - month.last_at) / this.calc.msec.day) + 1,
+      day_start_at: day.last_at,
+    }
+  }
+
+  private lunisolar_months_around(utc: number): LunisolarMonth[] {
+    if (!this.dic.moony) {
+      throw new Error('lunisolar requires a satellite orbital model')
+    }
+    const periodMsec = this.dic.moony.periodMsec
+    let newMoonAt = this.lunar_phase(0, utc)
+    let monthStartAt = this.local_day_start(newMoonAt)
+    while (utc < monthStartAt) {
+      newMoonAt = this.lunar_phase(0, newMoonAt - periodMsec)
+      monthStartAt = this.local_day_start(newMoonAt)
+    }
+    while (this.local_day_start(this.lunar_phase(0, newMoonAt + periodMsec)) <= utc) {
+      newMoonAt = this.lunar_phase(0, newMoonAt + periodMsec)
+      monthStartAt = this.local_day_start(newMoonAt)
+    }
+
+    const newMoons = [newMoonAt]
+    for (let i = 0; i < 18; i++) {
+      newMoons.unshift(this.lunar_phase(0, newMoons[0] - periodMsec))
+    }
+    for (let i = 0; i < 19; i++) {
+      newMoons.push(this.lunar_phase(0, newMoons[newMoons.length - 1] + periodMsec))
+    }
+    const months = newMoons.slice(0, -1).map((at, index) => {
+      const nextAt = newMoons[index + 1]
+      return {
+        month: NaN,
+        is_leap: false,
+        last_at: this.local_day_start(at),
+        next_at: this.local_day_start(nextAt),
+        new_moon_at: at,
+        next_new_moon_at: nextAt,
+        principal_term: this.lunisolar_principal_term(at, nextAt),
+      }
+    })
+    this.assign_lunisolar_months(months)
+    return months
+  }
+
+  private assign_lunisolar_months(months: LunisolarMonth[]) {
+    let month = NaN
+    for (const item of months) {
+      if (item.principal_term) {
+        month = item.principal_term.month
+        item.month = month
+        item.is_leap = false
+      } else {
+        item.month = month
+        item.is_leap = true
+      }
+    }
+
+    const firstAssignedIndex = months.findIndex(({ month }) => Number.isFinite(month))
+    if (0 < firstAssignedIndex) {
+      let previousMonth = months[firstAssignedIndex].month
+      for (let i = firstAssignedIndex - 1; 0 <= i; i--) {
+        const item = months[i]
+        if (item.principal_term) {
+          previousMonth = item.principal_term.month
+          item.month = previousMonth
+          item.is_leap = false
+        } else {
+          item.month = previousMonth
+          item.is_leap = true
+        }
+      }
+    }
+
+    const firstMonthOneIndex = months.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
+    if (firstMonthOneIndex < 0) {
+      const year = new Date(months[0].last_at + this.local_timezone_msec()).getUTCFullYear()
+      for (const item of months) item.year = year
+      return
+    }
+    let year = new Date(months[firstMonthOneIndex].last_at + this.local_timezone_msec()).getUTCFullYear()
+    for (let i = 0; i < firstMonthOneIndex; i++) {
+      months[i].year = year - 1
+    }
+    for (let i = firstMonthOneIndex; i < months.length; i++) {
+      const item = months[i]
+      if (item.month === 1 && !item.is_leap) {
+        year = new Date(item.last_at + this.local_timezone_msec()).getUTCFullYear()
+      }
+      item.year = year
+    }
+  }
+
+  private lunisolar_principal_term(monthStartAt: number, nextMonthStartAt: number) {
+    const near = (monthStartAt + nextMonthStartAt) / 2
+    const startAt = this.local_day_start(monthStartAt)
+    const nextAt = this.local_day_start(nextMonthStartAt)
+    for (let index = 0; index < 12; index++) {
+      const at = this.solar_phase(index / 12, near)
+      if (startAt <= at && at < nextAt) {
+        return {
+          index,
+          longitudeDeg: index * 30,
+          month: ((index + 1) % 12) + 1,
+          at,
+        }
+      }
+    }
+    return undefined
+  }
+
+  private local_day_start(utc: number) {
+    return to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc).last_at
+  }
+
+  private local_timezone_msec() {
+    return (this.calc.msec.day * (this.dic.geo[2] != null ? this.dic.geo[2] : this.dic.geo[1])) / 360
   }
 
   solar_term(utc: number, phase: number) {
@@ -1252,7 +1385,8 @@ K   = @dic.earthy[2] / 360
   南中時刻 + 時角
 */
 
-  noon(utc, { last_at, center_at } = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
+  noon(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
+    const { last_at, center_at } = day
     const { sin, PI } = Math
     const deg_to_day = this.calc.msec.day / 360
     const year_to_rad = (2 * PI) / this.calc.msec.year
@@ -1267,17 +1401,13 @@ K   = @dic.earthy[2] / 360
     const 南中時刻 = center_at + 南中差分
     const 真夜中 = last_at + 南中差分
 
-    const T1 = to_tempo_bare(
-      this.calc.msec.year,
-      this.dic.sunny.epochMsec,
-      南中時刻,
-    )
+    const T1 = to_tempo_bare(this.calc.msec.year, this.dic.sunny.epochMsec, 南中時刻)
     const 季節 = T1.since * year_to_rad
 
-    return { T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
+    return { ...day, center_at, T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
   }
 
-  solor(utc, idx = 2, { 季節, 南中時刻, 真夜中 } = this.noon(utc)) {
+  solor(utc, idx = 2, solarNoon = this.noon(utc)) {
     const days = [
       6, // golden hour end         / golden hour
       -18 / 60, // sunrise bottom edge end / sunset bottom edge start
@@ -1287,6 +1417,17 @@ K   = @dic.earthy[2] / 360
       -12, // nautical dawn           / nautical dusk
       -18, // night end               / night
     ]
+    if (hasSolarEvents(this.dic.sunny)) {
+      return this.dic.sunny.solarEvents(utc, {
+        latitudeDeg: this.dic.geo[0],
+        longitudeDeg: this.dic.geo[1],
+        timezoneDeg: this.dic.geo[2],
+        horizonDeg: days[idx],
+        dayStartUtc: solarNoon.last_at,
+        dayCenterUtc: solarNoon.center_at,
+      })
+    }
+    const { 季節, 南中時刻, 真夜中 } = solarNoon
     const { asin, acos, atan, sin, cos, tan, PI } = Math
     const deg_to_rad = (2 * PI) / 360
     const rad_to_day = this.calc.msec.day / (2 * PI)
@@ -1304,6 +1445,18 @@ K   = @dic.earthy[2] / 360
     const 日の入 = Math.floor(南中時刻 + 時角 * rad_to_day)
 
     return { K, lat, 時角, 方向, 高度, 真夜中, 日の出, 南中時刻, 日の入 }
+  }
+
+  lunar(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
+    if (!hasLunarEvents(this.dic.moony)) {
+      throw new Error('lunar requires a satellite orbital model with lunarEvents')
+    }
+    return this.dic.moony.lunarEvents(utc, {
+      latitudeDeg: this.dic.geo[0],
+      longitudeDeg: this.dic.geo[1],
+      timezoneDeg: this.dic.geo[2],
+      dayStartUtc: day.last_at,
+    })
   }
 
   節句(utc: number, { M, d, B, E } = this.to_tempos(utc)) {

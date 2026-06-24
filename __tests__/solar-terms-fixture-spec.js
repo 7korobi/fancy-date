@@ -1,5 +1,10 @@
 require('../lib/sample')
-const { Calendar } = require('../lib/sample')
+const { expectMetricsNotWorse, summarizeDifferences } = require('./helpers/naoj-metrics')
+const {
+  SOLAR_TERM_DIFF_BASELINE,
+  SOLAR_TERM_DIFF_FIELDS,
+  solarTermDifferences,
+} = require('./helpers/naoj-differences')
 const {
   NAOJ_SOLAR_TERM_FIXTURES,
   NAOJ_SOLAR_TERM_SOURCE,
@@ -37,14 +42,6 @@ function fixtureKey({ year, name }) {
   return `${year}:${name}`
 }
 
-function toPhase({ longitudeDeg }) {
-  return longitudeDeg / 360
-}
-
-function minuteDiff(a, b) {
-  return Math.abs(a - b) / 60000
-}
-
 describe('NAOJ solar term fixtures', () => {
   test('source metadata is explicit', () => {
     expect(NAOJ_SOLAR_TERM_SOURCE.timezone).toBe('JST')
@@ -78,18 +75,14 @@ describe('NAOJ solar term fixtures', () => {
 describe('NAOJ solar term conformance target', () => {
   const conformanceTest = process.env.FANCY_DATE_RUN_NAOJ_CONFORMANCE === '1' ? test : test.skip
 
+  test('difference metrics do not exceed recorded baseline', () => {
+    const metrics = summarizeDifferences(solarTermDifferences(), SOLAR_TERM_DIFF_FIELDS)
+    expectMetricsNotWorse(metrics, SOLAR_TERM_DIFF_BASELINE)
+  })
+
   conformanceTest('GregorianAstronomical solar_phase matches published JST minute fixtures', () => {
     const toleranceMinutes = Number(process.env.FANCY_DATE_NAOJ_TOLERANCE_MINUTES ?? 2)
-    const misses = NAOJ_SOLAR_TERM_FIXTURES.map((event) => {
-      const expectedAt = Date.parse(event.jst)
-      const actualAt = Calendar.GregorianAstronomical.solar_phase(toPhase(event), expectedAt)
-      return {
-        key: fixtureKey(event),
-        expected: event.jst,
-        actual: Calendar.GregorianAstronomical.format(actualAt, 'yyyy-MM-dd HH:mm'),
-        diffMinutes: minuteDiff(actualAt, expectedAt),
-      }
-    }).filter(({ diffMinutes }) => toleranceMinutes < diffMinutes)
+    const misses = solarTermDifferences().filter(({ diffMinutes }) => toleranceMinutes < diffMinutes)
 
     expect({ count: misses.length, samples: misses.slice(0, 5) }).toEqual({ count: 0, samples: [] })
   })

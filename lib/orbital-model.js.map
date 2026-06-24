@@ -1,0 +1,1 @@
+{"version":3,"file":"orbital-model.js","sourceRoot":"","sources":["../src/orbital-model.ts"],"names":[],"mappings":";;AA+HA,wCAEC;AAED,wCAEC;AAND,SAAgB,cAAc,CAAC,KAAmB;IAChD,OAAO,OAAQ,KAAyB,CAAC,WAAW,KAAK,UAAU,CAAA;AACrE,CAAC;AAED,SAAgB,cAAc,CAAC,KAA+B;IAC5D,OAAO,OAAQ,KAAqC,EAAE,WAAW,KAAK,UAAU,CAAA;AAClF,CAAC"}
