@@ -3,10 +3,6 @@ const { FancyDate } = require('../lib/fancy-date')
 const { Calendar } = require('../lib/sample')
 const { to_msec, to_tempo_bare } = require('../lib/time')
 
-const format = require('date-fns/format')
-const locale = require('date-fns/locale/ja')
-const _ = require('lodash')
-
 const utc = Calendar.UTC
 const g = Calendar.Gregorian
 const fg = Calendar.フランス革命暦
@@ -40,7 +36,7 @@ describe('テーブル', () => {
     expect(
       calendars.map(([c, str]) => {
         return c.time_table(msec).join('/')
-      })
+      }),
     ).toMatchSnapshot()
   })
   test('週間', () => {
@@ -49,7 +45,7 @@ describe('テーブル', () => {
     expect(
       calendars.map(([c, str]) => {
         return c.weekly_table(msec).join('/')
-      })
+      }),
     ).toMatchSnapshot()
   })
   test('月間', () => {
@@ -58,7 +54,7 @@ describe('テーブル', () => {
     expect(
       calendars.map(([c, str]) => {
         return c.monthry_table(msec).join('/')
-      })
+      }),
     ).toMatchSnapshot()
   })
   test('年間', () => {
@@ -67,7 +63,7 @@ describe('テーブル', () => {
     expect(
       calendars.map(([c, str]) => {
         return c.yeary_table(msec).join('/')
-      })
+      }),
     ).toMatchSnapshot()
   })
 })

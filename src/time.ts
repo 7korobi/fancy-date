@@ -21,9 +21,11 @@ const TIMERS: [string, string, number][] = [
   ['秒', 's', SECOND],
 ]
 
-const DISTANCE_NAN = [-VALID, INTERVAL, YEAR, '？？？']
-const DISTANCE_LONG_AGO = [Infinity, INTERVAL, VALID, '昔']
-const DISTANCES = [
+type Distance = readonly [limit: number, interval: number, base: number, label: string]
+
+const DISTANCE_NAN: Distance = [-VALID, INTERVAL, YEAR, '？？？']
+const DISTANCE_LONG_AGO: Distance = [Infinity, INTERVAL, VALID, '昔']
+const DISTANCES: Distance[] = [
   DISTANCE_NAN,
   [-YEAR, INTERVAL, YEAR, '%s年後'],
   [-MONTH, INTERVAL, MONTH, '%sヶ月後'],
@@ -232,7 +234,7 @@ export class Tempo {
     write_at: number,
     last_at: number,
     next_at: number,
-    table: number[] = null as any
+    table: number[] = null as any,
   ) {
     if (table) {
       this.table = table
@@ -278,7 +280,7 @@ const modulo = (a: number, b: number) => ((+a % (b = +b)) + b) % b
 export function to_tempo(
   size_str: string,
   zero_str: string = '0s',
-  write_at: number | Date = Date.now()
+  write_at: number | Date = Date.now(),
 ) {
   const size = to_msec(size_str)
   const zero = to_msec(zero_str) + tempo_zero
@@ -324,15 +326,21 @@ export function to_tempo_by(table: number[], zero: number, write_at: number) {
   return new Tempo(zero, now_idx, write_at, last_at, next_at, table)
 }
 
-export function to_msec(str: string): number {
-  return 1000 * to_sec(str)
+export type DurationOptions = {
+  strict?: boolean
 }
 
-export function to_sec(str: string): number {
+export function to_msec(str: string, options?: DurationOptions): number {
+  return 1000 * to_sec(str, options)
+}
+
+export function to_sec(str: string, { strict = false }: DurationOptions = {}): number {
   let timeout = 0
+  let consumed = ''
   str.replace(
-    /(\d+)([ヵ]?([smhdwy秒分時日週月年])[間]?(半$)?)|0/g,
+    /(\d+)(([ヶヵかカケ箇]?月|[smhdwy秒分時日週年])[間]?(半$)?)|0/g,
     (full, num_str: string, fullunit, unit: string, appendix: string) => {
+      consumed += full
       let num = Number(num_str)
       if (!num) return ''
       if ('半' === appendix) num += 0.5
@@ -364,6 +372,15 @@ export function to_sec(str: string): number {
           unit_size = 3600 * 24 * 7
           break
 
+        case '月':
+        case 'ヶ月':
+        case 'ヵ月':
+        case 'か月':
+        case 'カ月':
+        case 'ケ月':
+        case '箇月':
+          throw new Error(`variable-length unit 月 is not supported by to_msec: ${str}`)
+
         case 'y':
         case '年':
           unit_size = 31556925.147
@@ -375,8 +392,11 @@ export function to_sec(str: string): number {
       }
       timeout += num * unit_size
       return ''
-    }
+    },
   )
+  if (strict && consumed !== str) {
+    throw new Error(`invalid duration ${str}`)
+  }
   return timeout
 }
 
@@ -396,7 +416,7 @@ export function to_timer(msec: number, unit_mode: number = 1) {
 }
 
 export function to_relative_time_distance(msec: number) {
-  if (msec < -VALID || VALID < msec || msec - 0 == NaN) {
+  if (msec < -VALID || VALID < msec || Number.isNaN(msec)) {
     return DISTANCE_NAN
   }
   const _limit = DISTANCES.length

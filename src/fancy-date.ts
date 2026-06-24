@@ -1,19 +1,79 @@
-import _cloneDeep from 'lodash/cloneDeep'
-import _padStart from 'lodash/padStart'
-
 import { Tempo, to_tempo_by, to_tempo_bare } from './time'
-import { jpn, old_jpn } from './number'
+
+export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
+export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
 
 export type ERA = readonly [string, number, string?]
 export type ERA_WITH_YEAR = readonly [string, number, number]
-export type STAR = readonly [null, null, null]
-export type PLANET = readonly [STAR, ORBITAL, ROTATION]
-export type SATELLITE = readonly [PLANET, ORBITAL, ROTATION?]
-export type SPOT = readonly [SATELLITE, number, number, number]
+export type STAR = readonly [center: null, orbital: null, rotation: null]
+export type PLANET = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION]
+export type SATELLITE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION]
+export type SKY_BODY = PLANET | SATELLITE
+export type SPOT = readonly [
+  body: SKY_BODY,
+  latitudeDeg: number,
+  longitudeDeg: number,
+  timezoneDeg: number,
+]
 
-type TIMEZONE = readonly [number, number, number]
-type ORBITAL = readonly [number, number]
-type ROTATION = readonly [number, number, number]
+type TIMEZONE = readonly [latitudeDeg: number, longitudeDeg: number, timezoneDeg: number]
+export type ORBITAL = readonly [periodMsec: number, epochMsec: number] | OrbitalModel
+export type ROTATION =
+  | readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number]
+  | RotationModel
+
+export interface OrbitalModel {
+  periodMsec: number
+  epochMsec: number
+  phaseAt(utc: number): number
+  timeOfPhase(phase: number, near: number): number
+}
+
+export interface RotationModel {
+  periodMsec: number
+  epochMsec: number
+  axialTiltDeg: number
+}
+
+export class MeanOrbital implements OrbitalModel {
+  constructor(
+    readonly periodMsec: number,
+    readonly epochMsec: number,
+  ) {}
+
+  phaseAt(utc: number) {
+    return __mod__((utc - this.epochMsec) / this.periodMsec, 1)
+  }
+
+  timeOfPhase(phase: number, near: number) {
+    const cycle = Math.round((near - this.epochMsec) / this.periodMsec - phase)
+    return this.epochMsec + (cycle + phase) * this.periodMsec
+  }
+
+  static from(src: ORBITAL): OrbitalModel {
+    return is_orbital_tuple(src) ? new MeanOrbital(src[0], src[1]) : src
+  }
+}
+
+export class MeanRotation implements RotationModel {
+  constructor(
+    readonly periodMsec: number,
+    readonly epochMsec: number,
+    readonly axialTiltDeg: number,
+  ) {}
+
+  static from(src: ROTATION): RotationModel {
+    return is_rotation_tuple(src) ? new MeanRotation(src[0], src[1], src[2]) : src
+  }
+}
+
+function is_orbital_tuple(src: ORBITAL): src is readonly [number, number] {
+  return Array.isArray(src)
+}
+
+function is_rotation_tuple(src: ROTATION): src is readonly [number, number, number] {
+  return Array.isArray(src)
+}
 
 type ALL_DIC =
   | ALGO_DIC
@@ -43,6 +103,7 @@ type ALGO_DIC =
   | 'V'
   | 'Z'
   | 'a'
+  | 'd'
   | 'f'
   | 'm'
   | 's'
@@ -114,7 +175,7 @@ type Tempos = {
   H: Tempo
   J: Tempo
   M: Tempo & TempoMonth
-  N: Tempo
+  N: Tempo | undefined
   Q: Tempo
   S: Tempo
   V: Tempo
@@ -139,8 +200,10 @@ const main_tokens = 'ABCEFabcfx' + core_tokens
 const sub_tokens = 'DJNQVYZuw'
 const all_tokens = main_tokens + sub_tokens
 
-const diff_token = /(\d+)(?:([ABCDEFGHJMNQSVYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
-const reg_token = /([ABCEFHMNQVZabcdfms][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
+const diff_token =
+  /(\d+)(?:([ABCDEFGHJMNQSVYZabcdfmpsuwxy])|[ヶ]?([元年月季節週日時分秒])[間]?([半]?))/g
+const reg_token =
+  /([ABCEFHMNQVZabcdfms][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
 
 type NUMBER_RANGE = [number, number?]
 type MEASURE = {
@@ -148,14 +211,18 @@ type MEASURE = {
   msec: number
 }
 
+type FindMatcher = string | RegExp
+export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatcher }
+type FindBetween = readonly [from: number, to: number]
+
 type PI_DIC = Partial<IDIC>
 type IIDX = TOKENS<ALL_DIC, Indexer>
 type IDIC = IIDX & {
   parse: string
   format: string
-  sunny: ORBITAL
-  moony: ORBITAL
-  earthy: ROTATION
+  sunny: OrbitalModel
+  moony?: OrbitalModel
+  earthy: RotationModel
   geo: TIMEZONE
   era: string
   eras: ERA[]
@@ -169,12 +236,16 @@ type ICALC = {
   eras: ERA_WITH_YEAR[]
   idx: TOKENS<ALL_DIC, number>
   zero: TOKENS<ZERO_CALC, number>
-  msec: TOKENS<MSEC_CALC, number>
+  msec: TOKENS<MSEC_CALC, number> & { moon?: number }
   range: TOKENS<RANGE_CALC, [number, number]>
 }
 
 type TOKENS<K extends string, T> = {
   [key in K]: T
+}
+
+function is_planet(body: SKY_BODY): body is PLANET {
+  return body[0][0] === null
 }
 
 const 単位系 = {
@@ -193,10 +264,14 @@ const 単位系 = {
 function calc_set(
   this: FancyDate,
   path: keyof MEASURE,
-  o: Partial<TOKENS<ALL_CALC, MEASURE | number>>
+  o: Partial<TOKENS<ALL_CALC, MEASURE | number>>,
 ) {
   for (let key in o) {
     const val = o[key]
+    if (val == null) {
+      delete this.calc[path][key]
+      continue
+    }
     this.calc[path][key] = val?.[path] || val
   }
 }
@@ -218,9 +293,59 @@ function daily_measure(msec: number, day: number): MEASURE {
   return { range, msec }
 }
 
+function cloneValue<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneValue(item)) as T
+  }
+  if (value instanceof Date) {
+    return new Date(value.getTime()) as T
+  }
+  if (value && 'object' === typeof value) {
+    const clone = Object.create(Object.getPrototypeOf(value))
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)
+      if (!descriptor) continue
+      if ('value' in descriptor) {
+        descriptor.value = cloneValue(descriptor.value)
+      }
+      Object.defineProperty(clone, key, descriptor)
+    }
+    return clone
+  }
+  return value
+}
+
 function to_indexs<T>(zero: T): TOKENS<ALL_DIC, T> {
   let A, a, b, B, c, C, d, D, E, f, F, G, H, J, m, M, N, p, Q, s, S, u, V, w, x, y, Y, Z
-  A = B = C = D = E = F = G = H = J = M = N = Q = S = V = Y = Z = a = b = c = d = f = m = p = s = u = w = x = y = zero
+  A =
+    B =
+    C =
+    D =
+    E =
+    F =
+    G =
+    H =
+    J =
+    M =
+    N =
+    Q =
+    S =
+    V =
+    Y =
+    Z =
+    a =
+    b =
+    c =
+    d =
+    f =
+    m =
+    p =
+    s =
+    u =
+    w =
+    x =
+    y =
+      zero
   return { A, B, C, D, E, F, G, H, J, M, N, Q, S, V, Y, Z, a, b, c, d, f, m, p, s, u, w, x, y }
 }
 
@@ -238,7 +363,7 @@ type IndexFactory = (this: Indexer, s: string) => number
 type LabelFactory = (
   list: readonly string[] | null,
   val: Tempo & { is_leap: boolean },
-  size: number
+  size: number,
 ) => string
 
 type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null]
@@ -299,7 +424,7 @@ export class FancyDate {
 
   constructor(o?: FancyDate) {
     if (o) {
-      ;({ dic: this.dic, calc: this.calc } = _cloneDeep(o))
+      ;({ dic: this.dic, calc: this.calc } = cloneValue(o))
     } else {
       this.dic = {
         parse: 'y年M月d日',
@@ -318,8 +443,16 @@ export class FancyDate {
   }
 
   spot(...spot: SPOT) {
-    const [[[, sunny, earthy], moony], ...geo] = spot
-    Object.assign(this.dic, { sunny, moony, earthy, geo })
+    const [body, ...geo] = spot
+    const planet = is_planet(body) ? body : body[0]
+    const moony = is_planet(body) ? undefined : MeanOrbital.from(body[1])
+    const [, sunny, earthy] = planet
+    Object.assign(this.dic, {
+      sunny: MeanOrbital.from(sunny),
+      moony,
+      earthy: MeanRotation.from(earthy),
+      geo,
+    })
     return this
   }
 
@@ -338,7 +471,7 @@ export class FancyDate {
   calendar(
     start = ['1970-1-1 0:0:0', 'y-M-d H:m:s', 0],
     leaps: number[] | null = null,
-    month_divs: (number | null)[] | null = null
+    month_divs: (number | null)[] | null = null,
   ) {
     Object.assign(this.dic, { month_divs, leaps, start })
     return this
@@ -385,9 +518,9 @@ export class FancyDate {
 
   init() {
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
-    const year = daily_measure(sunny[0], earthy[0])
-    const day = daily_define(earthy[0], earthy[0])
-    const moon = moony && daily_measure(moony[0], earthy[0])
+    const year = daily_measure(sunny.periodMsec, earthy.periodMsec)
+    const day = daily_define(earthy.periodMsec, earthy.periodMsec)
+    const moon = moony ? daily_measure(moony.periodMsec, earthy.periodMsec) : undefined
     calc_set.call(this, 'range', { year })
     calc_set.call(this, 'msec', { year, moon, day })
     this.is_table_leap = leaps != null
@@ -420,6 +553,74 @@ export class FancyDate {
     return this.to_table(utc, 'd', 'H')
   }
 
+  solar_phase(phase: number, near: number) {
+    return this.dic.sunny.timeOfPhase(__mod__(phase, 1), near)
+  }
+
+  lunar_phase(phase: number, near: number) {
+    if (!this.dic.moony) {
+      throw new Error('lunar_phase requires a satellite orbital model')
+    }
+    return this.dic.moony.timeOfPhase(__mod__(phase, 1), near)
+  }
+
+  solar_term(utc: number, phase: number) {
+    const at = this.solar_phase(phase, utc)
+    return to_tempo_bare(this.calc.msec.day, this.calc.zero.day, at)
+  }
+
+  solar_phase_before(phase: number, utc: number) {
+    let at = this.solar_phase(phase, utc)
+    while (utc < at) {
+      at = this.solar_phase(phase, at - this.dic.sunny.periodMsec)
+    }
+    return at
+  }
+
+  solar_terms(utc: number) {
+    const phases = {
+      立春: 1 / 8,
+      入梅: 80 / 360,
+      春分: 2 / 8,
+      半夏生: 100 / 360,
+      夏土用: 13 / 40,
+      立夏: 3 / 8,
+      夏至: 4 / 8,
+      秋土用: 23 / 40,
+      立秋: 5 / 8,
+      秋分: 6 / 8,
+      冬土用: 33 / 40,
+      立冬: 7 / 8,
+      冬至: 8 / 8,
+      春土用: 43 / 40,
+      次立春: 9 / 8,
+    }
+    const springEquinoxPhase = 2 / 8
+    const basePhase = phases.立春
+    const baseAt = this.solar_phase_before(basePhase - springEquinoxPhase, utc)
+    const term = (phase: number) => {
+      const near = baseAt + (phase - basePhase) * this.dic.sunny.periodMsec
+      return this.solar_term(near, phase - springEquinoxPhase)
+    }
+    return {
+      立春: term(phases.立春),
+      入梅: term(phases.入梅),
+      春分: term(phases.春分),
+      半夏生: term(phases.半夏生),
+      夏土用: term(phases.夏土用),
+      立夏: term(phases.立夏),
+      夏至: term(phases.夏至),
+      秋土用: term(phases.秋土用),
+      立秋: term(phases.立秋),
+      秋分: term(phases.秋分),
+      冬土用: term(phases.冬土用),
+      立冬: term(phases.立冬),
+      冬至: term(phases.冬至),
+      春土用: term(phases.春土用),
+      次立春: term(phases.次立春),
+    }
+  }
+
   succ_index(diff: string) {
     return this.get_diff(diff, (n) => Number(n) - 0)
   }
@@ -449,6 +650,51 @@ export class FancyDate {
   }
   format(utc: number, str?: string) {
     return this.format_by(this.to_tempos(utc), str)
+  }
+
+  find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]) {
+    const [from, to] = between
+    if (from == null || to == null || from >= to) {
+      throw new Error(`invalid range ${from}..${to}`)
+    }
+    if (!conditions.length) {
+      throw new Error('find requires conditions')
+    }
+
+    const first = this.to_tempos(from)[unit]
+    if (!first) {
+      throw new Error(`invalid unit ${String(unit)}`)
+    }
+    let tempo = first
+    if (tempo.last_at < from) {
+      tempo = tempo.succ()
+    }
+
+    const list: number[] = []
+    while (tempo.last_at < to) {
+      if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
+        list.push(tempo.last_at)
+      }
+      tempo = tempo.succ()
+    }
+    return list
+  }
+
+  match_find_condition(utc: number, condition: FindCondition) {
+    return Object.entries(condition).every(([format, matcher]) => {
+      if (format === 'note') {
+        return this.note(utc).some((note) => this.match_find_value(note, matcher))
+      }
+      return this.match_find_value(this.format(utc, format), matcher)
+    })
+  }
+
+  match_find_value(value: string, matcher: FindMatcher) {
+    if (matcher instanceof RegExp) {
+      matcher.lastIndex = 0
+      return matcher.test(value)
+    }
+    return value === matcher
   }
 
   dup() {
@@ -546,26 +792,40 @@ export class FancyDate {
         return (s as any) - 0
       }
     }
-    H = N = m = s = function (this: Indexer, s: string): number {
-      const idx = this.list?.indexOf(s)
-      if (-1 < idx) {
-        return idx
-      } else {
-        return (s as any) - 0
-      }
-    }
+    H =
+      N =
+      m =
+      s =
+        function (this: Indexer, s: string): number {
+          const idx = this.list?.indexOf(s)
+          if (-1 < idx) {
+            return idx
+          } else {
+            return (s as any) - 0
+          }
+        }
 
-    A = B = C = E = F = M = V = Z = a = b = c = d = f = function (
-      this: Indexer,
-      s: string
-    ): number {
-      const idx = this.list?.indexOf(s)
-      if (-1 < idx) {
-        return idx
-      } else {
-        return (s as any) - 1
-      }
-    }
+    A =
+      B =
+      C =
+      E =
+      F =
+      M =
+      V =
+      Z =
+      a =
+      b =
+      c =
+      d =
+      f =
+        function (this: Indexer, s: string): number {
+          const idx = this.list?.indexOf(s)
+          if (-1 < idx) {
+            return idx
+          } else {
+            return (s as any) - 1
+          }
+        }
     D = Q = p = w = (s: string): number => (s as any) - 1
     J = S = Y = u = x = y = (s: string): number => (s as any) - 0
     const object = {
@@ -609,7 +869,7 @@ export class FancyDate {
     let A, B, C, E, F, N, Q, S, V, Y, Z
     let a, b, c, d, f, m, p, s, u, w, x, y
     function integer(idx: number): LabelFactory {
-      return (_, val, size: number) => _padStart(`${val.now_idx + idx}`, size, '0')
+      return (_, val, size: number) => `${val.now_idx + idx}`.padStart(size, '0')
     }
 
     function at(cb: LabelFactory): LabelFactory {
@@ -633,7 +893,7 @@ export class FancyDate {
     function float(__, val, size) {
       const num = parseInt(val.now_idx)
       const sub = `${val.now_idx % 1}`.slice(1)
-      return _padStart(`${num}`, size, '0') + sub
+      return `${num}`.padStart(size, '0') + sub
     }
 
     const G = (__, val) => val.label
@@ -738,7 +998,7 @@ export class FancyDate {
         for (let mode = 0; mode < leaps.length; mode++) {
           const div = leaps[mode]
           if (idx % div) continue
-          is_leap = ((!mode as any) as number) % 2
+          is_leap = (!mode as any as number) % 2
         }
         range.year.push(this.calc.range.year[is_leap])
       }
@@ -841,7 +1101,7 @@ export class FancyDate {
     const x = (this.dic.x.tempo = to_tempo_bare(
       this.calc.msec.hour,
       -0.5 * this.calc.msec.hour,
-      timezone
+      timezone,
     ))
     x.now_idx = timezone
 
@@ -874,11 +1134,12 @@ export class FancyDate {
     }
 
     // 単純のため平気法。
-    const 啓蟄 = this.dic.sunny[1] - (1 / 6 - 1 / 8) * this.dic.Z.length * this.calc.msec.season
+    const sunny_epoch = this.dic.sunny.epochMsec
+    const 啓蟄 = sunny_epoch - (1 / 6 - 1 / 8) * this.dic.Z.length * this.calc.msec.season
     let { last_at } = to_tempo_bare(this.calc.msec.year, 啓蟄, period || year)
     const spring = last_at
 
-    const 立春 = this.dic.sunny[1] + zero_size('Z', 'season')
+    const 立春 = sunny_epoch + zero_size('Z', 'season')
     ;({ last_at } = to_tempo_bare(this.calc.msec.year, 立春, period || year))
     const season = last_at
 
@@ -895,7 +1156,7 @@ export class FancyDate {
     }
 
     if (this.dic.moony) {
-      moon = this.dic.moony[1]
+      moon = this.dic.moony.epochMsec
     }
 
     // JD
@@ -1006,7 +1267,11 @@ K   = @dic.earthy[2] / 360
     const 南中時刻 = center_at + 南中差分
     const 真夜中 = last_at + 南中差分
 
-    const T1 = to_tempo_bare(this.calc.msec.year, this.dic.sunny[1], 南中時刻)
+    const T1 = to_tempo_bare(
+      this.calc.msec.year,
+      this.dic.sunny.epochMsec,
+      南中時刻,
+    )
     const 季節 = T1.since * year_to_rad
 
     return { T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
@@ -1027,7 +1292,7 @@ K   = @dic.earthy[2] / 360
     const rad_to_day = this.calc.msec.day / (2 * PI)
 
     const 高度 = days[idx] * deg_to_rad
-    const K = this.dic.earthy[2] * deg_to_rad
+    const K = this.dic.earthy.axialTiltDeg * deg_to_rad
     const lat = this.dic.geo[0] * deg_to_rad
 
     const 赤緯 = asin(sin(K) * sin(季節))
@@ -1169,6 +1434,85 @@ K   = @dic.earthy[2] / 360
     }
   }
 
+  雑節_by_phase(utc: number) {
+    let {
+      立春,
+      入梅,
+      春分,
+      半夏生,
+      夏土用,
+      立夏,
+      夏至,
+      秋土用,
+      立秋,
+      秋分,
+      冬土用,
+      立冬,
+      冬至,
+      春土用,
+      次立春: 立春2,
+    } = this.solar_terms(utc)
+
+    const [八十八夜, 二百十日, 二百二十日] = [88, 210, 220].map((n) => 立春.succ(n - 1))
+
+    const [春彼岸, 秋彼岸] = [春分, 秋分].map((dd) => {
+      return Tempo.join(dd.back(3), dd.succ(3))
+    })
+    const [春社日, 秋社日] = [春分, 秋分].map((dd) => {
+      const C = to_tempo_bare(this.calc.msec.day, this.calc.zero.day10, dd.write_at)
+      C.now_idx = __mod__(C.now_idx, this.dic.C.length)
+      return C.slide(this.dic.C.length / 2 - C.now_idx - 1)
+    })
+
+    const 春 = Tempo.join(立春, 夏土用.back())
+    const 夏節分 = 立夏.back()
+    const 夏 = Tempo.join(立夏, 秋土用.back())
+    const 秋節分 = 立秋.back()
+    const 秋 = Tempo.join(立秋, 冬土用.back())
+    const 冬節分 = 立冬.back()
+    const 冬 = Tempo.join(立冬, 春土用.back())
+    const 春節分 = 立春2.back()
+    const 節分 = 春節分
+
+    夏土用 = Tempo.join(夏土用, 夏節分)
+    秋土用 = Tempo.join(秋土用, 秋節分)
+    冬土用 = Tempo.join(冬土用, 冬節分)
+    春土用 = Tempo.join(春土用, 立春2)
+
+    return {
+      立春,
+      立夏,
+      立秋,
+      立冬,
+      冬至,
+      春分,
+      夏至,
+      秋分,
+      入梅,
+      半夏生,
+      春,
+      夏,
+      秋,
+      冬,
+      春社日,
+      秋社日,
+      春土用,
+      夏土用,
+      秋土用,
+      冬土用,
+      春節分,
+      夏節分,
+      秋節分,
+      冬節分,
+      節分,
+      春彼岸,
+      秋彼岸,
+      八十八夜,
+      二百十日,
+      二百二十日,
+    }
+  }
+
   to_tempo_by_solor(utc: number, day) {
     let idx, end, start
     const { 日の出, 南中時刻, 日の入 } = this.solor(utc, 4, this.noon(utc, day))
@@ -1206,7 +1550,7 @@ K   = @dic.earthy[2] / 360
     utc: number,
     tempos = this.to_tempos(utc),
     arg1 = this.雑節(utc, tempos),
-    arg2 = this.節句(utc, tempos)
+    arg2 = this.節句(utc, tempos),
   ) {
     let k
     const list: string[] = []
@@ -1217,7 +1561,7 @@ K   = @dic.earthy[2] / 360
           k
             .match(/.(彼岸|社日|節分|土用)|(.+)/)
             .slice(1)
-            .join('')
+            .join(''),
         )
       }
     }
@@ -1267,21 +1611,26 @@ K   = @dic.earthy[2] / 360
     const Zz = to_tempo_bare(this.calc.msec.year, this.calc.zero.season, utc) // 太陽年
     const Z = drill_down(Zz, 'season') // 太陽年の二十四節気
 
-    // 今月と中気
-    const Nn = to_tempo_bare(this.calc.msec.moon, this.calc.zero.moon, utc).floor(
-      this.calc.msec.day,
-      this.calc.zero.day
-    ) as Tempo & TempoMonth
-    const N = drill_down(Nn, 'day')
+    let N: Tempo | undefined
+    let Nn: (Tempo & TempoMonth) | undefined
+    const moon_msec = this.calc.msec.moon
+    if (this.dic.moony && moon_msec != null) {
+      // 今月と中気
+      Nn = to_tempo_bare(moon_msec, this.calc.zero.moon, utc).floor(
+        this.calc.msec.day,
+        this.calc.zero.day,
+      ) as Tempo & TempoMonth
+      N = drill_down(Nn, 'day')
 
-    let Zs = drill_down(Zz, 'season', Nn.last_at)
-    if (!Nn.is_cover(Zs.moderate_at)) {
-      Zs = drill_down(Zz, 'season', Nn.next_at)
+      let Zs = drill_down(Zz, 'season', Nn.last_at)
       if (!Nn.is_cover(Zs.moderate_at)) {
-        Nn.is_leap = true
+        Zs = drill_down(Zz, 'season', Nn.next_at)
+        if (!Nn.is_cover(Zs.moderate_at)) {
+          Nn.is_leap = true
+        }
       }
+      Nn.now_idx = __mod__(Zs.now_idx, this.dic.Z.length) >> 1
     }
-    Nn.now_idx = __mod__(Zs.now_idx, this.dic.Z.length) >> 1
 
     if (this.is_table_leap) {
       p = to_tempo('period')
@@ -1293,13 +1642,16 @@ K   = @dic.earthy[2] / 360
       if (this.is_table_month) {
         u = to_tempo_bare(this.calc.msec.year, this.calc.zero.spring, utc).floor(
           this.calc.msec.day,
-          this.calc.zero.day
+          this.calc.zero.day,
         )
         M = drill_down(u, 'month') as any
         d = drill_down(M, 'day')
       } else {
+        if (!Nn || !N) {
+          throw new Error('Lunar month calculation requires a satellite orbital period.')
+        }
         u = to_tempo_bare(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, utc)
-          .floor(this.calc.msec.moon, this.calc.zero.moon)
+          .floor(moon_msec, this.calc.zero.moon)
           .floor(this.calc.msec.day, this.calc.zero.day)
         M = Nn
         d = N
@@ -1376,7 +1728,7 @@ K   = @dic.earthy[2] / 360
       E.now_idx = __mod__(M.now_idx + d.now_idx, this.dic.E.length)
       V.now_idx = __mod__(
         [11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx,
-        this.dic.V.length
+        this.dic.V.length,
       )
     }
 
@@ -1445,7 +1797,7 @@ K   = @dic.earthy[2] / 360
         unit: string | null,
         単位: string | null,
         半: string | null,
-        offset: number
+        offset: number,
       ) => {
         let num = f(numstr)
         if (num) {
@@ -1460,7 +1812,7 @@ K   = @dic.earthy[2] / 360
           }
         }
         return ''
-      }
+      },
     )
     return data
   }
@@ -1581,7 +1933,11 @@ K   = @dic.earthy[2] / 360
       ;[p, y] = shift_up(p, y, this.dic.p.length)
     }
 
-    utc += Z * this.calc.msec.season + N * this.calc.msec.moon + d * this.calc.msec.day
+    utc += Z * this.calc.msec.season + d * this.calc.msec.day
+    const moon_msec = this.calc.msec.moon
+    if (this.dic.moony && moon_msec != null) {
+      utc += N * moon_msec
+    }
 
     // year section
     if (this.is_table_leap) {
@@ -1599,7 +1955,7 @@ K   = @dic.earthy[2] / 360
       ;({ size, last_at } = to_tempo_bare(
         this.calc.msec.year,
         zero,
-        zero + y * this.calc.msec.year
+        zero + y * this.calc.msec.year,
       ).floor(this.calc.msec.day, this.calc.zero.day))
       year_size = size
       utc += last_at
@@ -1609,14 +1965,17 @@ K   = @dic.earthy[2] / 360
     if (this.is_table_month) {
       utc += this.table.msec.month[year_size][M - 1] || 0
     } else {
+      if (!this.dic.moony || moon_msec == null) {
+        throw new Error('Lunar month parsing requires a satellite orbital period.')
+      }
       const base = last_at
       const M_utc = M_is_leap
-        ? base + this.calc.msec.season * (M * 2 + 2) - this.calc.msec.moon
+        ? base + this.calc.msec.season * (M * 2 + 2) - moon_msec
         : base + this.calc.msec.season * (M * 2 + 1)
 
-      ;({ last_at } = to_tempo_bare(this.calc.msec.moon, this.calc.zero.moon, M_utc).floor(
+      ;({ last_at } = to_tempo_bare(moon_msec, this.calc.zero.moon, M_utc).floor(
         this.calc.msec.day,
-        this.calc.zero.day
+        this.calc.zero.day,
       ))
       utc += last_at - base
     }

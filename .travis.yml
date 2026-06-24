@@ -1,5 +1,13 @@
 language: node_js
 node_js:
-  - "8"
-  - "10"
-  - "13"
+  - "22"
+env:
+  global:
+    - BUN_INSTALL="$HOME/.bun"
+    - PATH="$BUN_INSTALL/bin:$PATH"
+before_install:
+  - curl -fsSL https://bun.sh/install | bash
+install:
+  - bun install --frozen-lockfile
+script:
+  - bun run test
