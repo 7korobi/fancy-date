@@ -1,4 +1,16 @@
-import { FancyDate, ERA, PLANET, SATELLITE, STAR, SPOT } from './fancy-date'
+import {
+  BodyProfile,
+  FancyDate,
+  ERA,
+  PLANET,
+  SATELLITE,
+  STAR,
+  SPOT,
+  placePlanet,
+  placeSatellite,
+  placeStar,
+  transformOrbital,
+} from './fancy-date'
 import { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 
 export const 九星 = [
@@ -681,15 +693,27 @@ export const 元号 = [
 export const 北朝元号 = 元号.filter(([, , s]) => '南' !== s)
 export const 南朝元号 = 元号.filter(([, , s]) => '北' !== s)
 
-export const 太陽: STAR = EarthSolarOrbital.sun
+export const 太陽本体: BodyProfile = { kind: 'physical', name: 'Sun', radiusKm: 695700 }
+export const 地球本体: BodyProfile = { kind: 'physical', name: 'Earth', radiusKm: 6378.137 }
+export const 月本体: BodyProfile = {
+  kind: 'physical',
+  name: 'Moon',
+  radiusKm: 1737.4,
+  meanDistanceKm: 384400,
+}
 
-export const 地球: PLANET = [
-  太陽,
-  [31556925147, 1553119080000], // 2019/03/21 06:58
-  [86400000, 0, 23.4397], // LOD ではなく、暦上の1日。Unix epoch では閏秒を消し去るため。
-] as const
+export const 太陽: STAR = placeStar(太陽本体)
+export const 地球軌道 = [31556925147, 1553119080000] as const // 2019/03/21 06:58
+export const 地球自転 = [86400000, 0, 23.4397] as const // LOD ではなく、暦上の1日。Unix epoch では閏秒を消し去るため。
 
-export const 天文地球: PLANET = EarthSolarOrbital.planet()
+export const 地球: PLANET = placePlanet({
+  body: 地球本体,
+  center: 太陽,
+  orbital: 地球軌道,
+  rotation: 地球自転,
+})
+
+export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 地球本体 })
 
 export const 火星: PLANET = [
   太陽,
@@ -763,19 +787,25 @@ export const エリス: PLANET = [
   [93240000, 0, 0], // 自転周期
 ] as const
 
-export const 白分月: SATELLITE = [
-  地球,
-  [2551442889, 1577310360000], // 2019/12/26 06:46
-  [2551442889, 0, 6.68],
-] as const
+export const 白分月軌道 = [2551442889, 1577310360000] as const // 2019/12/26 06:46
+export const 黒分月軌道 = transformOrbital(白分月軌道, { phaseOffset: 0.5 })
+export const 月自転 = [2551442889, 0, 6.68] as const
 
-export const 黒分月: SATELLITE = [
-  地球,
-  [2551442889, 1577310360000 - 2551442889 / 2], // 2019/12/26 06:46
-  [2551442889, 0, 6.68],
-] as const
+export const 白分月: SATELLITE = placeSatellite({
+  body: 月本体,
+  center: 地球,
+  orbital: 白分月軌道,
+  rotation: 月自転,
+})
+
+export const 黒分月: SATELLITE = placeSatellite({
+  body: 月本体,
+  center: 地球,
+  orbital: 黒分月軌道,
+  rotation: 月自転,
+})
 export const 月: SATELLITE = 白分月
-export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球)
+export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, { body: 月本体 })
 
 export const ガニメデ: SATELLITE = [木星, [618192000, 0]] as const
 export const カリスト: SATELLITE = [木星, [1441929600, 0]] as const

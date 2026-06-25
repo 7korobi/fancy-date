@@ -1,6 +1,8 @@
 import { hasLunarEvents, hasSolarEvents } from './orbital-model'
+import { centerOf, isPlanetSkyBody, orbitalOf, rotationOf } from './orbital-model'
 import type {
   ORBITAL,
+  OrbitalTransformOptions,
   OrbitalModel,
   PLANET,
   ROTATION,
@@ -37,6 +39,35 @@ export class MeanOrbital implements OrbitalModel {
   static from(src: ORBITAL): OrbitalModel {
     return is_orbital_tuple(src) ? new MeanOrbital(src[0], src[1]) : src
   }
+}
+
+export class TransformedOrbital implements OrbitalModel {
+  readonly source: OrbitalModel
+  readonly phaseOffset: number
+  readonly direction: 1 | -1
+  readonly periodMsec: number
+  readonly epochMsec: number
+
+  constructor(source: ORBITAL, { phaseOffset = 0, direction = 1, epochMsec }: OrbitalTransformOptions = {}) {
+    this.source = MeanOrbital.from(source)
+    this.phaseOffset = phaseOffset
+    this.direction = direction
+    this.periodMsec = this.source.periodMsec
+    this.epochMsec = epochMsec ?? this.source.epochMsec - direction * phaseOffset * this.source.periodMsec
+  }
+
+  phaseAt(utc: number) {
+    return __mod__(this.direction * this.source.phaseAt(utc) + this.phaseOffset, 1)
+  }
+
+  timeOfPhase(phase: number, near: number) {
+    const sourcePhase = __mod__(this.direction * (__mod__(phase, 1) - this.phaseOffset), 1)
+    return this.source.timeOfPhase(sourcePhase, near)
+  }
+}
+
+export function transformOrbital(source: ORBITAL, options: OrbitalTransformOptions = {}): OrbitalModel {
+  return new TransformedOrbital(source, options)
 }
 
 export class MeanRotation implements RotationModel {
@@ -249,10 +280,6 @@ type TOKENS<K extends string, T> = {
   [key in K]: T
 }
 
-function is_planet(body: SKY_BODY): body is PLANET {
-  return body[0][0] === null
-}
-
 const 単位系 = {
   元: 'G',
   年: 'y',
@@ -449,13 +476,14 @@ export class FancyDate {
 
   spot(...spot: SPOT) {
     const [body, ...geo] = spot
-    const planet = is_planet(body) ? body : body[0]
-    const moony = is_planet(body) ? undefined : MeanOrbital.from(body[1])
-    const [, sunny, earthy] = planet
+    const planet = isPlanetSkyBody(body) ? body : centerOf(body)
+    const moony = isPlanetSkyBody(body) ? undefined : MeanOrbital.from(orbitalOf(body))
+    const sunny = orbitalOf(planet)
+    const earthy = rotationOf(planet)
     Object.assign(this.dic, {
       sunny: MeanOrbital.from(sunny),
       moony,
-      earthy: MeanRotation.from(earthy),
+      earthy: MeanRotation.from(earthy!),
       geo,
     })
     return this

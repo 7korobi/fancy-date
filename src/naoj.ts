@@ -1,4 +1,5 @@
 import type {
+  BodyProfile,
   LunarEquatorialCoordinates,
   LunarEventModel,
   LunarHorizontalCoordinates,
@@ -15,6 +16,7 @@ import type {
   SolarObservationOptions,
   STAR,
 } from './orbital-model'
+import { placePlanet, placeSatellite } from './orbital-model'
 export type {
   LunarEquatorialCoordinates,
   LunarHorizontalCoordinates,
@@ -32,11 +34,13 @@ export type {
 export type EarthSolarOrbitalOptions = {
   periodMsec?: number
   epochMsec?: number
+  body?: BodyProfile
 }
 
 export type EarthMoonOrbitalOptions = {
   periodMsec?: number
   epochMsec?: number
+  body?: BodyProfile
 }
 
 const DEG_TO_RAD = Math.PI / 180
@@ -465,7 +469,13 @@ export class EarthSolarOrbital implements SolarEventModel {
     center: STAR = EarthSolarOrbital.sun,
     options: EarthSolarOrbitalOptions = {},
   ): PLANET {
-    return [center, new EarthSolarOrbital(options), EarthSolarOrbital.rotation()]
+    const { body, ...orbitalOptions } = options
+    return placePlanet({
+      body,
+      center,
+      orbital: new EarthSolarOrbital(orbitalOptions),
+      rotation: EarthSolarOrbital.rotation(),
+    })
   }
 
   solarLongitudeDeg(utc: number) {
@@ -651,7 +661,13 @@ export class EarthMoonOrbital implements LunarEventModel {
   }
 
   static satellite(center: PLANET, options: EarthMoonOrbitalOptions = {}): SATELLITE {
-    return [center, new EarthMoonOrbital(options), EarthMoonOrbital.rotation()]
+    const { body, ...orbitalOptions } = options
+    return placeSatellite({
+      body,
+      center,
+      orbital: new EarthMoonOrbital(orbitalOptions),
+      rotation: EarthMoonOrbital.rotation(),
+    })
   }
 
   lunarEquatorial(utc: number): LunarEquatorialCoordinates {

@@ -1,12 +1,14 @@
-import type { LunarEquatorialCoordinates, LunarEventModel, LunarHorizontalCoordinates, LunarObservation, LunarObservationOptions, PLANET, ROTATION, SATELLITE, SolarEquatorialCoordinates, SolarEventModel, SolarHorizontalCoordinates, SolarObservation, SolarObservationOptions, STAR } from './orbital-model';
+import type { BodyProfile, LunarEquatorialCoordinates, LunarEventModel, LunarHorizontalCoordinates, LunarObservation, LunarObservationOptions, PLANET, ROTATION, SATELLITE, SolarEquatorialCoordinates, SolarEventModel, SolarHorizontalCoordinates, SolarObservation, SolarObservationOptions, STAR } from './orbital-model';
 export type { LunarEquatorialCoordinates, LunarHorizontalCoordinates, LunarObservation, LunarObservationOptions, SolarEquatorialCoordinates, SolarHorizontalCoordinates, SolarObservation, SolarObservationOptions, } from './orbital-model';
 export type EarthSolarOrbitalOptions = {
     periodMsec?: number;
     epochMsec?: number;
+    body?: BodyProfile;
 };
 export type EarthMoonOrbitalOptions = {
     periodMsec?: number;
     epochMsec?: number;
+    body?: BodyProfile;
 };
 export declare class EarthSolarOrbital implements SolarEventModel {
     static readonly sun: STAR;
