@@ -1,6 +1,18 @@
 require('../lib/sample')
 const { FancyDate } = require('../lib/fancy-date')
-const { Calendar, mayaHaab, mayaLongCount, mayaTzolkin, 太陽, 地球, 月, 東京 } = require('../lib/sample')
+const {
+  Calendar,
+  mayaHaab,
+  mayaLongCount,
+  mayaTzolkin,
+  太陽,
+  地球,
+  月,
+  東京,
+  白分月軌道,
+  黒分月,
+  黒分月軌道,
+} = require('../lib/sample')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { format } = require('date-fns')
 const { ja: locale } = require('date-fns/locale/ja')
@@ -260,6 +272,19 @@ describe('平気法 calculate', () => {
     const ret = 平気法.parse(tgt)
 
     expect(平気法.format(ret)).toEqual(tgt)
+  })
+
+  test('body placement keeps tuple compatibility', () => {
+    expect(地球.body).toMatchObject({ kind: 'physical', name: 'Earth', radiusKm: 6378.137 })
+    expect(月.body).toMatchObject({ kind: 'physical', name: 'Moon', radiusKm: 1737.4 })
+    expect(地球[1]).toBe(地球.orbital)
+    expect(地球[2]).toBe(地球.rotation)
+    expect(月[0]).toBe(地球)
+    expect(月[1]).toBe(月.orbital)
+    expect(黒分月[1]).toBe(黒分月軌道)
+    expect(黒分月軌道.periodMsec).toBe(白分月軌道[0])
+    expect(黒分月軌道.epochMsec).toBe(白分月軌道[1] - 白分月軌道[0] / 2)
+    expect(黒分月軌道.phaseAt(白分月軌道[1])).toBe(0.5)
   })
 
   test('1月,1年', () => {

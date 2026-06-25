@@ -1,6 +1,31 @@
-export type STAR = readonly [center: null, orbital: null, rotation: null];
-export type PLANET = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION];
-export type SATELLITE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION];
+export type BodyProfile = {
+    kind?: 'physical' | 'virtual';
+    name?: string;
+    radiusKm?: number;
+    meanDistanceKm?: number;
+    massKg?: number;
+    albedo?: number;
+    derivedFrom?: STAR | SKY_BODY;
+};
+export type STAR = readonly [center: null, orbital: null, rotation: null] & {
+    body?: BodyProfile;
+};
+export type PLANET_TUPLE = readonly [center: STAR, orbital: ORBITAL, rotation: ROTATION];
+export type SATELLITE_TUPLE = readonly [center: PLANET, orbital: ORBITAL, rotation?: ROTATION];
+export type PlanetPlacement = PLANET_TUPLE & {
+    body?: BodyProfile;
+    center: STAR;
+    orbital: ORBITAL;
+    rotation: ROTATION;
+};
+export type SatellitePlacement = SATELLITE_TUPLE & {
+    body?: BodyProfile;
+    center: PLANET;
+    orbital: ORBITAL;
+    rotation?: ROTATION;
+};
+export type PLANET = PLANET_TUPLE | PlanetPlacement;
+export type SATELLITE = SATELLITE_TUPLE | SatellitePlacement;
 export type SKY_BODY = PLANET | SATELLITE;
 export type SPOT = readonly [
     body: SKY_BODY,
@@ -11,17 +36,44 @@ export type SPOT = readonly [
 export type TIMEZONE = readonly [latitudeDeg: number, longitudeDeg: number, timezoneDeg: number];
 export type ORBITAL = readonly [periodMsec: number, epochMsec: number] | OrbitalModel;
 export type ROTATION = readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number] | RotationModel;
+export type PlanetPlacementOptions = {
+    body?: BodyProfile;
+    center: STAR;
+    orbital: ORBITAL;
+    rotation: ROTATION;
+};
+export type SatellitePlacementOptions = {
+    body?: BodyProfile;
+    center: PLANET;
+    orbital: ORBITAL;
+    rotation?: ROTATION;
+};
 export interface OrbitalModel {
     periodMsec: number;
     epochMsec: number;
     phaseAt(utc: number): number;
     timeOfPhase(phase: number, near: number): number;
 }
+export type OrbitalTransformOptions = {
+    phaseOffset?: number;
+    direction?: 1 | -1;
+    epochMsec?: number;
+};
 export interface RotationModel {
     periodMsec: number;
     epochMsec: number;
     axialTiltDeg: number;
 }
+export declare function placeStar(body?: BodyProfile): STAR;
+export declare function placePlanet(options: PlanetPlacementOptions): PlanetPlacement;
+export declare function placeSatellite(options: SatellitePlacementOptions): SatellitePlacement;
+export declare function isPlanetSkyBody(body: SKY_BODY): body is PLANET;
+export declare function centerOf(body: PLANET): STAR;
+export declare function centerOf(body: SATELLITE): PLANET;
+export declare function centerOf(body: SKY_BODY): STAR | PLANET;
+export declare function orbitalOf(body: SKY_BODY): ORBITAL;
+export declare function rotationOf(body: SKY_BODY): ROTATION | undefined;
+export declare function bodyProfileOf(body: STAR | SKY_BODY): BodyProfile | undefined;
 export type SolarObservationOptions = {
     latitudeDeg: number;
     longitudeDeg: number;
