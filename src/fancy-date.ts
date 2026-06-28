@@ -1,94 +1,40 @@
-import { hasLunarEvents, hasSolarEvents } from './orbital-model'
-import { centerOf, isPlanetSkyBody, orbitalOf, rotationOf } from './orbital-model'
+import { hasLunarEvents, hasLunarOrbitEvents } from './orbital-model'
+import { mod } from './number'
 import type {
-  ORBITAL,
-  OrbitalTransformOptions,
+  LunarApsisKind,
+  LunarNodeKind,
   OrbitalModel,
   PLANET,
-  ROTATION,
   RotationModel,
   SATELLITE,
-  SKY_BODY,
   SPOT,
   TIMEZONE,
 } from './orbital-model'
+import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
+import type { LunisolarDate } from './phenomena/lunisolar'
+import {
+  noon as resolveNoon,
+  solor as resolveSolor,
+  solar_phase as resolveSolarPhase,
+  solar_phase_before as resolveSolarPhaseBefore,
+  solar_term as resolveSolarTerm,
+  solar_terms as resolveSolarTerms,
+  to_tempo_by_solor as resolveTempoBySolor,
+  雑節_by_phase as resolve雑節ByPhase,
+} from './phenomena/solar'
+import { prepareSpot } from './prepare'
 import { Tempo, to_tempo_by, to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
+export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean'
+export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar'
+export type { PreparedSpot, PreparedSpotModels } from './prepare'
+export { prepareSpot, prepareSpotModels } from './prepare'
 export * from './orbital-model'
 
 export type ERA = readonly [string, number, string?]
 export type ERA_WITH_YEAR = readonly [string, number, number]
-
-export class MeanOrbital implements OrbitalModel {
-  constructor(
-    readonly periodMsec: number,
-    readonly epochMsec: number,
-  ) {}
-
-  phaseAt(utc: number) {
-    return __mod__((utc - this.epochMsec) / this.periodMsec, 1)
-  }
-
-  timeOfPhase(phase: number, near: number) {
-    const cycle = Math.round((near - this.epochMsec) / this.periodMsec - phase)
-    return this.epochMsec + (cycle + phase) * this.periodMsec
-  }
-
-  static from(src: ORBITAL): OrbitalModel {
-    return is_orbital_tuple(src) ? new MeanOrbital(src[0], src[1]) : src
-  }
-}
-
-export class TransformedOrbital implements OrbitalModel {
-  readonly source: OrbitalModel
-  readonly phaseOffset: number
-  readonly direction: 1 | -1
-  readonly periodMsec: number
-  readonly epochMsec: number
-
-  constructor(source: ORBITAL, { phaseOffset = 0, direction = 1, epochMsec }: OrbitalTransformOptions = {}) {
-    this.source = MeanOrbital.from(source)
-    this.phaseOffset = phaseOffset
-    this.direction = direction
-    this.periodMsec = this.source.periodMsec
-    this.epochMsec = epochMsec ?? this.source.epochMsec - direction * phaseOffset * this.source.periodMsec
-  }
-
-  phaseAt(utc: number) {
-    return __mod__(this.direction * this.source.phaseAt(utc) + this.phaseOffset, 1)
-  }
-
-  timeOfPhase(phase: number, near: number) {
-    const sourcePhase = __mod__(this.direction * (__mod__(phase, 1) - this.phaseOffset), 1)
-    return this.source.timeOfPhase(sourcePhase, near)
-  }
-}
-
-export function transformOrbital(source: ORBITAL, options: OrbitalTransformOptions = {}): OrbitalModel {
-  return new TransformedOrbital(source, options)
-}
-
-export class MeanRotation implements RotationModel {
-  constructor(
-    readonly periodMsec: number,
-    readonly epochMsec: number,
-    readonly axialTiltDeg: number,
-  ) {}
-
-  static from(src: ROTATION): RotationModel {
-    return is_rotation_tuple(src) ? new MeanRotation(src[0], src[1], src[2]) : src
-  }
-}
-
-function is_orbital_tuple(src: ORBITAL): src is readonly [number, number] {
-  return Array.isArray(src)
-}
-
-function is_rotation_tuple(src: ROTATION): src is readonly [number, number, number] {
-  return Array.isArray(src)
-}
 
 type ALL_DIC =
   | ALGO_DIC
@@ -174,27 +120,6 @@ type TempoIdxs = TOKENS<ALL_DIC, number> & {
 type TempoMonth = {
   is_leap: boolean
 }
-type LunisolarPrincipalTerm = {
-  index: number
-  longitudeDeg: number
-  month: number
-  at: number
-}
-export type LunisolarDate = {
-  year: number
-  month: number
-  day: number
-  is_leap: boolean
-  day_start_at: number
-  last_at: number
-  next_at: number
-  new_moon_at: number
-  next_new_moon_at: number
-  principal_term?: LunisolarPrincipalTerm
-}
-type LunisolarMonth = Omit<LunisolarDate, 'year' | 'day' | 'day_start_at'> & {
-  year?: number
-}
 type TempoDrillDown = {
   length: number
   path: string
@@ -261,7 +186,7 @@ type IDIC = IIDX & {
   earthy: RotationModel
   geo: TIMEZONE
   era: string
-  eras: ERA[]
+  eras: readonly ERA[]
   month_divs: number[]
   leaps: number[]
   start: [string, string, number]
@@ -386,7 +311,7 @@ const shift_up = function (a, b, size) {
     return arguments
   }
   a += Math.floor(b / size)
-  b = __mod__(b, size)
+  b = mod(b, size)
   return [a, b]
 }
 
@@ -475,17 +400,7 @@ export class FancyDate {
   }
 
   spot(...spot: SPOT) {
-    const [body, ...geo] = spot
-    const planet = isPlanetSkyBody(body) ? body : centerOf(body)
-    const moony = isPlanetSkyBody(body) ? undefined : MeanOrbital.from(orbitalOf(body))
-    const sunny = orbitalOf(planet)
-    const earthy = rotationOf(planet)
-    Object.assign(this.dic, {
-      sunny: MeanOrbital.from(sunny),
-      moony,
-      earthy: MeanRotation.from(earthy!),
-      geo,
-    })
+    Object.assign(this.dic, prepareSpot(...spot))
     return this
   }
 
@@ -494,7 +409,7 @@ export class FancyDate {
     return this
   }
 
-  era(era: string, past: string, eras: ERA[] = []) {
+  era(era: string, past: string, eras: readonly ERA[] = []) {
     const all_eras = [past, ...eras.map(([s]) => s)]
     this.dic.G = new Indexer([all_eras, null])
     Object.assign(this.dic, { era, eras })
@@ -587,199 +502,40 @@ export class FancyDate {
   }
 
   solar_phase(phase: number, near: number) {
-    return this.dic.sunny.timeOfPhase(__mod__(phase, 1), near)
+    return resolveSolarPhase(this.dic.sunny, phase, near)
   }
 
   lunar_phase(phase: number, near: number) {
     if (!this.dic.moony) {
       throw new Error('lunar_phase requires a satellite orbital model')
     }
-    return this.dic.moony.timeOfPhase(__mod__(phase, 1), near)
+    return this.dic.moony.timeOfPhase(mod(phase, 1), near)
   }
 
   lunisolar(utc: number): LunisolarDate {
-    const months = this.lunisolar_months_around(utc)
-    const month = months.find(({ last_at, next_at }) => last_at <= utc && utc < next_at)
-    if (!month || month.year == null) {
-      throw new Error('failed to resolve lunisolar month')
-    }
-    const day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
-    return {
-      ...month,
-      year: month.year,
-      day: Math.floor((day.last_at - month.last_at) / this.calc.msec.day) + 1,
-      day_start_at: day.last_at,
-    }
-  }
-
-  private lunisolar_months_around(utc: number): LunisolarMonth[] {
-    if (!this.dic.moony) {
-      throw new Error('lunisolar requires a satellite orbital model')
-    }
-    const periodMsec = this.dic.moony.periodMsec
-    let newMoonAt = this.lunar_phase(0, utc)
-    let monthStartAt = this.local_day_start(newMoonAt)
-    while (utc < monthStartAt) {
-      newMoonAt = this.lunar_phase(0, newMoonAt - periodMsec)
-      monthStartAt = this.local_day_start(newMoonAt)
-    }
-    while (this.local_day_start(this.lunar_phase(0, newMoonAt + periodMsec)) <= utc) {
-      newMoonAt = this.lunar_phase(0, newMoonAt + periodMsec)
-      monthStartAt = this.local_day_start(newMoonAt)
-    }
-
-    const newMoons = [newMoonAt]
-    for (let i = 0; i < 18; i++) {
-      newMoons.unshift(this.lunar_phase(0, newMoons[0] - periodMsec))
-    }
-    for (let i = 0; i < 19; i++) {
-      newMoons.push(this.lunar_phase(0, newMoons[newMoons.length - 1] + periodMsec))
-    }
-    const months = newMoons.slice(0, -1).map((at, index) => {
-      const nextAt = newMoons[index + 1]
-      return {
-        month: NaN,
-        is_leap: false,
-        last_at: this.local_day_start(at),
-        next_at: this.local_day_start(nextAt),
-        new_moon_at: at,
-        next_new_moon_at: nextAt,
-        principal_term: this.lunisolar_principal_term(at, nextAt),
-      }
-    })
-    this.assign_lunisolar_months(months)
-    return months
-  }
-
-  private assign_lunisolar_months(months: LunisolarMonth[]) {
-    let month = NaN
-    for (const item of months) {
-      if (item.principal_term) {
-        month = item.principal_term.month
-        item.month = month
-        item.is_leap = false
-      } else {
-        item.month = month
-        item.is_leap = true
-      }
-    }
-
-    const firstAssignedIndex = months.findIndex(({ month }) => Number.isFinite(month))
-    if (0 < firstAssignedIndex) {
-      let previousMonth = months[firstAssignedIndex].month
-      for (let i = firstAssignedIndex - 1; 0 <= i; i--) {
-        const item = months[i]
-        if (item.principal_term) {
-          previousMonth = item.principal_term.month
-          item.month = previousMonth
-          item.is_leap = false
-        } else {
-          item.month = previousMonth
-          item.is_leap = true
-        }
-      }
-    }
-
-    const firstMonthOneIndex = months.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
-    if (firstMonthOneIndex < 0) {
-      const year = new Date(months[0].last_at + this.local_timezone_msec()).getUTCFullYear()
-      for (const item of months) item.year = year
-      return
-    }
-    let year = new Date(months[firstMonthOneIndex].last_at + this.local_timezone_msec()).getUTCFullYear()
-    for (let i = 0; i < firstMonthOneIndex; i++) {
-      months[i].year = year - 1
-    }
-    for (let i = firstMonthOneIndex; i < months.length; i++) {
-      const item = months[i]
-      if (item.month === 1 && !item.is_leap) {
-        year = new Date(item.last_at + this.local_timezone_msec()).getUTCFullYear()
-      }
-      item.year = year
-    }
-  }
-
-  private lunisolar_principal_term(monthStartAt: number, nextMonthStartAt: number) {
-    const near = (monthStartAt + nextMonthStartAt) / 2
-    const startAt = this.local_day_start(monthStartAt)
-    const nextAt = this.local_day_start(nextMonthStartAt)
-    for (let index = 0; index < 12; index++) {
-      const at = this.solar_phase(index / 12, near)
-      if (startAt <= at && at < nextAt) {
-        return {
-          index,
-          longitudeDeg: index * 30,
-          month: ((index + 1) % 12) + 1,
-          at,
-        }
-      }
-    }
-    return undefined
-  }
-
-  private local_day_start(utc: number) {
-    return to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc).last_at
-  }
-
-  private local_timezone_msec() {
-    return (this.calc.msec.day * (this.dic.geo[2] != null ? this.dic.geo[2] : this.dic.geo[1])) / 360
+    return resolveLunisolar(
+      {
+        moony: this.dic.moony,
+        geo: this.dic.geo,
+        dayMsec: this.calc.msec.day,
+        dayZero: this.calc.zero.day,
+        lunarPhase: (phase, near) => this.lunar_phase(phase, near),
+        solarPhase: (phase, near) => this.solar_phase(phase, near),
+      },
+      utc,
+    )
   }
 
   solar_term(utc: number, phase: number) {
-    const at = this.solar_phase(phase, utc)
-    return to_tempo_bare(this.calc.msec.day, this.calc.zero.day, at)
+    return resolveSolarTerm(this.dic.sunny, this.calc.msec.day, this.calc.zero.day, utc, phase)
   }
 
   solar_phase_before(phase: number, utc: number) {
-    let at = this.solar_phase(phase, utc)
-    while (utc < at) {
-      at = this.solar_phase(phase, at - this.dic.sunny.periodMsec)
-    }
-    return at
+    return resolveSolarPhaseBefore(this.dic.sunny, phase, utc)
   }
 
   solar_terms(utc: number) {
-    const phases = {
-      立春: 1 / 8,
-      入梅: 80 / 360,
-      春分: 2 / 8,
-      半夏生: 100 / 360,
-      夏土用: 13 / 40,
-      立夏: 3 / 8,
-      夏至: 4 / 8,
-      秋土用: 23 / 40,
-      立秋: 5 / 8,
-      秋分: 6 / 8,
-      冬土用: 33 / 40,
-      立冬: 7 / 8,
-      冬至: 8 / 8,
-      春土用: 43 / 40,
-      次立春: 9 / 8,
-    }
-    const springEquinoxPhase = 2 / 8
-    const basePhase = phases.立春
-    const baseAt = this.solar_phase_before(basePhase - springEquinoxPhase, utc)
-    const term = (phase: number) => {
-      const near = baseAt + (phase - basePhase) * this.dic.sunny.periodMsec
-      return this.solar_term(near, phase - springEquinoxPhase)
-    }
-    return {
-      立春: term(phases.立春),
-      入梅: term(phases.入梅),
-      春分: term(phases.春分),
-      半夏生: term(phases.半夏生),
-      夏土用: term(phases.夏土用),
-      立夏: term(phases.立夏),
-      夏至: term(phases.夏至),
-      秋土用: term(phases.秋土用),
-      立秋: term(phases.立秋),
-      秋分: term(phases.秋分),
-      冬土用: term(phases.冬土用),
-      立冬: term(phases.立冬),
-      冬至: term(phases.冬至),
-      春土用: term(phases.春土用),
-      次立春: term(phases.次立春),
-    }
+    return resolveSolarTerms(this.dic.sunny, this.calc.msec.day, this.calc.zero.day, utc)
   }
 
   succ_index(diff: string) {
@@ -1414,65 +1170,30 @@ K   = @dic.earthy[2] / 360
 */
 
   noon(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
-    const { last_at, center_at } = day
-    const { sin, PI } = Math
-    const deg_to_day = this.calc.msec.day / 360
-    const year_to_rad = (2 * PI) / this.calc.msec.year
-
-    const T0 = to_tempo_bare(this.calc.msec.year, this.calc.zero.season, utc)
-
-    // 南中差分の計算がテキトウになってしまった。あとで検討。
-    const 南中差分A = deg_to_day * 2.0 * sin(year_to_rad * T0.since)
-    const 南中差分B = deg_to_day * 2.5 * sin(year_to_rad * T0.since * 2 + PI * 0.4)
-    const 南中差分 = 南中差分A + 南中差分B
-
-    const 南中時刻 = center_at + 南中差分
-    const 真夜中 = last_at + 南中差分
-
-    const T1 = to_tempo_bare(this.calc.msec.year, this.dic.sunny.epochMsec, 南中時刻)
-    const 季節 = T1.since * year_to_rad
-
-    return { ...day, center_at, T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
+    return resolveNoon(
+      this.dic.sunny,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.msec.year,
+      this.calc.zero.season,
+      utc,
+      day,
+    )
   }
 
   solor(utc, idx = 2, solarNoon = this.noon(utc)) {
-    const days = [
-      6, // golden hour end         / golden hour
-      -18 / 60, // sunrise bottom edge end / sunset bottom edge start
-      -50 / 60, // sunrise top edge start  / sunset top edge end
-      -6, // dawn                    / dusk
-      -7.36, // 寛政暦 太陽の伏角が7°21′40″
-      -12, // nautical dawn           / nautical dusk
-      -18, // night end               / night
-    ]
-    if (hasSolarEvents(this.dic.sunny)) {
-      return this.dic.sunny.solarEvents(utc, {
-        latitudeDeg: this.dic.geo[0],
-        longitudeDeg: this.dic.geo[1],
-        timezoneDeg: this.dic.geo[2],
-        horizonDeg: days[idx],
-        dayStartUtc: solarNoon.last_at,
-        dayCenterUtc: solarNoon.center_at,
-      })
-    }
-    const { 季節, 南中時刻, 真夜中 } = solarNoon
-    const { asin, acos, atan, sin, cos, tan, PI } = Math
-    const deg_to_rad = (2 * PI) / 360
-    const rad_to_day = this.calc.msec.day / (2 * PI)
-
-    const 高度 = days[idx] * deg_to_rad
-    const K = this.dic.earthy.axialTiltDeg * deg_to_rad
-    const lat = this.dic.geo[0] * deg_to_rad
-
-    const 赤緯 = asin(sin(K) * sin(季節))
-    const 赤経 = atan(tan(季節) * cos(K))
-    const 時角 = acos((sin(高度) - sin(lat) * sin(赤緯)) / (cos(lat) * cos(赤緯)))
-    const 方向 = acos((cos(lat) * sin(赤緯) - sin(lat) * cos(赤緯) * cos(時角)) / cos(高度))
-
-    const 日の出 = Math.floor(南中時刻 - 時角 * rad_to_day)
-    const 日の入 = Math.floor(南中時刻 + 時角 * rad_to_day)
-
-    return { K, lat, 時角, 方向, 高度, 真夜中, 日の出, 南中時刻, 日の入 }
+    return resolveSolor(
+      this.dic.sunny,
+      this.dic.earthy,
+      this.dic.geo,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.msec.year,
+      this.calc.zero.season,
+      utc,
+      idx,
+      solarNoon,
+    )
   }
 
   lunar(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
@@ -1485,6 +1206,20 @@ K   = @dic.earthy[2] / 360
       timezoneDeg: this.dic.geo[2],
       dayStartUtc: day.last_at,
     })
+  }
+
+  lunar_apsis(kind: LunarApsisKind, near: number) {
+    if (!hasLunarOrbitEvents(this.dic.moony)) {
+      throw new Error('lunar_apsis requires a satellite orbital model with lunarApsis')
+    }
+    return this.dic.moony.lunarApsis(kind, near)
+  }
+
+  lunar_node(kind: LunarNodeKind, near: number) {
+    if (!hasLunarOrbitEvents(this.dic.moony)) {
+      throw new Error('lunar_node requires a satellite orbital model with lunarNode')
+    }
+    return this.dic.moony.lunarNode(kind, near)
   }
 
   節句(utc: number, { M, d, B, E } = this.to_tempos(utc)) {
@@ -1562,7 +1297,7 @@ K   = @dic.earthy[2] / 360
     })
     const [春社日, 秋社日] = [春分, 秋分].map((dd) => {
       const C = to_tempo_bare(this.calc.msec.day, this.calc.zero.day10, dd.write_at)
-      C.now_idx = __mod__(C.now_idx, this.dic.C.length)
+      C.now_idx = mod(C.now_idx, this.dic.C.length)
       return C.slide(this.dic.C.length / 2 - C.now_idx - 1)
     })
 
@@ -1616,115 +1351,29 @@ K   = @dic.earthy[2] / 360
   }
 
   雑節_by_phase(utc: number) {
-    let {
-      立春,
-      入梅,
-      春分,
-      半夏生,
-      夏土用,
-      立夏,
-      夏至,
-      秋土用,
-      立秋,
-      秋分,
-      冬土用,
-      立冬,
-      冬至,
-      春土用,
-      次立春: 立春2,
-    } = this.solar_terms(utc)
-
-    const [八十八夜, 二百十日, 二百二十日] = [88, 210, 220].map((n) => 立春.succ(n - 1))
-
-    const [春彼岸, 秋彼岸] = [春分, 秋分].map((dd) => {
-      return Tempo.join(dd.back(3), dd.succ(3))
-    })
-    const [春社日, 秋社日] = [春分, 秋分].map((dd) => {
-      const C = to_tempo_bare(this.calc.msec.day, this.calc.zero.day10, dd.write_at)
-      C.now_idx = __mod__(C.now_idx, this.dic.C.length)
-      return C.slide(this.dic.C.length / 2 - C.now_idx - 1)
-    })
-
-    const 春 = Tempo.join(立春, 夏土用.back())
-    const 夏節分 = 立夏.back()
-    const 夏 = Tempo.join(立夏, 秋土用.back())
-    const 秋節分 = 立秋.back()
-    const 秋 = Tempo.join(立秋, 冬土用.back())
-    const 冬節分 = 立冬.back()
-    const 冬 = Tempo.join(立冬, 春土用.back())
-    const 春節分 = 立春2.back()
-    const 節分 = 春節分
-
-    夏土用 = Tempo.join(夏土用, 夏節分)
-    秋土用 = Tempo.join(秋土用, 秋節分)
-    冬土用 = Tempo.join(冬土用, 冬節分)
-    春土用 = Tempo.join(春土用, 立春2)
-
-    return {
-      立春,
-      立夏,
-      立秋,
-      立冬,
-      冬至,
-      春分,
-      夏至,
-      秋分,
-      入梅,
-      半夏生,
-      春,
-      夏,
-      秋,
-      冬,
-      春社日,
-      秋社日,
-      春土用,
-      夏土用,
-      秋土用,
-      冬土用,
-      春節分,
-      夏節分,
-      秋節分,
-      冬節分,
-      節分,
-      春彼岸,
-      秋彼岸,
-      八十八夜,
-      二百十日,
-      二百二十日,
-    }
+    return resolve雑節ByPhase(
+      this.dic.sunny,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.zero.day10,
+      this.dic.C.length,
+      utc,
+    )
   }
 
   to_tempo_by_solor(utc: number, day) {
-    let idx, end, start
-    const { 日の出, 南中時刻, 日の入 } = this.solor(utc, 4, this.noon(utc, day))
-    const size = this.dic.H.length / 4
-
-    const list: number[] = []
-
-    let next_at = 0
-    let msec = (日の出 - day.last_at) / size
-    for (idx = 0, end = 1 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = 日の出 - day.last_at
-    msec = (日の入 - 日の出) / (2 * size)
-    for (start = 1 * size, idx = start, end = 3 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = day.size
-    msec = (day.next_at - 日の入) / size
-
-    const tails: number[] = []
-    for (start = 3 * size, idx = start, end = 4 * size; idx < end; idx++) {
-      tails.push(Math.ceil(next_at))
-      next_at -= msec
-    }
-    list.push(...tails.reverse())
-    return to_tempo_by(list, day.last_at, utc)
+    return resolveTempoBySolor(
+      this.dic.sunny,
+      this.dic.earthy,
+      this.dic.geo,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.msec.year,
+      this.calc.zero.season,
+      this.dic.H.length,
+      utc,
+      day,
+    )
   }
 
   note(
@@ -1810,7 +1459,7 @@ K   = @dic.earthy[2] / 360
           Nn.is_leap = true
         }
       }
-      Nn.now_idx = __mod__(Zs.now_idx, this.dic.Z.length) >> 1
+      Nn.now_idx = mod(Zs.now_idx, this.dic.Z.length) >> 1
     }
 
     if (this.is_table_leap) {
@@ -1881,10 +1530,10 @@ K   = @dic.earthy[2] / 360
     }
 
     // 年不断
-    const a = { now_idx: __mod__(u.now_idx - this.calc.zero.year60, this.dic.a.length) } as Tempo
-    const b = { now_idx: __mod__(u.now_idx - this.calc.zero.year12, this.dic.b.length) } as Tempo
-    const c = { now_idx: __mod__(u.now_idx - this.calc.zero.year10, this.dic.c.length) } as Tempo
-    const f = { now_idx: __mod__(u.now_idx - this.calc.zero.year_s, this.dic.f.length) } as Tempo
+    const a = { now_idx: mod(u.now_idx - this.calc.zero.year60, this.dic.a.length) } as Tempo
+    const b = { now_idx: mod(u.now_idx - this.calc.zero.year12, this.dic.b.length) } as Tempo
+    const c = { now_idx: mod(u.now_idx - this.calc.zero.year10, this.dic.c.length) } as Tempo
+    const f = { now_idx: mod(u.now_idx - this.calc.zero.year_s, this.dic.f.length) } as Tempo
 
     // 月不断
     const Q = { now_idx: Math.floor((4 * M.now_idx) / this.dic.M.length) } as Tempo
@@ -1897,17 +1546,17 @@ K   = @dic.earthy[2] / 360
     const F = to_tempo_bare(this.calc.msec.day, this.calc.zero.day_9, utc)
     const V = to_tempo_bare(this.calc.msec.day, this.calc.zero.day28, utc)
 
-    A.now_idx = __mod__(A.now_idx, this.dic.A.length)
-    B.now_idx = __mod__(B.now_idx, this.dic.B.length)
-    C.now_idx = __mod__(C.now_idx, this.dic.C.length)
-    F.now_idx = __mod__(F.now_idx, this.dic.F.length)
+    A.now_idx = mod(A.now_idx, this.dic.A.length)
+    B.now_idx = mod(B.now_idx, this.dic.B.length)
+    C.now_idx = mod(C.now_idx, this.dic.C.length)
+    F.now_idx = mod(F.now_idx, this.dic.F.length)
     if (this.is_table_leap) {
       // 旧暦では、週は月初にリセットする。
-      E.now_idx = __mod__(E.now_idx, this.dic.E.length)
-      V.now_idx = __mod__(V.now_idx, this.dic.V.length)
+      E.now_idx = mod(E.now_idx, this.dic.E.length)
+      V.now_idx = mod(V.now_idx, this.dic.V.length)
     } else {
-      E.now_idx = __mod__(M.now_idx + d.now_idx, this.dic.E.length)
-      V.now_idx = __mod__(
+      E.now_idx = mod(M.now_idx + d.now_idx, this.dic.E.length)
+      V.now_idx = mod(
         [11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx,
         this.dic.V.length,
       )
@@ -2006,10 +1655,10 @@ K   = @dic.earthy[2] / 360
       data.p = Math.floor(data.y / this.dic.p.length)
       data.y = data.y - data.p * this.dic.p.length
     }
-    data.c = __mod__(data.a, this.dic.c.length)
-    data.b = __mod__(data.a, this.dic.b.length)
-    data.C = __mod__(data.A, this.dic.C.length)
-    data.B = __mod__(data.A, this.dic.B.length)
+    data.c = mod(data.a, this.dic.c.length)
+    data.b = mod(data.a, this.dic.b.length)
+    data.C = mod(data.A, this.dic.C.length)
+    data.B = mod(data.A, this.dic.B.length)
     return data
   }
 
@@ -2214,8 +1863,3 @@ K   = @dic.earthy[2] / 360
   }
 }
 
-function __mod__(a: number, b: number) {
-  a = +a
-  b = +b
-  return ((a % b) + b) % b
-}

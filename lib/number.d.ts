@@ -1,4 +1,5 @@
 type TDic = [string, string, string, string];
+export declare function mod(value: number, by: number): number;
 export declare class DIC {
     units: number[];
     join_str: string;

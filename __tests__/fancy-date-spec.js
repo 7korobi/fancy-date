@@ -1,5 +1,6 @@
 require('../lib/sample')
 const { FancyDate } = require('../lib/fancy-date')
+const { prepareSpot } = require('../lib/fancy-date')
 const {
   Calendar,
   mayaHaab,
@@ -7,9 +8,11 @@ const {
   mayaTzolkin,
   太陽,
   地球,
+  木星,
   月,
   東京,
-  白分月軌道,
+  太歳,
+  天文,
   黒分月,
   黒分月軌道,
 } = require('../lib/sample')
@@ -209,9 +212,7 @@ describe('Gregorio calculate', () => {
   test('find day cycle in range', () => {
     const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
     const found = g.find('d', between, [{ Ao: '甲子' }])
-    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual([
-      '2020年01月22日 甲子',
-    ])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年01月22日 甲子'])
   })
 
   test('find note in range', () => {
@@ -282,9 +283,53 @@ describe('平気法 calculate', () => {
     expect(月[0]).toBe(地球)
     expect(月[1]).toBe(月.orbital)
     expect(黒分月[1]).toBe(黒分月軌道)
-    expect(黒分月軌道.periodMsec).toBe(白分月軌道[0])
-    expect(黒分月軌道.epochMsec).toBe(白分月軌道[1] - 白分月軌道[0] / 2)
-    expect(黒分月軌道.phaseAt(白分月軌道[1])).toBe(0.5)
+    expect(黒分月軌道.periodMsec).toBe(天文.月.白分軌道[0])
+    expect(黒分月軌道.epochMsec).toBe(天文.月.白分軌道[1] - 天文.月.白分軌道[0] / 2)
+    expect(黒分月軌道.phaseAt(天文.月.白分軌道[1])).toBe(0.5)
+    expect(木星.body).toMatchObject({ kind: 'physical', name: 'Jupiter' })
+    expect(太歳.本体).toMatchObject({ kind: 'virtual', name: '太歳' })
+    expect(太歳.本体.derivedFrom).toBe(天文.木星)
+    expect(太歳.軌道.phaseAt(木星[1][1])).toBe(0)
+    expect(太歳.軌道.phaseAt(木星[1][1] + 木星[1][0] / 4)).toBe(0.75)
+  })
+
+  test('prepareSpot resolves spot input into calendar internals', () => {
+    const prepared = prepareSpot(...東京)
+    expect(prepared.geo).toEqual([東京[1], 東京[2], 東京[3]])
+    expect(prepared.sunny.periodMsec).toBe(地球[1][0])
+    expect(prepared.moony.periodMsec).toBe(月[1][0])
+    expect(prepared.earthy.periodMsec).toBe(地球[2][0])
+  })
+
+  test('astronomical moon exposes apsides and nodes', () => {
+    const near = ga.parse('2024年3月10日')
+    const perigee = ga.lunar_apsis('perigee', near)
+    const apogee = ga.lunar_apsis('apogee', near)
+    const ascending = ga.lunar_node('ascending', near)
+    const descending = ga.lunar_node('descending', near)
+    const moon = ga.dic.moony
+
+    expect(perigee.kind).toBe('perigee')
+    expect(apogee.kind).toBe('apogee')
+    expect(perigee.distanceKm).toBeLessThan(
+      moon.lunarEquatorial(perigee.at - to_msec('1d')).distanceKm,
+    )
+    expect(perigee.distanceKm).toBeLessThan(
+      moon.lunarEquatorial(perigee.at + to_msec('1d')).distanceKm,
+    )
+    expect(apogee.distanceKm).toBeGreaterThan(
+      moon.lunarEquatorial(apogee.at - to_msec('1d')).distanceKm,
+    )
+    expect(apogee.distanceKm).toBeGreaterThan(
+      moon.lunarEquatorial(apogee.at + to_msec('1d')).distanceKm,
+    )
+
+    expect(Math.abs(ascending.latitudeDeg)).toBeLessThan(0.001)
+    expect(Math.abs(descending.latitudeDeg)).toBeLessThan(0.001)
+    expect(moon.lunarEquatorial(ascending.at - to_msec('12h')).latitudeDeg).toBeLessThan(0)
+    expect(moon.lunarEquatorial(ascending.at + to_msec('12h')).latitudeDeg).toBeGreaterThan(0)
+    expect(moon.lunarEquatorial(descending.at - to_msec('12h')).latitudeDeg).toBeGreaterThan(0)
+    expect(moon.lunarEquatorial(descending.at + to_msec('12h')).latitudeDeg).toBeLessThan(0)
   })
 
   test('1月,1年', () => {

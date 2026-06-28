@@ -7,11 +7,12 @@ import {
   STAR,
   SPOT,
   placePlanet,
-  placeSatellite,
   placeStar,
   transformOrbital,
 } from './fancy-date'
 import { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
+import { mod } from './number'
+import { make元号, placeMeanPlanet, placeMeanSatellite } from './preset'
 
 export const 九星 = [
   '九紫火',
@@ -409,28 +410,8 @@ export const マヤハアブ = [
   'Kumku',
   'Wayeb',
 ] as const
-export const マヤハアブ日 = [
-  '0',
-  '1',
-  '2',
-  '3',
-  '4',
-  '5',
-  '6',
-  '7',
-  '8',
-  '9',
-  '10',
-  '11',
-  '12',
-  '13',
-  '14',
-  '15',
-  '16',
-  '17',
-  '18',
-  '19',
-] as const
+
+export const マヤハアブ日 = Array.from({ length: 20 }, (_, i) => `${i}`)
 
 // 号, 開始時刻
 // 各時刻は、このライブラリで使う JST 00:00 の Unix epoch ms。
@@ -601,11 +582,17 @@ export const 元号 = [
   ['延元', -19997744400000, '南'], // JST 1336-04-19; WJ
   ['興国', -19867712400000, '南'], // JST 1340-06-02; WJ
   ['正平', -19657674000000, '南'], // JST 1347-01-28; WJ
-  ['建徳', -18913856400000, '南'], // JST 1370-08-24; WJ; 南朝後期は始期に異説あり
-  ['文中', -18859942800000, '南'], // JST 1372-05-09; WJ; 南朝後期は始期に異説あり
-  ['天授', -18760496400000, '南'], // JST 1375-07-04; WJ; 南朝後期は始期に異説あり
-  ['弘和', -18580784400000, '南'], // JST 1381-03-14; WJ; 南朝後期は始期に異説あり
-  ['元中', -18479782800000, '南'], // JST 1384-05-26; WJ; 南朝後期は始期に異説あり
+  ['建徳', -18913856400000, '南'], // JST 1370-08-24; WJ; 南朝編年記略・南朝公卿補任
+  ['建徳', -18921718800000, '皇代記'], // JST 1370-05-25
+  ['建徳', -18929408400000, '伊勢之巻'], // JST 1370-02-25
+  ['文中', -18859942800000, '南'], // JST 1372-05-09; WJ; 建徳3年4月、日未確定
+  ['文中', -18860374800000, '七巻冊子'], // JST 1372-05-04; 確証を得ない
+  ['文中', -18844218000000, '南朝編年記略・続史愚抄'], // JST 1372-11-07; 誤りとされる
+  // 文中 < -18857350800000 // JST 1372-06-08; 金剛寺文書の長慶天皇綸旨は、元号が文中となったことを前提としている。
+  ['天授', -18760496400000, '南'], // JST 1375-07-04; WJ; 南朝編年記略・続史愚抄。七巻冊子は2月上旬
+  ['弘和', -18580784400000, '南'], // JST 1381-03-14; WJ; 南朝公卿補任・続史愚抄
+  ['弘和', -18580438800000, '南朝編年記略'], // JST 1381-03-18
+  ['元中', -18479782800000, '南'], // JST 1384-05-26; WJ; 南方紀伝・続史愚抄
   ['暦応', -19918861200000, '北'], // JST 1338-10-19; WJ
   ['康永', -19804035600000, '北'], // JST 1342-06-09; WJ
   ['貞和', -19694912400000, '北'], // JST 1345-11-23; WJ
@@ -690,133 +677,192 @@ export const 元号 = [
   ['平成', 600188400000], // JST 1989-01-08; WJ/CAO
   ['令和', 1556636400000], // JST 2019-05-01; WJ/CAO
 ] as const
-export const 北朝元号 = 元号.filter(([, , s]) => '南' !== s)
-export const 南朝元号 = 元号.filter(([, , s]) => '北' !== s)
 
-export const 太陽本体: BodyProfile = { kind: 'physical', name: 'Sun', radiusKm: 695700 }
-export const 地球本体: BodyProfile = { kind: 'physical', name: 'Earth', radiusKm: 6378.137 }
-export const 月本体: BodyProfile = {
-  kind: 'physical',
-  name: 'Moon',
-  radiusKm: 1737.4,
-  meanDistanceKm: 384400,
-}
+export const 北朝元号 = 元号.filter(([, , s]) => !s || s === '北') as readonly ERA[]
+export const 南朝元号 = 元号.filter(([, , s]) => !s || s === '南') as readonly ERA[]
 
-export const 太陽: STAR = placeStar(太陽本体)
-export const 地球軌道 = [31556925147, 1553119080000] as const // 2019/03/21 06:58
-export const 地球自転 = [86400000, 0, 23.4397] as const // LOD ではなく、暦上の1日。Unix epoch では閏秒を消し去るため。
+// 南朝元号には、南朝後期元号の始期に異説のあるものが含まれる。
+export const 南朝編年記略元号 = make元号(元号, 南朝元号, '南朝編年記略')
+export const 南朝公卿補任元号 = make元号(元号, 南朝元号, '南朝公卿補任')
+export const 続史愚抄元号 = make元号(元号, 南朝元号, '続史愚抄')
+export const 南方紀伝元号 = make元号(元号, 南朝元号, '南方紀伝')
+export const 皇代記元号 = make元号(元号, 南朝元号, '皇代記')
+export const 七巻冊子元号 = make元号(元号, 南朝元号, '七巻冊子')
+export const 伊勢之巻元号 = make元号(元号, 南朝元号, '伊勢之巻')
+export const 史料初出元号 = 南朝元号
+export const 金剛寺文書元号 = 南朝元号
 
-export const 地球: PLANET = placePlanet({
-  body: 地球本体,
-  center: 太陽,
-  orbital: 地球軌道,
-  rotation: 地球自転,
+export const 天文 = (function () {
+  const 平均 = {
+    太陽: {
+      本体: { kind: 'physical', name: 'Sun', radiusKm: 695700 } as BodyProfile,
+    },
+    水星: {
+      本体: { kind: 'physical', name: 'Mercury', radiusKm: 2439.7 } as BodyProfile,
+      軌道: [7596288000, 1553119080000] as const, // 太陽年 2019/03/21 06:58
+      自転: [15192576000, 0, 0.01] as const, // 太陽日
+    },
+    金星: {
+      本体: { kind: 'physical', name: 'Venus', radiusKm: 6051.8 } as BodyProfile,
+      軌道: [19414456423, 1553119080000] as const, // 公転周期 2019/03/21 06:58
+      自転: [10087251840, 0, -2.64] as const, // 太陽日
+    },
+    地球: {
+      本体: { kind: 'physical', name: 'Earth', radiusKm: 6378.137 } as BodyProfile,
+      軌道: [31556925147, 1553119080000] as const, // 2019/03/21 06:58
+      自転: [86400000, 0, 23.4397] as const, // LOD ではなく、暦上の1日。Unix epoch では閏秒を消し去るため。
+    },
+    月: {
+      本体: {
+        kind: 'physical',
+        name: 'Moon',
+        radiusKm: 1737.4,
+        meanDistanceKm: 384400,
+      } as BodyProfile,
+      軌道: [2551442889, 1577310360000] as const, // 2019/12/26 06:46
+      白分軌道: [2551442889, 1577310360000] as const,
+      自転: [2551442889, 0, 6.68] as const,
+    },
+    ガニメデ: {
+      本体: { kind: 'physical', name: 'Ganymede' } as BodyProfile,
+      軌道: [618192000, 0] as const,
+    },
+    カリスト: {
+      本体: { kind: 'physical', name: 'Callisto' } as BodyProfile,
+      軌道: [1441929600, 0] as const,
+    },
+    火星: {
+      本体: { kind: 'physical', name: 'Mars', radiusKm: 3389.5 } as BodyProfile,
+      軌道: [59355616881, 1540684800000] as const, // 公転周期 UTC 2018/10/28 00:00
+      自転: [88740035, 0, 25.19] as const, // 自転周期 24時間39分35秒。
+    },
+    木星: {
+      本体: { kind: 'physical', name: 'Jupiter', radiusKm: 69911 } as BodyProfile,
+      軌道: [374322050280, 1553119080000] as const, // 公転周期 2019/03/21 06:58
+      自転: [35769600, 0, 3.12] as const,
+    },
+    土星: {
+      本体: { kind: 'physical', name: 'Saturn', radiusKm: 58232 } as BodyProfile,
+      軌道: [931964092416, 1553119080000] as const, // 公転周期 2019/03/21 06:58
+      自転: [37920035, 0, 25.33] as const,
+    },
+    タイタン: {
+      本体: { kind: 'physical', name: 'Titan' } as BodyProfile,
+      軌道: [1377684374, 0] as const,
+    },
+    天王星: {
+      本体: { kind: 'physical', name: 'Uranus', radiusKm: 25362 } as BodyProfile,
+      軌道: [2658822788376, 1553119080000] as const, // 公転周期 2019/03/21 06:58
+      自転: [62061120, 0, -82.23] as const,
+    },
+    チタニア: {
+      本体: { kind: 'physical', name: 'Titania' } as BodyProfile,
+      軌道: [752198400, 0] as const,
+    },
+    海王星: {
+      本体: { kind: 'physical', name: 'Neptune', radiusKm: 24622 } as BodyProfile,
+      軌道: [5200376904000, 1553119080000] as const, // 公転周期 2019/03/21 06:58
+      自転: [64800000, 0, 28.32] as const,
+    },
+    トリトン: {
+      本体: { kind: 'physical', name: 'Triton' } as BodyProfile,
+      軌道: [507733056, 0] as const,
+    },
+    冥王星: {
+      本体: { kind: 'physical', name: 'Pluto', radiusKm: 1188.3 } as BodyProfile,
+      軌道: [7818100727754, 0] as const,
+      自転: [551856672, 0, -60.41] as const,
+    },
+    カロン: {
+      本体: { kind: 'physical', name: 'Charon' } as BodyProfile,
+      軌道: [551880000, 0] as const,
+    },
+    セレス: {
+      本体: { kind: 'physical', name: 'Ceres', radiusKm: 469.7 } as BodyProfile,
+      軌道: [145423814400, 0] as const,
+      自転: [32667012, 0, 4] as const,
+    },
+    ハウメア: {
+      本体: { kind: 'physical', name: 'Haumea' } as BodyProfile,
+      軌道: [8908394904000, 0] as const,
+      自転: [14095440, 0, 0] as const,
+    },
+    ナマカ: {
+      本体: { kind: 'physical', name: 'Namaka' } as BodyProfile,
+      軌道: [1579245120, 0] as const,
+    },
+    ヒイアカ: {
+      本体: { kind: 'physical', name: 'Hiiaka' } as BodyProfile,
+      軌道: [4273516800, 0] as const,
+    },
+    マケマケ: {
+      本体: { kind: 'physical', name: 'Makemake' } as BodyProfile,
+      軌道: [9639268920000, 0] as const,
+      自転: [27975600, 0, 0] as const,
+    },
+    エリス: {
+      本体: { kind: 'physical', name: 'Eris' } as BodyProfile,
+      軌道: [17610403104000, 0] as const,
+      自転: [93240000, 0, 0] as const,
+    },
+    ディスノミア: {
+      本体: { kind: 'physical', name: 'Dysnomia' } as BodyProfile,
+      軌道: [1362700800, 0] as const,
+    },
+  } as const
+  const 太歳 = {
+    本体: { kind: 'virtual', name: '太歳', derivedFrom: 平均.木星 },
+    軌道: transformOrbital(平均.木星.軌道, { direction: -1 }),
+    自転: 平均.木星.自転,
+  } as const
+  return { ...平均, 太歳 }
+})()
+
+export const 太陽: STAR = placeStar(天文.太陽.本体)
+
+export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 天文.地球.本体 })
+
+export const 地球: PLANET = placeMeanPlanet(太陽, 天文.地球)
+export const 水星: PLANET = placeMeanPlanet(太陽, 天文.水星)
+export const 金星: PLANET = placeMeanPlanet(太陽, 天文.金星)
+export const 火星: PLANET = placeMeanPlanet(太陽, 天文.火星)
+export const 木星: PLANET = placeMeanPlanet(太陽, 天文.木星)
+export const 土星: PLANET = placeMeanPlanet(太陽, 天文.土星)
+export const 天王星: PLANET = placeMeanPlanet(太陽, 天文.天王星)
+export const 海王星: PLANET = placeMeanPlanet(太陽, 天文.海王星)
+export const 冥王星: PLANET = placeMeanPlanet(太陽, 天文.冥王星)
+export const セレス: PLANET = placeMeanPlanet(太陽, 天文.セレス)
+export const ハウメア: PLANET = placeMeanPlanet(太陽, 天文.ハウメア)
+export const マケマケ: PLANET = placeMeanPlanet(太陽, 天文.マケマケ)
+export const エリス: PLANET = placeMeanPlanet(太陽, 天文.エリス)
+export const 太歳: PLANET = placeMeanPlanet(太陽, 天文.太歳)
+Object.defineProperties(太歳, {
+  本体: { value: 天文.太歳.本体 },
+  軌道: { value: 天文.太歳.軌道 },
+  自転: { value: 天文.太歳.自転 },
 })
 
-export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 地球本体 })
+export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, { body: 天文.月.本体 })
+export const 月: SATELLITE = placeMeanSatellite(地球, 天文.月)
+export const 白分月: SATELLITE = 月
 
-export const 火星: PLANET = [
-  太陽,
-  [59355616881, 1540684800000], // 公転周期 UTC 2018/10/28 00:00
-  [88740035, 0, 25.19], // 自転周期 24時間39分35秒。
-] as const
-
-export const 水星: PLANET = [
-  太陽,
-  [7596288000, 1553119080000], // 太陽年 2019/03/21 06:58
-  [15192576000, 0, 0.01], // 太陽日
-] as const
-
-export const 金星: PLANET = [
-  太陽,
-  [19414456423, 1553119080000], // 公転周期 2019/03/21 06:58
-  [10087251840, 0, -2.64], // 太陽日
-] as const
-
-export const 木星: PLANET = [
-  太陽,
-  [374322050280, 1553119080000], // 公転周期 2019/03/21 06:58
-  [35769600, 0, 3.12], // 自転周期
-] as const
-
-export const 土星: PLANET = [
-  太陽,
-  [931964092416, 1553119080000], // 公転周期 2019/03/21 06:58
-  [37920035, 0, 25.33], // 自転周期
-] as const
-
-export const 天王星: PLANET = [
-  太陽,
-  [2658822788376, 1553119080000], // 公転周期 2019/03/21 06:58
-  [62061120, 0, -82.23], // 自転周期
-] as const
-
-export const 海王星: PLANET = [
-  太陽,
-  [5200376904000, 1553119080000], // 公転周期  2019/03/21 06:58
-  [64800000, 0, 28.32], // 自転周期
-] as const
-
-export const 冥王星: PLANET = [
-  太陽,
-  [7818100727754, 0], // 公転周期
-  [551856672, 0, -60.41], // 自転周期
-] as const
-
-export const セレス: PLANET = [
-  太陽,
-  [145423814400, 0], // 公転周期
-  [32667012, 0, 4], // 自転周期
-] as const
-
-export const ハウメア: PLANET = [
-  太陽,
-  [8908394904000, 0], // 公転周期
-  [14095440, 0, 0], // 自転周期
-] as const
-
-export const マケマケ: PLANET = [
-  太陽,
-  [9639268920000, 0], // 公転周期
-  [27975600, 0, 0], // 自転周期
-] as const
-
-export const エリス: PLANET = [
-  太陽,
-  [17610403104000, 0], // 公転周期
-  [93240000, 0, 0], // 自転周期
-] as const
-
-export const 白分月軌道 = [2551442889, 1577310360000] as const // 2019/12/26 06:46
-export const 黒分月軌道 = transformOrbital(白分月軌道, { phaseOffset: 0.5 })
-export const 月自転 = [2551442889, 0, 6.68] as const
-
-export const 白分月: SATELLITE = placeSatellite({
-  body: 月本体,
-  center: 地球,
-  orbital: 白分月軌道,
-  rotation: 月自転,
+export const 黒分月軌道 = transformOrbital(天文.月.軌道, { phaseOffset: 0.5 })
+export const 黒分月: SATELLITE = placeMeanSatellite(地球, {
+  本体: 天文.月.本体,
+  軌道: 黒分月軌道,
+  自転: 天文.月.自転,
 })
 
-export const 黒分月: SATELLITE = placeSatellite({
-  body: 月本体,
-  center: 地球,
-  orbital: 黒分月軌道,
-  rotation: 月自転,
-})
-export const 月: SATELLITE = 白分月
-export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, { body: 月本体 })
+export const ガニメデ: SATELLITE = placeMeanSatellite(木星, 天文.ガニメデ)
+export const カリスト: SATELLITE = placeMeanSatellite(木星, 天文.カリスト)
+export const タイタン: SATELLITE = placeMeanSatellite(土星, 天文.タイタン)
+export const チタニア: SATELLITE = placeMeanSatellite(天王星, 天文.チタニア)
+export const トリトン: SATELLITE = placeMeanSatellite(海王星, 天文.トリトン)
 
-export const ガニメデ: SATELLITE = [木星, [618192000, 0]] as const
-export const カリスト: SATELLITE = [木星, [1441929600, 0]] as const
-export const タイタン: SATELLITE = [土星, [1377684374, 0]] as const
-export const チタニア: SATELLITE = [天王星, [752198400, 0]] as const
-export const トリトン: SATELLITE = [海王星, [507733056, 0]] as const
-
-export const ナマカ: SATELLITE = [ハウメア, [1579245120, 0]] as const
-export const ヒイアカ: SATELLITE = [ハウメア, [4273516800, 0]] as const
-export const カロン: SATELLITE = [冥王星, [551880000, 0]] as const
-export const ディスノミア: SATELLITE = [エリス, [1362700800, 0]] as const
+export const ナマカ: SATELLITE = placeMeanSatellite(ハウメア, 天文.ナマカ)
+export const ヒイアカ: SATELLITE = placeMeanSatellite(ハウメア, 天文.ヒイアカ)
+export const カロン: SATELLITE = placeMeanSatellite(冥王星, 天文.カロン)
+export const ディスノミア: SATELLITE = placeMeanSatellite(エリス, 天文.ディスノミア)
 
 export const 東京: SPOT = [月, 35.7, 139.8, 15 * +9] as const
 export const 天文東京: SPOT = [天文月, 35.7, 139.8, 15 * +9] as const
@@ -1039,11 +1085,27 @@ const Maya = g
   .lang('Gy年Mod日', 'Mo do')
   .spot(マヤ暦地球, 0, 0, 0)
   .era('', '')
-  .calendar(
-    ['0年Kankin3日', 'y年Mod日', マヤ長期暦基準日],
+  .calendar(['0年Kankin3日', 'y年Mod日', マヤ長期暦基準日], null, [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
     null,
-    [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, null],
-  )
+  ])
   .algo({
     M: [マヤハアブ, null],
     d: [マヤハアブ日, null],
@@ -1069,22 +1131,18 @@ export function mayaLongCount(utc: number) {
 
 export function mayaTzolkin(utc: number) {
   const kin = mayaKin(utc)
-  const number = __mod__(kin + 3, 13) + 1
-  const name = マヤツォルキン[__mod__(kin + 19, 20)]
+  const number = mod(kin + 3, 13) + 1
+  const name = マヤツォルキン[mod(kin + 19, 20)]
   return `${number} ${name}`
 }
 
 export function mayaHaab(utc: number) {
   const kin = mayaKin(utc)
-  const dayOfYear = __mod__(kin + 348, 365)
+  const dayOfYear = mod(kin + 348, 365)
   const monthIndex = Math.floor(dayOfYear / 20)
   const day = dayOfYear - monthIndex * 20
   const name = マヤハアブ[monthIndex]
   return `${day} ${name}`
-}
-
-function __mod__(a: number, b: number) {
-  return ((a % b) + b) % b
 }
 
 const Beat = g
