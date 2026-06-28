@@ -1,5 +1,9 @@
 type TDic = [string, string, string, string]
 
+export function mod(value: number, by: number) {
+  return ((value % by) + by) % by
+}
+
 export class DIC {
   units: number[]
   join_str: string

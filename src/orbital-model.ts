@@ -5,8 +5,10 @@ export type BodyProfile = {
   meanDistanceKm?: number
   massKg?: number
   albedo?: number
-  derivedFrom?: STAR | SKY_BODY
+  derivedFrom?: BodyProfileReference
 }
+
+export type BodyProfileReference = STAR | SKY_BODY | { readonly 本体: BodyProfile }
 
 export type STAR = readonly [center: null, orbital: null, rotation: null] & {
   body?: BodyProfile
@@ -134,6 +136,29 @@ export function bodyProfileOf(body: STAR | SKY_BODY): BodyProfile | undefined {
   return (body as { body?: BodyProfile }).body
 }
 
+export type ResolvedSkyBody = {
+  planet: PLANET
+  satellite?: SATELLITE
+  planetaryOrbital: ORBITAL
+  satelliteOrbital?: ORBITAL
+  planetaryRotation: ROTATION
+}
+
+export function resolveSkyBody(body: SKY_BODY): ResolvedSkyBody {
+  const planet = isPlanetSkyBody(body) ? body : centerOf(body)
+  const planetaryRotation = rotationOf(planet)
+  if (!planetaryRotation) {
+    throw new Error('planetary rotation is required')
+  }
+  return {
+    planet,
+    satellite: isPlanetSkyBody(body) ? undefined : body,
+    planetaryOrbital: orbitalOf(planet),
+    satelliteOrbital: isPlanetSkyBody(body) ? undefined : orbitalOf(body),
+    planetaryRotation,
+  }
+}
+
 export type SolarObservationOptions = {
   latitudeDeg: number
   longitudeDeg: number
@@ -174,7 +199,11 @@ export type SolarHorizontalCoordinates = SolarEquatorialCoordinates & {
 export interface SolarPositionModel extends OrbitalModel {
   solarLongitudeDeg(utc: number): number
   solarEquatorial(utc: number): SolarEquatorialCoordinates
-  solarHorizontal(utc: number, latitudeDeg: number, longitudeDeg: number): SolarHorizontalCoordinates
+  solarHorizontal(
+    utc: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+  ): SolarHorizontalCoordinates
 }
 
 export interface SolarEventModel extends SolarPositionModel {
@@ -231,10 +260,37 @@ export interface LunarEventModel extends LunarPositionModel {
   lunarEvents(utc: number, options: LunarObservationOptions): LunarObservation
 }
 
+export type LunarApsisKind = 'perigee' | 'apogee'
+export type LunarApsis = {
+  kind: LunarApsisKind
+  at: number
+  distanceKm: number
+}
+
+export type LunarNodeKind = 'ascending' | 'descending'
+export type LunarNode = {
+  kind: LunarNodeKind
+  at: number
+  longitudeDeg: number
+  latitudeDeg: number
+}
+
+export interface LunarOrbitEventModel extends LunarPositionModel {
+  lunarApsis(kind: LunarApsisKind, near: number): LunarApsis
+  lunarNode(kind: LunarNodeKind, near: number): LunarNode
+}
+
 export function hasSolarEvents(model: OrbitalModel): model is SolarEventModel {
   return typeof (model as SolarEventModel).solarEvents === 'function'
 }
 
 export function hasLunarEvents(model: OrbitalModel | undefined): model is LunarEventModel {
   return typeof (model as LunarEventModel | undefined)?.lunarEvents === 'function'
+}
+
+export function hasLunarOrbitEvents(
+  model: OrbitalModel | undefined,
+): model is LunarOrbitEventModel {
+  const eventModel = model as LunarOrbitEventModel | undefined
+  return typeof eventModel?.lunarApsis === 'function' && typeof eventModel.lunarNode === 'function'
 }

@@ -1,7 +1,9 @@
+import { mod } from './number'
+
 const SECOND = to_msec('1s')
-const MINUTE = to_msec('1m')
+export const MINUTE = to_msec('1m')
 const HOUR = to_msec('1h')
-const DAY = to_msec('1d')
+export const DAY = to_msec('1d')
 const WEEK = to_msec('1w')
 const MONTH = to_msec('30d')
 const YEAR = to_msec('1y')
@@ -185,7 +187,7 @@ export class Tempo {
   slide(n: number) {
     if (this.table) {
       const now_idx = this.now_idx + n
-      const idx = modulo(now_idx, this.table.length)
+      const idx = mod(now_idx, this.table.length)
 
       const new_table_idx = Math.floor(now_idx / this.table.length)
       const now_table_idx = Math.floor(this.now_idx / this.table.length)
@@ -274,8 +276,6 @@ export class Tempo {
     return new Promise((ok) => ok(null))
   }
 }
-
-const modulo = (a: number, b: number) => ((+a % (b = +b)) + b) % b
 
 export function to_tempo(
   size_str: string,

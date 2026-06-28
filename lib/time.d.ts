@@ -1,3 +1,5 @@
+export declare const MINUTE: number;
+export declare const DAY: number;
 type Distance = readonly [limit: number, interval: number, base: number, label: string];
 export declare class Tempo {
     label?: string;

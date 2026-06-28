@@ -1,36 +1,15 @@
-import type { ORBITAL, OrbitalTransformOptions, OrbitalModel, ROTATION, RotationModel, SPOT, TIMEZONE } from './orbital-model';
+import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
+import type { LunisolarDate } from './phenomena/lunisolar';
 import { Tempo } from './time';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
+export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean';
+export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar';
+export type { PreparedSpot, PreparedSpotModels } from './prepare';
+export { prepareSpot, prepareSpotModels } from './prepare';
 export * from './orbital-model';
 export type ERA = readonly [string, number, string?];
 export type ERA_WITH_YEAR = readonly [string, number, number];
-export declare class MeanOrbital implements OrbitalModel {
-    readonly periodMsec: number;
-    readonly epochMsec: number;
-    constructor(periodMsec: number, epochMsec: number);
-    phaseAt(utc: number): number;
-    timeOfPhase(phase: number, near: number): number;
-    static from(src: ORBITAL): OrbitalModel;
-}
-export declare class TransformedOrbital implements OrbitalModel {
-    readonly source: OrbitalModel;
-    readonly phaseOffset: number;
-    readonly direction: 1 | -1;
-    readonly periodMsec: number;
-    readonly epochMsec: number;
-    constructor(source: ORBITAL, { phaseOffset, direction, epochMsec }?: OrbitalTransformOptions);
-    phaseAt(utc: number): number;
-    timeOfPhase(phase: number, near: number): number;
-}
-export declare function transformOrbital(source: ORBITAL, options?: OrbitalTransformOptions): OrbitalModel;
-export declare class MeanRotation implements RotationModel {
-    readonly periodMsec: number;
-    readonly epochMsec: number;
-    readonly axialTiltDeg: number;
-    constructor(periodMsec: number, epochMsec: number, axialTiltDeg: number);
-    static from(src: ROTATION): RotationModel;
-}
 type ALL_DIC = ALGO_DIC | 'D' | 'G' | 'J' | 'Q' | 'Y' | 'b' | 'c' | 'd' | 'p' | 'u' | 'w' | 'x' | 'y';
 type ALGO_DIC = 'A' | 'B' | 'C' | 'E' | 'F' | 'H' | 'M' | 'N' | 'S' | 'V' | 'Z' | 'a' | 'd' | 'f' | 'm' | 's';
 type MSEC_CALC = 'period' | 'year' | 'season' | 'month' | 'moon' | 'week' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
@@ -42,24 +21,6 @@ type TempoIdxs = TOKENS<ALL_DIC, number> & {
 };
 type TempoMonth = {
     is_leap: boolean;
-};
-type LunisolarPrincipalTerm = {
-    index: number;
-    longitudeDeg: number;
-    month: number;
-    at: number;
-};
-export type LunisolarDate = {
-    year: number;
-    month: number;
-    day: number;
-    is_leap: boolean;
-    day_start_at: number;
-    last_at: number;
-    next_at: number;
-    new_moon_at: number;
-    next_new_moon_at: number;
-    principal_term?: LunisolarPrincipalTerm;
 };
 type Tempos = {
     Zz: Tempo;
@@ -113,7 +74,7 @@ type IDIC = IIDX & {
     earthy: RotationModel;
     geo: TIMEZONE;
     era: string;
-    eras: ERA[];
+    eras: readonly ERA[];
     month_divs: number[];
     leaps: number[];
     start: [string, string, number];
@@ -175,7 +136,7 @@ export declare class FancyDate {
     constructor(o?: FancyDate);
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;
-    era(era: string, past: string, eras?: ERA[]): this;
+    era(era: string, past: string, eras?: readonly ERA[]): this;
     calendar(start?: (string | number)[], leaps?: number[] | null, month_divs?: (number | null)[] | null): this;
     algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this;
     daily(is_solor?: string | boolean): this;
@@ -187,11 +148,6 @@ export declare class FancyDate {
     solar_phase(phase: number, near: number): number;
     lunar_phase(phase: number, near: number): number;
     lunisolar(utc: number): LunisolarDate;
-    private lunisolar_months_around;
-    private assign_lunisolar_months;
-    private lunisolar_principal_term;
-    private local_day_start;
-    private local_timezone_msec;
     solar_term(utc: number, phase: number): Tempo;
     solar_phase_before(phase: number, utc: number): number;
     solar_terms(utc: number): {
@@ -286,6 +242,8 @@ export declare class FancyDate {
         日の入: number;
     };
     lunar(utc: any, day?: Tempo): import("./orbital-model").LunarObservation;
+    lunar_apsis(kind: LunarApsisKind, near: number): import("./orbital-model").LunarApsis;
+    lunar_node(kind: LunarNodeKind, near: number): import("./orbital-model").LunarNode;
     節句(utc: number, { M, d, B, E }?: Tempos): {
         カトリック: {
             万聖節: number[];

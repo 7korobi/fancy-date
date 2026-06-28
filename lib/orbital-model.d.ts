@@ -5,7 +5,10 @@ export type BodyProfile = {
     meanDistanceKm?: number;
     massKg?: number;
     albedo?: number;
-    derivedFrom?: STAR | SKY_BODY;
+    derivedFrom?: BodyProfileReference;
+};
+export type BodyProfileReference = STAR | SKY_BODY | {
+    readonly 本体: BodyProfile;
 };
 export type STAR = readonly [center: null, orbital: null, rotation: null] & {
     body?: BodyProfile;
@@ -74,6 +77,14 @@ export declare function centerOf(body: SKY_BODY): STAR | PLANET;
 export declare function orbitalOf(body: SKY_BODY): ORBITAL;
 export declare function rotationOf(body: SKY_BODY): ROTATION | undefined;
 export declare function bodyProfileOf(body: STAR | SKY_BODY): BodyProfile | undefined;
+export type ResolvedSkyBody = {
+    planet: PLANET;
+    satellite?: SATELLITE;
+    planetaryOrbital: ORBITAL;
+    satelliteOrbital?: ORBITAL;
+    planetaryRotation: ROTATION;
+};
+export declare function resolveSkyBody(body: SKY_BODY): ResolvedSkyBody;
 export type SolarObservationOptions = {
     latitudeDeg: number;
     longitudeDeg: number;
@@ -154,5 +165,23 @@ export interface LunarPositionModel extends OrbitalModel {
 export interface LunarEventModel extends LunarPositionModel {
     lunarEvents(utc: number, options: LunarObservationOptions): LunarObservation;
 }
+export type LunarApsisKind = 'perigee' | 'apogee';
+export type LunarApsis = {
+    kind: LunarApsisKind;
+    at: number;
+    distanceKm: number;
+};
+export type LunarNodeKind = 'ascending' | 'descending';
+export type LunarNode = {
+    kind: LunarNodeKind;
+    at: number;
+    longitudeDeg: number;
+    latitudeDeg: number;
+};
+export interface LunarOrbitEventModel extends LunarPositionModel {
+    lunarApsis(kind: LunarApsisKind, near: number): LunarApsis;
+    lunarNode(kind: LunarNodeKind, near: number): LunarNode;
+}
 export declare function hasSolarEvents(model: OrbitalModel): model is SolarEventModel;
 export declare function hasLunarEvents(model: OrbitalModel | undefined): model is LunarEventModel;
+export declare function hasLunarOrbitEvents(model: OrbitalModel | undefined): model is LunarOrbitEventModel;
