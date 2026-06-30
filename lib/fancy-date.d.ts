@@ -23,13 +23,17 @@ export type TempoIdxs = TOKENS<ALL_DIC, number> & {
 type TempoMonth = {
     is_leap: boolean;
 };
+export type Token = ALL_DIC | 'Zz';
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
-export type Precision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
+type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
+export type Precision = CorePrecision | Token;
 export type SpanPart = {
+    token: Token;
     unit: Unit;
     value: number;
     label: string;
 };
+export type SpanPartLike = SpanPart | Omit<SpanPart, 'token'>;
 export type Span = {
     unit: Unit;
     value: number;
@@ -41,7 +45,7 @@ export type Span = {
 export type SpanOptions = {
     precise?: boolean | Precision;
 };
-export type SpanLike = string | Span | SpanPart | readonly SpanPart[];
+export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[];
 export type Tempos = {
     Zz: Tempo;
     A: Tempo;
@@ -209,6 +213,7 @@ export declare class FancyDate {
     private parse_span;
     private format_span;
     private span_parts_of;
+    private normalize_span_part;
     private invert_span;
     private parse_span_part;
     private span_target;
@@ -226,11 +231,12 @@ export declare class FancyDate {
     private span_between;
     private with_span_anchor;
     private precise_span;
-    private next_fixed_span_at;
     private next_precise_span_at;
+    private next_span_at;
     private span_parts;
+    private token_span_parts;
+    private span_part_unit;
     private span_part_label;
-    private fixed_span;
     match_find_condition(utc: number, condition: FindCondition): boolean;
     match_find_value(value: string, matcher: FindMatcher): boolean;
     private to_utc;

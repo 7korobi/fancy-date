@@ -22,7 +22,7 @@ import {
   雑節_by_phase as resolve雑節ByPhase,
 } from './phenomena/solar'
 import { prepareSpot } from './prepare'
-import { DAY, HOUR, MINUTE, SECOND, Tempo, to_tempo_by, to_tempo_bare } from './time'
+import { Tempo, to_tempo_by, to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
@@ -119,13 +119,17 @@ export type TempoIdxs = TOKENS<ALL_DIC, number> & {
 type TempoMonth = {
   is_leap: boolean
 }
+export type Token = ALL_DIC | 'Zz'
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
-export type Precision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
+type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
+export type Precision = CorePrecision | Token
 export type SpanPart = {
+  token: Token
   unit: Unit
   value: number
   label: string
 }
+export type SpanPartLike = SpanPart | Omit<SpanPart, 'token'>
 export type Span = {
   unit: Unit
   value: number
@@ -140,8 +144,8 @@ export type SpanOptions = {
 export type SpanLike =
   | string
   | Span
-  | SpanPart
-  | readonly SpanPart[]
+  | SpanPartLike
+  | readonly SpanPartLike[]
 const span_anchor = Symbol('span_anchor')
 type AnchoredSpan = Span & {
   [span_anchor]?: readonly [from: number, to: number, calendar: FancyDate]
@@ -684,22 +688,29 @@ export class FancyDate {
     }
   }
 
-  private span_parts_of(span: SpanLike) {
-    if ('string' === typeof span) return this.parse_span(span).parts ?? []
-    if (Array.isArray(span)) return span
-    return 'parts' in span ? (span.parts ?? [span]) : [span]
+  private span_parts_of(span: SpanLike): readonly SpanPart[] {
+    const parts = (() => {
+      if ('string' === typeof span) return this.parse_span(span).parts ?? []
+      if (Array.isArray(span)) return span
+      return 'parts' in span ? (span.parts ?? [span]) : [span]
+    })()
+    return parts.map((part) => this.normalize_span_part(part))
+  }
+
+  private normalize_span_part(part: SpanPartLike): SpanPart {
+    return 'token' in part ? part : { ...part, token: span_unit_token(part.unit) }
   }
 
   private invert_span(span: SpanLike): readonly SpanPart[] {
-    return this.span_parts_of(span).map(({ unit, value, label }) => ({ unit, value: 0 - value, label }))
+    return this.span_parts_of(span).map(({ token, unit, value, label }) => ({ token, unit, value: 0 - value, label }))
   }
 
   private parse_span_part(text: string, sign: number) {
     let best: SpanPart | undefined
-    const accept = (unit: Unit, count: number, label: string) => {
+    const accept = (token: Token, unit: Unit, count: number, label: string) => {
       if (!label) return
       if (best && best.label.length >= label.length) return
-      best = { unit, value: count * sign, label }
+      best = { token, unit, value: count * sign, label }
     }
     const rows = [
       ['y', 'year', '年'],
@@ -714,15 +725,15 @@ export class FancyDate {
       const relatives = this.dic[token].relatives
       if ('string' === typeof relatives) {
         const match = text.match(new RegExp(`^(\\d+)${escape_regexp(relatives)}`))
-        if (match) accept(unit, Number(match[1]), match[0])
+        if (match) accept(token, unit, Number(match[1]), match[0])
       }
       if (relatives instanceof Array) {
         relatives.forEach((label, count) => {
-          if (label && text.startsWith(label)) accept(unit, count, label)
+          if (label && text.startsWith(label)) accept(token, unit, count, label)
         })
       }
       const match = text.match(new RegExp(`^(\\d+)${escape_regexp(fallbackUnit)}`))
-      if (match) accept(unit, Number(match[1]), match[0])
+      if (match) accept(token, unit, Number(match[1]), match[0])
     }
     return best
   }
@@ -746,8 +757,8 @@ export class FancyDate {
       sourceMinuteSince: source.m.since,
       sourceSecondSince: source.s.since,
     }
-    for (const { unit, value } of parts) {
-      const token = span_unit_token(unit) as Precision
+    for (const { token: spanToken, unit, value } of parts) {
+      const token = (spanToken ?? span_unit_token(unit)) as CorePrecision
       const amount = 0 - value
       target[token] += amount
       if (token === 'y') target.u += amount
@@ -790,13 +801,13 @@ export class FancyDate {
       case 'month':
         return this.calc.msec.month
       case 'day':
-        return DAY
+        return this.calc.msec.day
       case 'hour':
-        return this.calc.msec.hour || HOUR
+        return this.calc.msec.hour
       case 'minute':
-        return this.calc.msec.minute || MINUTE
+        return this.calc.msec.minute
       case 'second':
-        return SECOND
+        return this.calc.msec.second
       case 'msec':
         return 1
     }
@@ -807,9 +818,9 @@ export class FancyDate {
     const month = this.find_span_month(target)
     const dayIndex =
       target.changedRank <= span_rank('M')
-        ? Math.min(Math.max(target.d, 0), Math.max(0, Math.floor(month.size / DAY) - 1))
+        ? Math.min(Math.max(target.d, 0), Math.max(0, Math.floor(month.size / this.calc.msec.day) - 1))
         : target.d
-    const day = this.to_tempos(month.last_at + dayIndex * DAY).d
+    const day = this.to_tempos(month.last_at + dayIndex * this.calc.msec.day).d
     if (target.changedRank <= span_rank('d')) {
       return this.clamp_since(day, target.sourceDaySince)
     }
@@ -838,7 +849,7 @@ export class FancyDate {
       tempo = this.to_tempos(tempo.next_at).u
     }
     while (year < tempo.now_idx) {
-      tempo = this.to_tempos(tempo.last_at - DAY).u
+      tempo = this.to_tempos(tempo.last_at - this.calc.msec.day).u
     }
     return tempo.last_at
   }
@@ -925,8 +936,7 @@ export class FancyDate {
     to: number = Date.now(),
     { precise = false }: SpanOptions = {},
   ): Span {
-    const diff = to - from
-    if (!Number.isFinite(diff)) {
+    if (!Number.isFinite(to - from)) {
       return this.with_span_anchor(from, to, { unit: 'year', value: NaN, label: '？？？' })
     }
     if (precise) {
@@ -938,29 +948,19 @@ export class FancyDate {
         this.next_precise_span_at(to, precision),
       )
     }
-    if (Math.abs(diff) < MINUTE) {
-      return this.with_span_anchor(
-        from,
-        to,
-        this.fixed_span(diff, 'second', SECOND, '秒'),
-        this.next_fixed_span_at(from, to, SECOND),
-      )
+    const fromTempos = this.to_tempos(from)
+    const toTempos = this.to_tempos(to)
+    if (fromTempos.m.last_at === toTempos.m.last_at) {
+      const span = this.precise_span(from, to, 's')
+      return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
-    if (Math.abs(diff) < HOUR) {
-      return this.with_span_anchor(
-        from,
-        to,
-        this.fixed_span(diff, 'minute', MINUTE, '分'),
-        this.next_fixed_span_at(from, to, MINUTE),
-      )
+    if (fromTempos.H.last_at === toTempos.H.last_at) {
+      const span = this.precise_span(from, to, 'm')
+      return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
-    if (Math.abs(diff) < this.calc.msec.day) {
-      return this.with_span_anchor(
-        from,
-        to,
-        this.fixed_span(diff, 'hour', HOUR, '時間'),
-        this.next_fixed_span_at(from, to, HOUR),
-      )
+    if (fromTempos.d.last_at === toTempos.d.last_at) {
+      const span = this.precise_span(from, to, 'H')
+      return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
 
     const parts = this.span_parts(from, to, 'd')
@@ -970,11 +970,11 @@ export class FancyDate {
           from,
           to,
           this.format_span([part], part.value < 0 ? '後' : '前'),
-          this.to_tempos(to).d.next_at,
+          toTempos.d.next_at,
         )
       }
     }
-    return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今' }, this.to_tempos(to).d.next_at)
+    return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今', parts: [] }, toTempos.s.next_at)
   }
 
   private with_span_anchor(from: number, to: number, span: Span, next_at?: number) {
@@ -999,18 +999,17 @@ export class FancyDate {
     return this.format_span(parts, to < from ? '後' : '前')
   }
 
-  private next_fixed_span_at(target: number, at: number, size: number) {
-    const diff = at - target
-    if (0 <= diff) return target + (Math.floor(diff / size) + 1) * size
-    const count = Math.floor((target - at) / size)
-    return count ? target - (count - 1) * size : target + size
+  private next_precise_span_at(at: number, precision: Precision) {
+    return this.to_tempos(at)[precision]?.next_at
   }
 
-  private next_precise_span_at(at: number, precision: Precision) {
-    return this.to_tempos(at)[precision].next_at
+  private next_span_at(at: number, span: Span) {
+    const token = span.parts?.[0]?.token
+    return token ? this.to_tempos(at)[token]?.next_at : undefined
   }
 
   private span_parts(from: number, to: number, precision: Precision) {
+    if (!is_core_precision(precision)) return this.token_span_parts(from, to, precision)
     const rank = span_rank(precision)
     const [earlier, later] = from <= to ? [from, to] : [to, from]
     const sign = from <= to ? 1 : -1
@@ -1036,6 +1035,7 @@ export class FancyDate {
       .map(([token, unit, fallbackUnit], index) => {
         const count = Math.abs(diffs[index])
         return {
+          token,
           unit,
           value: diffs[index] * sign,
           label: this.span_part_label(token, count, fallbackUnit),
@@ -1044,22 +1044,59 @@ export class FancyDate {
       .filter(({ value }) => value)
   }
 
+  private token_span_parts(from: number, to: number, token: Token) {
+    const fromTempo = this.to_tempos(from)[token]
+    const toTempo = this.to_tempos(to)[token]
+    if (!fromTempo || !toTempo) return []
+    const value = toTempo.now_idx - fromTempo.now_idx
+    return [
+      {
+        token,
+        unit: this.span_part_unit(token),
+        value,
+        label: this.span_part_label(token, Math.abs(value), String(token)),
+      },
+    ].filter(({ value }) => value)
+  }
+
+  private span_part_unit(token: Token): Unit {
+    switch (token) {
+      case 'y':
+      case 'u':
+      case 'Y':
+        return 'year'
+      case 'M':
+      case 'N':
+      case 'Q':
+        return 'month'
+      case 'd':
+      case 'D':
+      case 'w':
+      case 'A':
+      case 'B':
+      case 'C':
+      case 'E':
+      case 'F':
+      case 'V':
+        return 'day'
+      case 'H':
+        return 'hour'
+      case 'm':
+        return 'minute'
+      case 's':
+        return 'second'
+      case 'S':
+      default:
+        return 'msec'
+    }
+  }
+
   private span_part_label(unit: keyof Tempos, count: number, fallbackUnit: string) {
     const indexer = this.dic[unit]
     const relatives = indexer?.relatives
     if ('string' === typeof relatives) return `${count}${relatives}`
     const label = relatives?.[count]
     return label != null ? label : `${count}${fallbackUnit}`
-  }
-
-  private fixed_span(
-    diff: number,
-    unit: Unit,
-    size: number,
-    labelUnit: string,
-  ): Span {
-    const value = Math.trunc(Math.abs(diff) / size) * (diff < 0 ? -1 : 1)
-    return { unit, value, label: span_label(value, labelUnit) }
   }
 
   match_find_condition(utc: number, condition: FindCondition) {
@@ -2340,17 +2377,16 @@ K   = @dic.earthy[2] / 360
   }
 }
 
-function span_label(value: number, unit: string) {
-  if (!value) return '今'
-  return value < 0 ? `${Math.abs(value)}${unit}後` : `${value}${unit}前`
-}
-
 function escape_regexp(text: string) {
   return text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
 }
 
 function span_rank(precision: Precision) {
   return 'yMdHmsS'.indexOf(precision)
+}
+
+function is_core_precision(precision: Precision): precision is CorePrecision {
+  return 0 <= span_rank(precision)
 }
 
 function span_unit_token(unit: Unit): keyof TempoDiff {
