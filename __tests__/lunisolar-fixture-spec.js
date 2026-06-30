@@ -75,24 +75,24 @@ describe('NAOJ lunisolar fixtures', () => {
     const base = Calendar.GregorianAstronomical.parse('2024年3月10日')
     const at = (date) => Calendar.GregorianAstronomical.parse(date)
 
-    expect(Calendar.定気法.relative_time_distance(at('2024年3月9日'), base)).toMatchObject({
+    expect(Calendar.定気法.span_obj(at('2024年3月9日'), base)).toMatchObject({
       unit: 'day',
       value: 1,
       label: '1日前',
     })
-    expect(Calendar.定気法.relative_time_distance(at('2024年4月9日'), base)).toMatchObject({
+    expect(Calendar.定気法.span_obj(at('2024年4月9日'), base)).toMatchObject({
       unit: 'month',
       value: -1,
       label: '1ヶ月後',
     })
-    expect(Calendar.定気法.relative_time_distance(at('2025年3月10日'), base)).toMatchObject({
+    expect(Calendar.定気法.span_obj(at('2025年3月10日'), base)).toMatchObject({
       unit: 'year',
       value: -1,
       label: '1年後',
     })
     const nextYear = at('2025年2月28日')
     expect(
-      Calendar.定気法.relative_time_distance(nextYear + to_msec('3h'), base, {
+      Calendar.定気法.span_obj(nextYear + to_msec('3h'), base, {
         precise: 'H',
       }),
     ).toMatchObject({
@@ -106,7 +106,7 @@ describe('NAOJ lunisolar fixtures', () => {
     })
     const nextYearTempos = Calendar.定気法.to_tempos(nextYear)
     expect(
-      Calendar.定気法.relative_time_distance(nextYearTempos.m.next_at, base, {
+      Calendar.定気法.span_obj(nextYearTempos.m.next_at, base, {
         precise: 'm',
       }),
     ).toMatchObject({
@@ -119,7 +119,7 @@ describe('NAOJ lunisolar fixtures', () => {
       ],
     })
     expect(
-      Calendar.定気法.relative_time_distance(
+      Calendar.定気法.span_obj(
         nextYear + to_msec('3h') + to_msec('45m') + to_msec('12s') + 345,
         base,
         { precise: 'S' },

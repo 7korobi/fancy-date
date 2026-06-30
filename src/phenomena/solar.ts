@@ -131,7 +131,7 @@ export function solor(
     })
   }
   const { 季節, 南中時刻, 真夜中 } = solarNoon
-  const { asin, acos, atan, sin, cos, tan, PI } = Math
+  const { asin, acos, sin, cos, PI } = Math
   const deg_to_rad = (2 * PI) / 360
   const rad_to_day = dayMsec / (2 * PI)
 
@@ -140,7 +140,6 @@ export function solor(
   const lat = geo[0] * deg_to_rad
 
   const 赤緯 = asin(sin(K) * sin(季節))
-  const 赤経 = atan(tan(季節) * cos(K))
   const 時角 = acos((sin(高度) - sin(lat) * sin(赤緯)) / (cos(lat) * cos(赤緯)))
   const 方向 = acos((cos(lat) * sin(赤緯) - sin(lat) * cos(赤緯) * cos(時角)) / cos(高度))
 
@@ -250,7 +249,7 @@ export function to_tempo_by_solor(
 ) {
   let idx, end, start
   const solarNoon = noon(sunny, dayMsec, dayZero, yearMsec, seasonZero, utc, day)
-  const { 日の出, 南中時刻, 日の入 } = solor(
+  const { 日の出, 日の入 } = solor(
     sunny,
     earthy,
     geo,

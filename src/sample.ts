@@ -6,7 +6,6 @@ import {
   SATELLITE,
   STAR,
   SPOT,
-  placePlanet,
   placeStar,
   transformOrbital,
 } from './fancy-date'
