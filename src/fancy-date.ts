@@ -521,6 +521,18 @@ export class FancyDate {
     return `${value}`.padStart(size, '0')
   }
 
+  private parse_number(text: string) {
+    const numeric = Number(text)
+    if (Number.isFinite(numeric)) return numeric
+    const parsed = this.dic.numeral?.to_number?.(text)
+    return parsed ?? numeric
+  }
+
+  private number_pattern(fallback = '\\d+') {
+    const pattern = this.dic.numeral?.regex
+    return pattern ? `(?:${pattern}|${fallback})` : fallback
+  }
+
   init() {
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
     const year = daily_measure(sunny.periodMsec, earthy.periodMsec)
@@ -1102,12 +1114,13 @@ export class FancyDate {
   def_regex() {
     let A, B, C, D, E, F, G, H, N, Q, S, V, Y, Z
     let a, b, c, d, f, m, p, s, w, x, y
+    const number = (fallback?: string) => this.number_pattern(fallback)
     ;(() => {
       A = B = C = E = F = G = H = N = V = Z = a = b = c = f = m = p = s = strategy
-      const M = () => '(閏?\\d+)'
-      const u = () => '([-\\d]+)'
-      D = Q = S = Y = d = w = y = () => '(\\d+)'
-      const J = (x = () => '([\\d.]+)')
+      const M = () => `(閏?${number()})`
+      const u = () => `(${number('[-\\d]+')})`
+      D = Q = S = Y = d = w = y = () => `(${number()})`
+      const J = (x = () => `(${number('[\\d.]+')})`)
       const object = {
         A,
         B,
@@ -1155,7 +1168,7 @@ export class FancyDate {
             return `(閏?(?:${list.join('|')}))`
           }
         }
-        return '(閏?\\d+)'
+        return `(閏?${number()})`
       }
 
       const object = { H, M, N, Q, V, Z, d, m, s }
@@ -1176,18 +1189,19 @@ export class FancyDate {
           return `(${list.join('|')})`
         }
       }
-      return '(\\d+)'
+      return `(${number()})`
     }
   }
 
   def_to_idx() {
     let A, a, b, B, c, C, D, d, E, f, F, H, J, m, M, N, p, Q, s, S, u, V, w, x, y, Y, Z
+    const numeric = (s: string) => this.parse_number(s)
     const G = function (this: Indexer, s: string): number {
       const idx = this.list?.indexOf(s)
       if (-1 < idx) {
         return idx
       } else {
-        return (s as any) - 0
+        return numeric(s)
       }
     }
     H =
@@ -1199,7 +1213,7 @@ export class FancyDate {
           if (-1 < idx) {
             return idx
           } else {
-            return (s as any) - 0
+            return numeric(s)
           }
         }
 
@@ -1221,11 +1235,11 @@ export class FancyDate {
           if (-1 < idx) {
             return idx
           } else {
-            return (s as any) - 1
+            return numeric(s) - 1
           }
         }
-    D = Q = p = w = (s: string): number => (s as any) - 1
-    J = S = Y = u = x = y = (s: string): number => (s as any) - 0
+    D = Q = p = w = (s: string): number => numeric(s) - 1
+    J = S = Y = u = x = y = (s: string): number => numeric(s)
     const object = {
       A,
       B,
