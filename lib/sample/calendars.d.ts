@@ -1,0 +1,20 @@
+import { FancyDate } from '../fancy-date';
+export declare function mayaLongCount(utc: number): string;
+export declare function mayaTzolkin(utc: number): string;
+export declare function mayaHaab(utc: number): string;
+export declare const Calendar: {
+    UTC: FancyDate;
+    Gregorian: FancyDate;
+    GregorianAstronomical: FancyDate;
+    Julian: FancyDate;
+    アマンタ: FancyDate;
+    プールニマンタ: FancyDate;
+    平気法: FancyDate;
+    定気法: FancyDate;
+    Romulus: FancyDate;
+    MarsGregorian: FancyDate;
+    Jupiter: FancyDate;
+    フランス革命暦: FancyDate;
+    Maya: FancyDate;
+    Beat: FancyDate;
+};
