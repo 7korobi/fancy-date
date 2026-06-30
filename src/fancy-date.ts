@@ -826,10 +826,37 @@ export class FancyDate {
     if (target.changedRank <= span_rank('d')) {
       return this.clamp_since(day, target.sourceDaySince)
     }
+    const direct = this.find_span_time_in_day_direct(day, target)
+    if (direct != null) return direct
     return this.find_span_time_in_day(day, target)
   }
 
+  private find_span_time_in_day_direct(day: Tempo, target: SpanTarget) {
+    if (target.changedRank < span_rank('H')) return null
+    const firstHour = this.to_tempos(day.last_at).H
+    const hour = firstHour.succ(target.H)
+    if (hour.now_idx !== target.H) return null
+
+    let at = hour.last_at
+    if (target.changedRank < span_rank('m')) return at + Math.min(Math.max(0, target.sourceHourSince), Math.max(0, hour.size - 1))
+
+    const minuteSize = hour.size / this.dic.m.length
+    if (span_rank('m') <= target.changedRank) at += target.m * (hour.size / this.dic.m.length)
+    if (target.changedRank < span_rank('s')) return at + Math.min(Math.max(0, target.sourceMinuteSince), Math.max(0, minuteSize - 1))
+
+    if (span_rank('s') <= target.changedRank) at += target.s * this.calc.msec.second
+    if (target.changedRank < span_rank('S')) return at + Math.min(Math.max(0, target.sourceSecondSince), Math.max(0, this.calc.msec.second - 1))
+
+    if (span_rank('S') <= target.changedRank) at += target.S
+    return at
+  }
+
   private find_span_month(target: SpanTarget) {
+    const near = this.to_tempos(target.near)
+    if (near.u.now_idx === target.u && near.M.now_idx === target.M && near.M.is_leap === target.M_is_leap) {
+      return near.M
+    }
+
     const yearStart = this.find_span_year_start(target.u, target.near)
     const nextYearStart = this.to_tempos(yearStart).u.next_at
     let cursor = yearStart
