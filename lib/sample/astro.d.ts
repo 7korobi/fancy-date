@@ -126,6 +126,7 @@ export declare const 天文: {
 };
 export declare const 太陽: STAR;
 export declare const 天文地球: PLANET;
+export declare const 天文火星: PLANET;
 export declare const 地球: PLANET;
 export declare const 水星: PLANET;
 export declare const 金星: PLANET;

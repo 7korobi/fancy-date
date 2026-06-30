@@ -8,6 +8,7 @@ const {
   mayaTzolkin,
   太陽,
   地球,
+  天文火星,
   木星,
   月,
   東京,
@@ -18,6 +19,7 @@ const {
 } = require('../lib/sample')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
+const { MarsSolarOrbital } = require('../lib/nasa')
 const { format } = require('date-fns')
 const { ja: locale } = require('date-fns/locale/ja')
 
@@ -276,9 +278,12 @@ describe('平気法 calculate', () => {
 
   test('body placement keeps tuple compatibility', () => {
     expect(地球.body).toMatchObject({ kind: 'physical', name: 'Earth', radiusKm: 6378.137 })
+    expect(天文火星.body).toMatchObject({ kind: 'physical', name: 'Mars', radiusKm: 3389.5 })
     expect(月.body).toMatchObject({ kind: 'physical', name: 'Moon', radiusKm: 1737.4 })
     expect(地球[1]).toBe(地球.orbital)
     expect(地球[2]).toBe(地球.rotation)
+    expect(天文火星[1]).toBe(天文火星.orbital)
+    expect(天文火星[2]).toBe(天文火星.rotation)
     expect(月[0]).toBe(地球)
     expect(月[1]).toBe(月.orbital)
     expect(黒分月[1]).toBe(黒分月軌道)
@@ -618,6 +623,20 @@ describe('Maya', () => {
 })
 
 describe('火星', () => {
+  test('NASA style Mars solar model resolves solar season phases', () => {
+    const mars = new MarsSolarOrbital()
+    const near = g.parse('2024年1月1日')
+    const at = mars.timeOfPhase(0, near)
+    expect(Math.abs(mars.phaseAt(at))).toBeLessThan(0.001)
+    expect(Math.abs(at - near)).toBeLessThan(mars.periodMsec / 2)
+
+    const planet = MarsSolarOrbital.planet(太陽, { body: { name: 'Mars' } })
+    expect(planet.body).toMatchObject({ name: 'Mars' })
+    expect(planet[1]).toBe(planet.orbital)
+    expect(planet[2]).toBe(planet.rotation)
+    expect(天文火星.orbital).toBeInstanceOf(MarsSolarOrbital)
+  })
+
   test('calc', () => {
     expect(mg.calc).toMatchSnapshot()
   })
