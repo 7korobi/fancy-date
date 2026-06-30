@@ -161,6 +161,8 @@ export declare const zürich: SPOT;
 export declare const Paris: SPOT;
 export declare const Romus: SPOT;
 export declare const London: SPOT;
+export declare const Cairo: SPOT;
+export declare const Alexandria: SPOT;
 export declare const NewYork: SPOT;
 export declare const NewYork_Summer: SPOT;
 export declare const Madurai: SPOT;

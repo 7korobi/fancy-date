@@ -27,12 +27,15 @@ import {
   マヤハアブ,
   マヤハアブ日,
   エジプト月名,
+  コプト月名,
   月相,
   月相かな,
   時鐘,
   時鐘かな,
 } from './locale'
 import {
+  Alexandria,
+  Cairo,
   London,
   Madurai,
   Paris,
@@ -353,11 +356,12 @@ const Beat = g
   .init()
 
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
+const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
 const エジプト民用暦 = g
   .dup()
-  .spot(エジプト民用暦地球, 30, 31, 30)
-  .era('エジプト暦', '紀元前')
-  .calendar(['1年トート1日', 'y年Mod日', g.parse('1900年9月11日')!], [], [
+  .spot(エジプト民用暦地球, Cairo[1], Cairo[2], Cairo[3])
+  .era('ナボナサル紀元', '紀元前')
+  .calendar(['1年トート1日', 'y年Mod日', ナボナサル紀元], [], [
     30,
     30,
     30,
@@ -377,6 +381,30 @@ const エジプト民用暦 = g
   })
   .init()
 
+const コプト暦 = g
+  .dup()
+  .spot(...Alexandria)
+  .era('コプト暦', '紀元前')
+  .calendar(['1736年トウト1日', 'y年Mod日', g.parse('2019年9月11日')!], [4], [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    null,
+  ], 3)
+  .algo({
+    M: [コプト月名, null],
+  })
+  .init()
+
 export const Calendar = {
   UTC,
   Gregorian,
@@ -393,4 +421,5 @@ export const Calendar = {
   Maya,
   Beat,
   エジプト民用暦,
+  コプト暦,
 }

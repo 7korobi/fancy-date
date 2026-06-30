@@ -116,6 +116,7 @@ type ZERO_CALC =
 
 export type TempoDiff = TOKENS<ALL_DIC, number>
 export type TempoIdxs = TOKENS<ALL_DIC, number> & {
+  G_is_past?: boolean
   M_is_leap: boolean
 }
 type TempoMonth = {
@@ -233,6 +234,7 @@ type IDIC = IIDX & {
   eras: readonly ERA[]
   month_divs: number[]
   leaps: number[]
+  leap_shift?: number
   start: [string, string, number]
   is_solor: boolean
 }
@@ -472,8 +474,12 @@ export class FancyDate {
     start = ['1970-1-1 0:0:0', 'y-M-d H:m:s', 0],
     leaps: number[] | null = null,
     month_divs: (number | null)[] | null = null,
+    leap_shift = 0,
   ) {
     Object.assign(this.dic, { month_divs, leaps, start })
+    if (leap_shift) {
+      this.dic.leap_shift = leap_shift
+    }
     return this
   }
 
@@ -1305,7 +1311,17 @@ export class FancyDate {
           }
         }
     D = Q = p = w = (s: string): number => numeric(s) - 1
-    J = S = Y = u = x = y = (s: string): number => numeric(s)
+    J = S = u = x = (s: string): number => numeric(s)
+    y = Y = (s: string): number => {
+      const past = this.dic.G.list[0]
+      if (past && s.startsWith(past)) {
+        return 1 - numeric(s.slice(past.length))
+      }
+      if (s.startsWith('-')) {
+        return -numeric(s.slice(1))
+      }
+      return numeric(s)
+    }
     const object = {
       A,
       B,
@@ -1470,17 +1486,19 @@ export class FancyDate {
     let period = leaps.pop()
 
     if (period) {
+      const leap_shift = this.dic.leap_shift || 0
       range.year = []
       for (let idx = 0; idx < period; idx++) {
+        const rel_idx = mod(idx - leap_shift, period)
         let is_leap = 0
         for (let mode = 0; mode < leaps.length; mode++) {
           const div = leaps[mode]
-          if (idx % div) continue
+          if (rel_idx % div) continue
           is_leap = (!mode as any as number) % 2
         }
         range.year.push(this.calc.range.year[is_leap])
       }
-      range.year[0] = this.calc.range.year[1]
+      range.year[mod(leap_shift, period)] = this.calc.range.year[1]
     } else {
       range.year = [this.calc.range.year[0]]
     }
@@ -2098,7 +2116,7 @@ K   = @dic.earthy[2] / 360
 
     const y = u.copy()
     if (y.now_idx < 1) {
-      G.label = '紀元前'
+      G.label = this.dic.G.list[0] || '紀元前'
       y.now_idx = 1 - y.now_idx
     }
     const x = this.dic.x.tempo
@@ -2197,6 +2215,9 @@ K   = @dic.earthy[2] / 360
           data.M_is_leap = true
           s = s.slice(1)
         }
+        if ('G' === top && s === this.dic.G.list[0]) {
+          data.G_is_past = true
+        }
         data[top] = dic.to_idx(s)
       }
     }
@@ -2206,6 +2227,16 @@ K   = @dic.earthy[2] / 360
   index(src: string, str = this.dic.parse, _disuse = 0) {
     const tokens = str.match(reg_token)!
     const data = this.get_dic(src, tokens, this.regex(tokens))
+
+    if (data.G_is_past) {
+      if (tokens.some((token) => 'y' === token[0])) {
+        data.y = 1 - data.y
+      }
+      if (tokens.some((token) => 'Y' === token[0])) {
+        data.Y = 1 - data.Y
+      }
+      delete data.G_is_past
+    }
 
     if (this.is_table_leap) {
       data.p = Math.floor(data.y / this.dic.p.length)
@@ -2220,11 +2251,16 @@ K   = @dic.earthy[2] / 360
 
   regex(tokens) {
     const reg = ['^']
+    const escape_regex = (value: string) => value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
     tokens.forEach((token) => {
       const [top, mode] = token
       const dic = this.dic[top]
       if (dic) {
-        if ('or'.includes(mode)) {
+        if (('y' === top || 'Y' === top) && !'or'.includes(mode)) {
+          const past = this.dic.G.list[0]
+          const prefix = past ? `(?:${escape_regex(past)}|-)?` : '-?'
+          reg.push(`(${prefix}${this.number_pattern()})`)
+        } else if ('or'.includes(mode)) {
           reg.push(dic.regex_o)
         } else {
           reg.push(dic.regex)
@@ -2369,8 +2405,16 @@ K   = @dic.earthy[2] / 360
   }
 
   format_by(tempos: Tempos, str = this.dic.format) {
-    return str
-      .match(reg_token)!
+    const tokens = str.match(reg_token)!
+    const has_era = tokens.some((token) => 'G' === token[0])
+    const past = this.dic.G.list[0]
+    const signed_year = (year: number, size: number) => {
+      if (year < 0) {
+        return `-${this.format_number(-year, size)}`
+      }
+      return this.format_number(year, size)
+    }
+    return tokens
       .map((token) => {
         const [top, mode] = token
         const val = tempos[top]
@@ -2383,6 +2427,17 @@ K   = @dic.earthy[2] / 360
             case 'o':
               return dic.to_label(dic.list, val, token.length)
             default:
+              if ('y' === top && !has_era && past && tempos.G?.label === past) {
+                return signed_year(1 - val.now_idx, token.length)
+              }
+              if ('Y' === top) {
+                if (has_era && val.now_idx < 1) {
+                  return this.format_number(1 - val.now_idx, token.length)
+                }
+                if (!has_era) {
+                  return signed_year(val.now_idx, token.length)
+                }
+              }
               return dic.to_value(dic.list, val, token.length)
           }
         } else {
