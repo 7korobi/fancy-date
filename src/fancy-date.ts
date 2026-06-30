@@ -1,5 +1,6 @@
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import { mod } from './number'
+import type { Numeral } from './number'
 import type {
   LunarApsisKind,
   LunarNodeKind,
@@ -217,6 +218,7 @@ type IIDX = TOKENS<ALL_DIC, Indexer>
 type IDIC = IIDX & {
   parse: string
   format: string
+  numeral?: Numeral | null
   sunny: OrbitalModel
   moony?: OrbitalModel
   earthy: RotationModel
@@ -506,6 +508,17 @@ export class FancyDate {
   daily(is_solor: string | boolean = false) {
     this.dic.is_solor = !!is_solor
     return this
+  }
+
+  numeral(numeral: Numeral | null = null) {
+    this.dic.numeral = numeral
+    return this
+  }
+
+  private format_number(value: number, size: number, appendix = '') {
+    const numeral = this.dic.numeral
+    if (numeral) return numeral.parse(value, appendix)
+    return `${value}`.padStart(size, '0')
   }
 
   init() {
@@ -1253,8 +1266,8 @@ export class FancyDate {
   def_to_label() {
     let A, B, C, E, F, N, Q, S, V, Y, Z
     let a, b, c, d, f, m, p, s, u, w, x, y
-    function integer(idx: number): LabelFactory {
-      return (_, val, size: number) => `${val.now_idx + idx}`.padStart(size, '0')
+    const integer = (idx: number): LabelFactory => {
+      return (_, val, size: number) => this.format_number(val.now_idx + idx, size)
     }
 
     function at(cb: LabelFactory): LabelFactory {
@@ -1275,10 +1288,10 @@ export class FancyDate {
       return (list, val, size) => `${val.is_leap ? '閏' : ''}${cb(list, val, size)}`
     }
 
-    function float(__, val, size) {
-      const num = parseInt(val.now_idx)
+    const float: LabelFactory = (__, val, size) => {
+      const num = Math.trunc(val.now_idx)
       const sub = `${val.now_idx % 1}`.slice(1)
-      return `${num}`.padStart(size, '0') + sub
+      return this.format_number(num, size) + sub
     }
 
     const G = (__, val) => val.label
