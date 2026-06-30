@@ -213,4 +213,29 @@ describe('NAOJ lunisolar fixtures', () => {
       timeout: minuteBoundary - base,
     })
   })
+
+  test('定気法 span can use calendar tokens as precision', () => {
+    const base = Calendar.GregorianAstronomical.parse('2024年3月10日')
+    const nextDay = Calendar.GregorianAstronomical.parse('2024年3月11日')
+    const nextYear = Calendar.GregorianAstronomical.parse('2025年2月28日')
+
+    for (const token of ['A', 'B', 'C', 'E', 'F', 'V']) {
+      const span = Calendar.定気法.span_obj(nextDay, base, { precise: token })
+      expect(span.parts?.[0]).toMatchObject({ token })
+      expect(span.label).toMatch(/(?:前|後)$/)
+    }
+
+    for (const token of ['a', 'b', 'c', 'f']) {
+      const span = Calendar.定気法.span_obj(nextYear, base, { precise: token })
+      expect(span.parts?.[0]).toMatchObject({ token })
+      expect(span.label).toMatch(/(?:前|後)$/)
+    }
+
+    expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'A' }).parts?.[0]).toMatchObject({
+      token: 'A',
+      unit: 'day',
+      value: -1,
+      label: '1A',
+    })
+  })
 })
