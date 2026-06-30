@@ -30,6 +30,7 @@ export type Token = ALL_DIC | 'Zz';
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
 export type Precision = CorePrecision | Token;
+export type SpanUnitLabels = Partial<Record<Token, string>>;
 export type SpanPart = {
     token: Token;
     unit: Unit;
@@ -107,6 +108,7 @@ type IDIC = IIDX & {
     month_divs: number[];
     leaps: number[];
     leap_shift?: number;
+    span_units: SpanUnitLabels;
     start: [string, string, number];
     is_solor: boolean;
 };
@@ -172,6 +174,7 @@ export declare class FancyDate {
     algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this;
     daily(is_solor?: string | boolean): this;
     numeral(numeral?: Numeral | null): this;
+    span_units(units: SpanUnitLabels): this;
     private format_number;
     private parse_number;
     private number_pattern;
@@ -239,8 +242,10 @@ export declare class FancyDate {
     private next_precise_span_at;
     private next_span_at;
     private span_parts;
+    private hierarchical_span_rows;
     private token_span_parts;
     private span_part_unit;
+    private span_part_fallback_unit;
     private span_part_label;
     match_find_condition(utc: number, condition: FindCondition): boolean;
     match_find_value(value: string, matcher: FindMatcher): boolean;
