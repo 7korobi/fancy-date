@@ -35,3 +35,4 @@ export declare const 十二支かな: readonly ["ね", "うし", "とら", "う"
 export declare const マヤツォルキン: readonly ["Imix", "Ik", "Akbal", "Kan", "Chikchan", "Kimi", "Manik", "Lamat", "Muluk", "Ok", "Chuwen", "Eb", "Ben", "Ix", "Men", "Kib", "Kaban", "Etznab", "Kawak", "Ajaw"];
 export declare const マヤハアブ: readonly ["Pop", "Wo", "Sip", "Sotz", "Sek", "Xul", "Yaxkin", "Mol", "Chen", "Yax", "Sak", "Keh", "Mak", "Kankin", "Muwan", "Pax", "Kayab", "Kumku", "Wayeb"];
 export declare const マヤハアブ日: string[];
+export declare const エジプト月名: readonly ["トート", "パオピ", "ハトホル", "コイアク", "トビ", "メシル", "パレムハト", "パレムウデ", "パションス", "パオニ", "エペプ", "メソリ", "余日"];
