@@ -222,6 +222,7 @@ export declare class FancyDate {
     private normalize_span_target;
     private unit_msec;
     private find_span_time;
+    private find_span_time_in_day_direct;
     private find_span_month;
     private find_span_year_start;
     private find_span_time_in_day;
