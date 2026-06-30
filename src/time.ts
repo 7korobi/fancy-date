@@ -1,8 +1,8 @@
 import { mod } from './number'
 
-const SECOND = to_msec('1s')
+export const SECOND = to_msec('1s')
 export const MINUTE = to_msec('1m')
-const HOUR = to_msec('1h')
+export const HOUR = to_msec('1h')
 export const DAY = to_msec('1d')
 const WEEK = to_msec('1w')
 const MONTH = to_msec('30d')

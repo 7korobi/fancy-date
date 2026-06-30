@@ -179,29 +179,29 @@ describe('Gregorio calculate', () => {
     expect(g.table.msec.year.slice(-1)).toEqual([12622780800000])
   })
 
-  test('succ 10/10/10', () => {
+  test('add 10/10/10', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.succ(msec, '10年10月10日'))).toEqual('西暦12年12月12日(水)0時0分0秒')
+    expect(g.format(g.add(msec, '10年10ヶ月10日後'))).toEqual('西暦12年12月12日(水)0時0分0秒')
   })
 
-  test('succ 11/11/11', () => {
+  test('add 11/11/11', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.succ(msec, '11年11月11日'))).toEqual('西暦14年1月13日(月)0時0分0秒')
+    expect(g.format(g.add(msec, '11年11ヶ月11日後'))).toEqual('西暦14年1月13日(月)0時0分0秒')
   })
 
-  test('back 1/1/1', () => {
+  test('sub 1/1/1', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.back(msec, '1年1月1日'))).toEqual('西暦1年1月1日(月)0時0分0秒')
+    expect(g.format(g.sub(msec, '1年1ヶ月1日後'))).toEqual('西暦1年1月1日(月)0時0分0秒')
   })
 
-  test('back 5/5/5', () => {
+  test('sub 5/5/5', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.back(msec, '5年5月5日'))).toEqual('紀元前5年8月28日(水)0時0分0秒')
+    expect(g.format(g.sub(msec, '5年5ヶ月5日後'))).toEqual('紀元前5年8月28日(水)0時0分0秒')
   })
 
-  test('back 10y', () => {
+  test('sub 10y', () => {
     const msec = g.parse('401年1月1日')
-    expect(g.format(g.back(msec, '10年'))).toEqual('西暦391年1月1日(火)0時0分0秒')
+    expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火)0時0分0秒')
   })
 
   test('parse', () => {
@@ -239,8 +239,8 @@ describe('平気法 calculate', () => {
     expect([
       平気法.format(ret),
       平気法.format(平気法.parse('明治9年閏文月1日')),
-      平気法.format(平気法.back(ret, '1ヶ月')),
-      平気法.format(平気法.back(ret, '2ヶ月')),
+      平気法.format(平気法.sub(ret, '1ヶ月後')),
+      平気法.format(平気法.sub(ret, '2ヶ月後')),
     ]).toEqual([
       '明治9年文月1日(先勝)暁九ツ',
       '明治9年閏文月1日(先勝)暁九ツ',
@@ -249,20 +249,18 @@ describe('平気法 calculate', () => {
     ])
   })
 
-  test('閏月をまたぐback 2', () => {
+  test('閏月をまたぐsub/add', () => {
     const tgt = '明治9年文月1日 暁九ツ'
     const ret = 平気法.parse(tgt)
 
     expect([
-      平気法.back(ret, '2ヶ月'),
-      平気法.back(ret, '1ヶ月'),
-      平気法.back(ret, '1N'), // 閏月
+      平気法.sub(ret, '2ヶ月後'),
+      平気法.sub(ret, '1ヶ月後'),
       ret,
-      平気法.succ(ret, '1ヶ月'),
+      平気法.add(ret, '1ヶ月後'),
     ]).toEqual([
       -2946448800000 - 3 * 2592000000 + 1 * 86400000,
       -2946448800000 - 2 * 2592000000 + 1 * 86400000,
-      -2946448800000 - 1 * 2551442889,
       -2946448800000,
       -2946448800000 + 1 * 2592000000,
     ])
@@ -338,10 +336,10 @@ describe('平気法 calculate', () => {
 
     const msec = 平気法.parse('明治10年神無月10日')
     expect([
-      平気法.format(平気法.back(msec, '1年')),
-      平気法.format(平気法.back(msec, '1月')),
-      平気法.format(平気法.succ(msec, '1月')),
-      平気法.format(平気法.succ(msec, '1年')),
+      平気法.format(平気法.sub(msec, '1年後')),
+      平気法.format(平気法.sub(msec, '1ヶ月後')),
+      平気法.format(平気法.add(msec, '1ヶ月後')),
+      平気法.format(平気法.add(msec, '1年後')),
     ]).toEqual([
       '明治9年神無月10日(先勝)暁九ツ',
       '明治10年長月10日(赤口)暁九ツ',
@@ -350,23 +348,6 @@ describe('平気法 calculate', () => {
     ])
   })
 
-  test('back 昭和 ⇒ 明治', () => {
-    const tgt = '明治10年神無月10日(先勝)暁九ツ'
-    const goal = 平気法.parse(tgt)
-
-    const msec = 平気法.parse('昭和10年神無月10日')
-    const ret = 平気法.back(msec, '2G')
-    expect([(ret - goal) / 86400000, ret - goal, 平気法.format(ret)]).toEqual([0, 0, tgt])
-  })
-
-  test('succ 昭和 ⇒ 令和', () => {
-    const tgt = '令和10年神無月10日(先勝)暁九ツ'
-    const goal = 平気法.parse(tgt)
-
-    const msec = 平気法.parse('昭和10年神無月10日')
-    const ret = 平気法.succ(msec, '2G')
-    expect([(ret - goal) / 86400000, ret - goal, 平気法.format(ret)]).toEqual([0, 0, tgt])
-  })
 })
 
 describe('Dr.Stone', () => {
