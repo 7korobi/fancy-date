@@ -1,0 +1,369 @@
+import { FancyDate } from '../fancy-date'
+import type { PLANET } from '../fancy-date'
+import { mod } from '../number'
+import { 北朝元号 } from './eras'
+import {
+  七曜,
+  七曜かな,
+  九星,
+  九星かな,
+  九星rev,
+  九星かなrev,
+  二十七宿,
+  二十七宿かな,
+  二十八宿,
+  二十八宿かな,
+  二十四節季,
+  二十四節季かな,
+  六曜,
+  六曜かな,
+  十干,
+  十干かな,
+  十二支,
+  十二支かな,
+  和風月名,
+  和風月名かな,
+  マヤツォルキン,
+  マヤハアブ,
+  マヤハアブ日,
+  月相,
+  月相かな,
+  時鐘,
+  時鐘かな,
+} from './locale'
+import {
+  London,
+  Madurai,
+  Paris,
+  Romus,
+  Jaypore,
+  zürich,
+  カリスト,
+  太陽,
+  天文東京,
+  東京,
+  火星,
+} from './astro'
+
+// ---  -  I  L -OP R TUVWX -
+// --- efghijkl no qr t v   z
+
+const g = new FancyDate()
+  .spot(...London)
+  .era('西暦', '紀元前')
+  .calendar(
+    ['1970年 木-斗 庚戌-辛巳', 'y年 E-V a-A', 0],
+    [4, 100, 400],
+    [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+  )
+  .algo({
+    M: [12],
+    H: [24],
+    m: [60],
+    s: [60],
+
+    N: [月相, 月相かな],
+
+    E: [七曜, 七曜かな],
+    V: [二十八宿, 二十八宿かな],
+    Z: [二十四節季, 二十四節季かな],
+
+    a: [60],
+    A: [60],
+    B: [十二支, 十二支かな],
+    C: [十干, 十干かな],
+  })
+  .init()
+
+const UTC = g
+const Gregorian = g
+  .dup()
+  .spot(...東京)
+  .init()
+
+const GregorianAstronomical = g
+  .dup()
+  .spot(...天文東京)
+  .init()
+
+const Julian = g
+  .dup()
+  .spot(...Romus)
+  .calendar(
+    ['1582/10/5(金) 壬午-甲戌', 'y/M/d(E) a-A', g.parse('1582年10月15日')!],
+    [4],
+    [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+  )
+  .init()
+
+const アマンタ = g
+  .dup()
+  .spot(...Madurai)
+  .era('サカ歴', '紀元前')
+  .calendar(['1891-09-08(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(E) a-A f-F', 0])
+  .daily('Rise')
+  .algo({
+    f: [九星, 九星かな],
+    F: [九星rev, 九星かなrev],
+  })
+  .init()
+
+const プールニマンタ = g
+  .dup()
+  .spot(...Jaypore)
+  .era('サカ歴', '紀元前')
+  .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(E) a-A f-F', 0])
+  .daily('Rise')
+  .algo({
+    f: [九星, 九星かな],
+    F: [九星rev, 九星かなrev],
+  })
+  .init()
+
+const 平気法 = g
+  .dup()
+  .lang('Gy年Mod日', 'Gy年Mod日(E)Homo')
+  .spot(...東京)
+  .era('皇紀', '紀元前', 北朝元号)
+  .calendar(['2629年12月7日 赤口-昴 己酉-辛巳 九紫火-七赤金', 'y年M月d日 E-V a-A f-F', 0])
+  .daily('Sunny')
+  .algo({
+    E: [六曜, 六曜かな],
+    V: [二十七宿, 二十七宿かな],
+    M: [和風月名, 和風月名かな],
+    H: [時鐘, 時鐘かな, '刻'],
+    m: [
+      ['', '半'],
+      ['', 'はん'],
+      ['', '半'],
+    ],
+    s: [3600],
+    S: [1000],
+
+    f: [九星, 九星かな],
+    F: [九星rev, 九星かなrev],
+  })
+  .init()
+
+const 定気法 = g
+  .dup()
+  .lang('Gy年Mod日', 'Gy年Mod日(E)Homo')
+  .spot(...天文東京)
+  .era('皇紀', '紀元前', 北朝元号)
+  .calendar(['2629年11月24日 仏滅-房 戊申-辛巳 一白水-七赤金', 'y年M月d日 E-V a-A f-F', 0])
+  .daily('Sunny')
+  .algo({
+    E: [六曜, 六曜かな],
+    V: [二十七宿, 二十七宿かな],
+    M: [和風月名, 和風月名かな],
+    H: [時鐘, 時鐘かな, '刻'],
+    m: [
+      ['', '半'],
+      ['', 'はん'],
+      ['', '半'],
+    ],
+    s: [3600],
+    S: [1000],
+
+    f: [九星, 九星かな],
+    F: [九星rev, 九星かなrev],
+  })
+  .init()
+
+const Romulus = g
+  .dup()
+  .spot(...Romus)
+  .era('ロムルス暦', '紀元前')
+  .calendar(['754年1月16日(H) 辛酉-己亥', 'y年M月d日(E) a-A', g.parse('1年3月22日')!], null, [
+    31,
+    30,
+    31,
+    30,
+    31,
+    30,
+    30,
+    31,
+    30,
+    30,
+    null,
+  ])
+  .algo({
+    M: [11],
+    E: [[...'ABCDEFGH'], null] as const,
+  })
+  .init()
+
+// Gregorianは太陽暦なので、衛星未定義でもよい
+const MarsGregorian = g
+  .dup()
+  .spot(火星, 35, 0, 0)
+  .era('西暦', '紀元前')
+  .calendar(
+    ['1年(火) 壬子-辛巳', 'y年(E) a-A', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
+    [1, 7, 70],
+  )
+  .algo({
+    M: [20],
+  })
+  .init()
+
+const Jupiter = g
+  .dup()
+  .spot(カリスト, 35, 0, 0)
+  .era('西暦', '紀元前')
+  .calendar(
+    ['1年(火) 壬子-辛巳', 'y年(E) a-A', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
+  )
+  .algo({
+    H: [10],
+    M: [260],
+    N: [40],
+    Z: [520],
+  })
+  .init()
+
+const フランス革命暦 = g
+  .dup()
+  .spot(...Paris)
+  .era('革命暦', '紀元前')
+  .calendar(
+    ['1年1月1日 1曜 壬子-癸酉', 'y年M月d日 E曜 a-A', g.parse('1792年9月22日')!],
+    [4, 100, 400],
+    [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
+  )
+  .algo({
+    M: [
+      [
+        '葡萄月',
+        '霧月',
+        '霜月',
+        '雪月',
+        '雨月',
+        '風月',
+        '芽月',
+        '花月',
+        '牧月',
+        '収穫月',
+        '熱月',
+        '実月',
+        '休日',
+      ],
+      [
+        'Vendémiaire',
+        'Brumaire',
+        'Frimaire',
+        'Nivôse',
+        'Pluviôse',
+        'Ventôse',
+        'Germinal',
+        'Floréal',
+        'Prairial',
+        'Messidor',
+        'Thermidor',
+        'Fructidor',
+        'Vacances',
+      ],
+    ] as const,
+    H: [10],
+    m: [100],
+    s: [100],
+
+    E: [10],
+  })
+  .init()
+
+const マヤ暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
+const マヤ長期暦13バクトゥン = 13 * 144000
+const マヤ長期暦基準日 = g.parse('2012年12月21日')!
+
+const Maya = g
+  .dup()
+  .lang('Gy年Mod日', 'Mo do')
+  .spot(マヤ暦地球, 0, 0, 0)
+  .era('', '')
+  .calendar(['0年Kankin3日', 'y年Mod日', マヤ長期暦基準日], null, [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    null,
+  ])
+  .algo({
+    M: [マヤハアブ, null],
+    d: [マヤハアブ日, null],
+  })
+  .init()
+
+function mayaKin(utc: number) {
+  return Math.floor((utc - マヤ長期暦基準日) / 86400000) + マヤ長期暦13バクトゥン
+}
+
+export function mayaLongCount(utc: number) {
+  let kin = mayaKin(utc)
+  const baktun = Math.floor(kin / 144000)
+  kin -= baktun * 144000
+  const katun = Math.floor(kin / 7200)
+  kin -= katun * 7200
+  const tun = Math.floor(kin / 360)
+  kin -= tun * 360
+  const uinal = Math.floor(kin / 20)
+  kin -= uinal * 20
+  return `${baktun}.${katun}.${tun}.${uinal}.${kin}`
+}
+
+export function mayaTzolkin(utc: number) {
+  const kin = mayaKin(utc)
+  const number = mod(kin + 3, 13) + 1
+  const name = マヤツォルキン[mod(kin + 19, 20)]
+  return `${number} ${name}`
+}
+
+export function mayaHaab(utc: number) {
+  const kin = mayaKin(utc)
+  const dayOfYear = mod(kin + 348, 365)
+  const monthIndex = Math.floor(dayOfYear / 20)
+  const day = dayOfYear - monthIndex * 20
+  const name = マヤハアブ[monthIndex]
+  return `${day} ${name}`
+}
+
+const Beat = g
+  .dup()
+  .spot(...zürich)
+  .era('@', '紀元前')
+  .algo({
+    H: [1000],
+    m: [100],
+  })
+  .init()
+
+export const Calendar = {
+  UTC,
+  Gregorian,
+  GregorianAstronomical,
+  Julian,
+  アマンタ,
+  プールニマンタ,
+  平気法,
+  定気法,
+  Romulus,
+  MarsGregorian,
+  Jupiter,
+  フランス革命暦,
+  Maya,
+  Beat,
+}
