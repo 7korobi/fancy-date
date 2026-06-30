@@ -34,6 +34,8 @@ export type Span = {
     value: number;
     label: string;
     parts?: readonly SpanPart[];
+    next_at?: number;
+    timeout?: number;
 };
 export type SpanOptions = {
     precise?: boolean | Precision;
@@ -218,6 +220,8 @@ export declare class FancyDate {
     private span_between;
     private with_span_anchor;
     private precise_span;
+    private next_fixed_span_at;
+    private next_precise_span_at;
     private span_parts;
     private span_part_label;
     private fixed_span;

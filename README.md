@@ -24,9 +24,9 @@ bun add fancy-date
 
 1. `sample.ts` を `src/sample/` に分割する。
 2. Span の parser/formatter を内部的に分離する。
+3. Span に次回表示変化時刻・timeout を持たせる。
 
 直近の実装順:
 
-1. Span に次回表示変化時刻・timeout を持たせる。
-2. `perf:*` 系の性能測定スクリプトを追加する。
-3. 数値表現、token 拡張、天文モデル、地域暦を順に検討する。
+1. `perf:*` 系の性能測定スクリプトを追加する。
+2. 数値表現、token 拡張、天文モデル、地域暦を順に検討する。
