@@ -2,6 +2,8 @@ type TDic = [string, string, string, string]
 
 export type Numeral = {
   parse(num: number, appendix?: string): string
+  regex?: string
+  to_number?(text: string): number | null
 }
 
 export function mod(value: number, by: number) {
@@ -9,6 +11,8 @@ export function mod(value: number, by: number) {
 }
 
 export class DIC {
+  private number_map?: Map<string, number>
+  private number_regex?: string
   units: number[]
   join_str: string
   zero_str: string
@@ -64,6 +68,28 @@ export class DIC {
     return this._calc(Math.floor(num * scale), -gap, appendix)
   }
 
+  get regex() {
+    this.ensure_number_map()
+    return this.number_regex!
+  }
+
+  to_number(text: string) {
+    this.ensure_number_map()
+    return this.number_map!.get(text) ?? null
+  }
+
+  private ensure_number_map() {
+    if (this.number_map) return
+    const map = new Map<string, number>()
+    for (let num = 0; num <= 9999; num++) {
+      const text = this.parse(num, '')
+      if (text) map.set(text, num)
+    }
+    const chars = new Set([...map.keys()].join(''))
+    this.number_regex = `[${[...chars].map(escape_regexp).join('')}]+`
+    this.number_map = map
+  }
+
   _calc(num: number, scale_idx: number, appendix: string) {
     let { join_str } = this
     let left_str = ''
@@ -106,6 +132,10 @@ export class DIC {
     const fix = this.fix(base ** scale_idx * n, `${n_str}${scale_str}`, appendix)
     return `${left_str}${join_str}${fix}${big_str}`
   }
+}
+
+function escape_regexp(text: string) {
+  return text.replace(/[\^$.*+?()[\]{}|\-]/g, '\\$&')
 }
 
 export const jpn = {
@@ -237,40 +267,41 @@ export const old_jpn = {
   }),
 }
 
+const ENGLISH_ONES = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+]
+const ENGLISH_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+
 function englishize(num: number) {
   if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
   if (num < 0 || 999999 < num) return `${num}`
-  const ones = [
-    'zero',
-    'one',
-    'two',
-    'three',
-    'four',
-    'five',
-    'six',
-    'seven',
-    'eight',
-    'nine',
-    'ten',
-    'eleven',
-    'twelve',
-    'thirteen',
-    'fourteen',
-    'fifteen',
-    'sixteen',
-    'seventeen',
-    'eighteen',
-    'nineteen',
-  ]
-  const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
   const underThousand = (value: number): string => {
-    if (value < 20) return ones[value]
+    if (value < 20) return ENGLISH_ONES[value]
     if (value < 100) {
       const tail = value % 10
-      return tail ? `${tens[Math.floor(value / 10)]}-${ones[tail]}` : tens[value / 10]
+      return tail ? `${ENGLISH_TENS[Math.floor(value / 10)]}-${ENGLISH_ONES[tail]}` : ENGLISH_TENS[value / 10]
     }
     const tail = value % 100
-    return tail ? `${ones[Math.floor(value / 100)]} hundred ${underThousand(tail)}` : `${ones[value / 100]} hundred`
+    return tail ? `${ENGLISH_ONES[Math.floor(value / 100)]} hundred ${underThousand(tail)}` : `${ENGLISH_ONES[value / 100]} hundred`
   }
   if (num < 1000) return underThousand(num)
   const tail = num % 1000
@@ -278,9 +309,39 @@ function englishize(num: number) {
   return tail ? `${head} ${underThousand(tail)}` : head
 }
 
-function romanize(num: number) {
-  if (!Number.isFinite(num) || num < 1 || num !== Math.floor(num)) return `${num}`
-  const table = [
+function english_to_number(text: string) {
+  const words = text.toLowerCase().split(/[\s-]+/).filter(Boolean)
+  if (!words.length) return null
+  const ones = new Map(ENGLISH_ONES.map((word, index) => [word, index]))
+  const tens = new Map<string, number>(
+    ENGLISH_TENS.flatMap((word, index) => (word ? ([[word, index * 10]] as [string, number][]) : [])),
+  )
+  let total = 0
+  let current = 0
+  for (const word of words) {
+    if (ones.has(word)) {
+      current += ones.get(word)!
+      continue
+    }
+    if (tens.has(word)) {
+      current += tens.get(word)!
+      continue
+    }
+    if (word === 'hundred') {
+      current *= 100
+      continue
+    }
+    if (word === 'thousand') {
+      total += current * 1000
+      current = 0
+      continue
+    }
+    return null
+  }
+  return total + current
+}
+
+const ROMAN_TABLE = [
     [1000, 'M'],
     [900, 'CM'],
     [500, 'D'],
@@ -294,10 +355,13 @@ function romanize(num: number) {
     [5, 'V'],
     [4, 'IV'],
     [1, 'I'],
-  ] as const
+] as const
+
+function romanize(num: number) {
+  if (!Number.isFinite(num) || num < 1 || num !== Math.floor(num)) return `${num}`
   let rest = num
   let text = ''
-  for (const [value, glyph] of table) {
+  for (const [value, glyph] of ROMAN_TABLE) {
     while (value <= rest) {
       text += glyph
       rest -= value
@@ -306,14 +370,27 @@ function romanize(num: number) {
   return text
 }
 
+function roman_to_number(text: string) {
+  if (!/^[ivxlcdm]+$/i.test(text)) return null
+  let rest = text.toUpperCase()
+  let total = 0
+  for (const [value, glyph] of ROMAN_TABLE) {
+    while (rest.startsWith(glyph)) {
+      total += value
+      rest = rest.slice(glyph.length)
+    }
+  }
+  return rest ? null : total
+}
+
 export const english = {
-  lower: { parse: englishize },
-  title: { parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()) },
+  lower: { parse: englishize, regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*', to_number: english_to_number },
+  title: { parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()), regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*', to_number: english_to_number },
 }
 
 export const roman = {
-  upper: { parse: romanize },
-  lower: { parse: (num: number) => romanize(num).toLowerCase() },
+  upper: { parse: romanize, regex: '[IVXLCDM]+', to_number: roman_to_number },
+  lower: { parse: (num: number) => romanize(num).toLowerCase(), regex: '[ivxlcdm]+', to_number: roman_to_number },
 }
 
 const _0__59 = [Array(60)].map((_, i) => i).join(' ')

@@ -165,6 +165,8 @@ export declare class FancyDate {
     daily(is_solor?: string | boolean): this;
     numeral(numeral?: Numeral | null): this;
     private format_number;
+    private parse_number;
+    private number_pattern;
     init(): this;
     yeary_table(utc: number): [string, string, string, string, (string[] | undefined)?][];
     monthry_table(utc: number): [string, string, string, string, (string[] | undefined)?][];

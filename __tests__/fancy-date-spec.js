@@ -537,10 +537,23 @@ describe('Gregorian', () => {
 
   test('numeral dictionaries format numeric tokens', () => {
     const msec = g.parse('2024年3月10日')
-    expect(g.dup().numeral(jpn.漢字).init().format(msec, 'y年M月d日')).toBe('二千廿四年三月十日')
-    expect(g.dup().numeral(english.lower).init().format(msec, 'M/d')).toBe('three/ten')
-    expect(g.dup().numeral(english.title).init().format(msec, 'M/d')).toBe('Three/Ten')
-    expect(g.dup().numeral(roman.upper).init().format(msec, 'M/d')).toBe('III/X')
+    const kanji = g.dup().numeral(jpn.漢字).init()
+    const englishLower = g.dup().numeral(english.lower).init()
+    const englishTitle = g.dup().numeral(english.title).init()
+    const romanUpper = g.dup().numeral(roman.upper).init()
+
+    expect(kanji.format(msec, 'y年M月d日')).toBe('二千廿四年三月十日')
+    expect(kanji.parse('二千廿四年三月十日')).toBe(msec)
+
+    expect(englishLower.format(msec, 'M/d')).toBe('three/ten')
+    expect(englishLower.parse('three/ten', 'M/d')).toBe(g.parse('3月10日', 'M月d日'))
+
+    expect(englishTitle.format(msec, 'M/d')).toBe('Three/Ten')
+    expect(englishTitle.parse('Three/Ten', 'M/d')).toBe(g.parse('3月10日', 'M月d日'))
+
+    expect(romanUpper.format(msec, 'M/d')).toBe('III/X')
+    expect(romanUpper.parse('III/X', 'M/d')).toBe(g.parse('3月10日', 'M月d日'))
+
     expect(g.dup().numeral().init().format(msec, 'yyyy年MM月dd日')).toBe('2024年03月10日')
   })
 
