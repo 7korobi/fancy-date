@@ -630,7 +630,8 @@ export class FancyDate {
     if (source === '今') return { unit: 'second', value: 0, label: '今', parts: [] }
     const match = source.match(/^(.*)(前|後)$/)
     if (!match) throw new Error(`invalid relative time ${text}`)
-    const [, body, direction] = match
+    const [, body] = match
+    const direction = match[2] as '前' | '後'
     if (!body) throw new Error(`invalid relative time ${text}`)
     const sign = direction === '後' ? -1 : 1
     let rest = body
@@ -641,6 +642,10 @@ export class FancyDate {
       parts.push(part)
       rest = rest.slice(part.label.length)
     }
+    return this.format_span(parts, direction)
+  }
+
+  private format_span(parts: readonly SpanPart[], direction: '前' | '後'): Span {
     const activeParts = parts.filter(({ value }) => value)
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
@@ -911,11 +916,7 @@ export class FancyDate {
     const parts = this.span_parts(from, to, 'd')
     for (const part of parts) {
       if (part.value) {
-        return this.with_span_anchor(from, to, {
-          unit: part.unit,
-          value: part.value,
-          label: `${part.label}${part.value < 0 ? '後' : '前'}`,
-        })
+        return this.with_span_anchor(from, to, this.format_span([part], part.value < 0 ? '後' : '前'))
       }
     }
     return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今' })
@@ -936,14 +937,7 @@ export class FancyDate {
   ): Span {
     const parts = this.span_parts(from, to, precision === true ? 's' : precision)
 
-    if (!parts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
-    const primary = parts[0]
-    return {
-      unit: primary.unit,
-      value: primary.value,
-      label: `${parts.map(({ label }) => label).join('')}${to < from ? '後' : '前'}`,
-      parts,
-    }
+    return this.format_span(parts, to < from ? '後' : '前')
   }
 
   private span_parts(from: number, to: number, precision: Precision) {
