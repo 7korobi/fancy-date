@@ -4,6 +4,8 @@ import type { LunisolarDate } from './phenomena/lunisolar';
 import { Tempo } from './time';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
+export { MarsSolarOrbital } from './nasa';
+export type { MarsSolarOrbitalOptions } from './nasa';
 export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean';
 export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar';
 export type { PreparedSpot, PreparedSpotModels } from './prepare';
