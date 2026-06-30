@@ -199,6 +199,7 @@ export declare class FancyDate {
     span_obj(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
     private add_span;
     private parse_span;
+    private format_span;
     private span_parts_of;
     private invert_span;
     private parse_span_part;
