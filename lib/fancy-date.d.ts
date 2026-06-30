@@ -39,12 +39,6 @@ export type SpanOptions = {
     precise?: boolean | Precision;
 };
 export type SpanLike = string | Span | SpanPart | readonly SpanPart[];
-export type RelativeTimeUnit = Unit;
-export type RelativeTimePrecision = Precision;
-export type RelativeTimeDistancePart = SpanPart;
-export type RelativeTimeDistance = Span;
-export type RelativeTimeDistanceOptions = SpanOptions;
-export type RelativeTimeAddition = SpanLike;
 export type Tempos = {
     Zz: Tempo;
     A: Tempo;
@@ -76,7 +70,7 @@ export type Tempos = {
     x: Tempo | undefined;
     y: Tempo;
 };
-type DateInput = number | Tempos | string;
+type DateLike = number | Tempos | string;
 type NUMBER_RANGE = [number, number?];
 type MEASURE = {
     range: NUMBER_RANGE;
@@ -192,57 +186,46 @@ export declare class FancyDate {
         春土用: Tempo;
         次立春: Tempo;
     };
-    succ_index(diff: string): TempoIdxs;
-    back_index(diff: string): TempoIdxs;
-    succ_msec(utc: number, diff: SpanLike): number;
-    back_msec(utc: number, diff: SpanLike): number;
-    succ(utc: DateInput, diff: SpanLike): number;
-    back(utc: DateInput, diff: SpanLike): number;
-    slide(utc: number, diff?: TempoDiff): number;
+    succ(utc: DateLike, diff: SpanLike): number;
+    back(utc: DateLike, diff: SpanLike): number;
     parse(tgt: string | TempoIdxs, str?: string): number;
     parse_obj(tgt: string | TempoIdxs, str?: string): TempoIdxs;
-    format(utc: DateInput, str?: string): string;
-    add(utc: DateInput, span: SpanLike): number;
-    add_obj(utc: DateInput, span: SpanLike): Tempos;
-    sub(utc: DateInput, span: SpanLike): number;
-    sub_obj(utc: DateInput, span: SpanLike): Tempos;
-    span(to: DateInput, from?: DateInput | SpanOptions, options?: SpanOptions): string;
-    span_obj(to: DateInput, from?: DateInput | SpanOptions, options?: SpanOptions): Span;
-    relative_time_obj(text: string): Span;
-    relative_time_add(utc: DateInput, distance: SpanLike): number;
+    format(utc: DateLike, str?: string): string;
+    add(utc: DateLike, span: SpanLike): number;
+    add_obj(utc: DateLike, span: SpanLike): Tempos;
+    sub(utc: DateLike, span: SpanLike): number;
+    sub_obj(utc: DateLike, span: SpanLike): Tempos;
+    span(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions): string;
+    span_obj(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
     private add_span;
-    relative_time_parse(text: string): Span;
-    private span_like_parts;
-    private invert_span_like;
-    private parse_relative_time_part;
-    private relative_time_target_digits;
-    private normalize_relative_time_target_digits;
-    private relative_time_unit_msec;
-    private find_time_by_relative_digits;
-    private find_relative_time_month;
-    private find_relative_time_year_start;
-    private find_time_in_day_by_relative_digits;
-    private compare_relative_time_digits;
-    private relative_time_interval_for_rank;
-    private relative_time_source_since;
-    private clamp_relative_time_since;
+    private parse_span;
+    private span_parts_of;
+    private invert_span;
+    private parse_span_part;
+    private span_target;
+    private normalize_span_target;
+    private unit_msec;
+    private find_span_time;
+    private find_span_month;
+    private find_span_year_start;
+    private find_span_time_in_day;
+    private compare_span_digits;
+    private interval_for_rank;
+    private source_since;
+    private clamp_since;
     find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]): number[];
-    relative_time_distance(from: number, to?: number, { precise }?: RelativeTimeDistanceOptions): RelativeTimeDistance;
-    private with_relative_time_anchor;
-    private relative_time_distance_precise;
-    private relative_time_parts;
-    private relative_time_part_label;
-    private relative_time_distance_fixed;
-    private count_full_years;
-    private count_full_months;
-    private is_before_year_anniversary;
-    private count_tempo_boundaries;
+    private span_between;
+    private with_span_anchor;
+    private precise_span;
+    private span_parts;
+    private span_part_label;
+    private fixed_span;
     match_find_condition(utc: number, condition: FindCondition): boolean;
     match_find_value(value: string, matcher: FindMatcher): boolean;
     private to_utc;
     private to_tempos_input;
     private is_tempos;
-    private span_from_options;
+    private span_args;
     private is_span_options;
     private is_span_text;
     dup(): FancyDate;
@@ -310,7 +293,7 @@ export declare class FancyDate {
     lunar(utc: any, day?: Tempo): import("./orbital-model").LunarObservation;
     lunar_apsis(kind: LunarApsisKind, near: number): import("./orbital-model").LunarApsis;
     lunar_node(kind: LunarNodeKind, near: number): import("./orbital-model").LunarNode;
-    節句(utc: number, { M, d, B, E }?: Tempos): {
+    節句(_utc: number, _tempos?: Tempos): {
         カトリック: {
             万聖節: number[];
             万霊節: number[];
@@ -335,7 +318,7 @@ export declare class FancyDate {
             正月事始め: number[];
         };
     };
-    雑節(utc: number, { Zz, u, d }?: Tempos): {
+    雑節(utc: number, { Zz, d }?: Tempos): {
         立春: Tempo;
         立夏: Tempo;
         立秋: Tempo;
@@ -458,14 +441,10 @@ export declare class FancyDate {
     }): string[];
     to_tempos(utc: number): Tempos;
     get_dic(tgt: string, tokens: string[], reg: RegExp): TempoIdxs;
-    get_diff(src: string, f: {
-        (num: string | null): number;
-    }): TempoIdxs;
     index(src: string, str?: string, _disuse?: number): TempoIdxs;
     regex(tokens: any): RegExp;
     to_table(utc: number, bk: string, ik: string, has_notes?: boolean): [string, string, string, string, (string[] | undefined)?][];
     parse_by(data: TempoIdxs, diff?: TempoDiff): number;
     format_by(tempos: Tempos, str?: string): string;
-    slide_by(o: Tempos, diff?: TempoDiff): number;
     tree(): (Indexer | (string[] | Indexer[])[])[];
 }

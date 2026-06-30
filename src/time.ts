@@ -339,7 +339,7 @@ export function to_sec(str: string, { strict = false }: DurationOptions = {}): n
   let consumed = ''
   str.replace(
     /(\d+)(([ヶヵかカケ箇]?月|[smhdwy秒分時日週年])[間]?(半$)?)|0/g,
-    (full, num_str: string, fullunit, unit: string, appendix: string) => {
+    (full, num_str: string, _fullunit, unit: string, appendix: string) => {
       consumed += full
       let num = Number(num_str)
       if (!num) return ''
