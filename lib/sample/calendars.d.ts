@@ -18,4 +18,5 @@ export declare const Calendar: {
     Maya: FancyDate;
     Beat: FancyDate;
     エジプト民用暦: FancyDate;
+    コプト暦: FancyDate;
 };

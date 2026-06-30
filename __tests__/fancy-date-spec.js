@@ -627,11 +627,33 @@ describe('エジプト民用暦', () => {
     const c = Calendar.エジプト民用暦
     const epoch = c.parse('1年1月1日')
 
-    expect(c.format(epoch, 'Gy年Mod日')).toBe('エジプト暦1年トート1日')
-    expect(c.format(epoch + to_msec('359d'), 'Gy年Mod日')).toBe('エジプト暦1年メソリ30日')
-    expect(c.format(epoch + to_msec('360d'), 'Gy年Mod日')).toBe('エジプト暦1年余日1日')
-    expect(c.format(epoch + to_msec('364d'), 'Gy年Mod日')).toBe('エジプト暦1年余日5日')
-    expect(c.format(epoch + to_msec('365d'), 'Gy年Mod日')).toBe('エジプト暦2年トート1日')
+    expect(c.dic.geo).toEqual([30, 31.2, 30])
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'y年M月d日')).toBe('-746年2月26日')
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Y-ww-E')).toBe('-746-09-日')
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'GY-ww-E')).toBe('紀元前747-09-日')
+    expect(Calendar.Julian.format(Calendar.Julian.parse('-746年2月26日'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
+    expect(Calendar.Julian.format(epoch + to_msec('12h'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
+    expect(c.format(epoch, 'Gy年Mod日')).toBe('ナボナサル紀元1年トート1日')
+    expect(c.format(epoch + to_msec('359d'), 'Gy年Mod日')).toBe('ナボナサル紀元1年メソリ30日')
+    expect(c.format(epoch + to_msec('360d'), 'Gy年Mod日')).toBe('ナボナサル紀元1年余日1日')
+    expect(c.format(epoch + to_msec('364d'), 'Gy年Mod日')).toBe('ナボナサル紀元1年余日5日')
+    expect(c.format(epoch + to_msec('365d'), 'Gy年Mod日')).toBe('ナボナサル紀元2年トート1日')
+  })
+})
+
+describe('コプト暦', () => {
+  test('3 mod 4 年を閏年として余日6日を持つ', () => {
+    const c = Calendar.コプト暦
+    const common = c.parse('1738年1月1日')
+    const leap = c.parse('1739年1月1日')
+
+    expect(c.dic.geo).toEqual([31.2, 29.9, 30])
+    expect(c.format(common + to_msec('364d'), 'Gy年Mod日')).toBe('コプト暦1738年ナシー5日')
+    expect(c.format(common + to_msec('365d'), 'Gy年Mod日')).toBe('コプト暦1739年トウト1日')
+    expect(c.format(leap + to_msec('364d'), 'Gy年Mod日')).toBe('コプト暦1739年ナシー5日')
+    expect(c.format(leap + to_msec('365d'), 'Gy年Mod日')).toBe('コプト暦1739年ナシー6日')
+    expect(c.format(leap + to_msec('366d'), 'Gy年Mod日')).toBe('コプト暦1740年トウト1日')
   })
 })
 

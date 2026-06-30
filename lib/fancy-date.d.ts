@@ -20,6 +20,7 @@ type RANGE_CALC = 'year' | 'month' | 'hour' | 'minute' | 'second';
 type ZERO_CALC = 'period' | 'era' | 'year60' | 'year12' | 'year10' | 'year_s' | 'spring' | 'season' | 'moon' | 'week' | 'day60' | 'day28' | 'day12' | 'day10' | 'day_9' | 'day' | 'jd';
 export type TempoDiff = TOKENS<ALL_DIC, number>;
 export type TempoIdxs = TOKENS<ALL_DIC, number> & {
+    G_is_past?: boolean;
     M_is_leap: boolean;
 };
 type TempoMonth = {
@@ -105,6 +106,7 @@ type IDIC = IIDX & {
     eras: readonly ERA[];
     month_divs: number[];
     leaps: number[];
+    leap_shift?: number;
     start: [string, string, number];
     is_solor: boolean;
 };
@@ -166,7 +168,7 @@ export declare class FancyDate {
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;
     era(era: string, past: string, eras?: readonly ERA[]): this;
-    calendar(start?: (string | number)[], leaps?: number[] | null, month_divs?: (number | null)[] | null): this;
+    calendar(start?: (string | number)[], leaps?: number[] | null, month_divs?: (number | null)[] | null, leap_shift?: number): this;
     algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this;
     daily(is_solor?: string | boolean): this;
     numeral(numeral?: Numeral | null): this;
