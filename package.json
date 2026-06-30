@@ -35,6 +35,8 @@
     "jest:update": "jest -u --config config/jest.js --rootDir .",
     "metrics:mean": "bun run compile && node scripts/mean-metrics.js",
     "metrics:naoj": "bun run compile && node scripts/naoj-metrics.js",
+    "perf": "bun run perf:core",
+    "perf:core": "bun run compile && node scripts/perf.js",
     "compile": "bun run compile:ts",
     "compile:ts": "tsc -p .",
     "type": "tsc -p . --noEmit"
