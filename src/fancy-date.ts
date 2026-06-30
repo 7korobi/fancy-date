@@ -130,6 +130,8 @@ export type Span = {
   value: number
   label: string
   parts?: readonly SpanPart[]
+  next_at?: number
+  timeout?: number
 }
 export type SpanOptions = {
   precise?: boolean | Precision
@@ -902,27 +904,59 @@ export class FancyDate {
     if (!Number.isFinite(diff)) {
       return this.with_span_anchor(from, to, { unit: 'year', value: NaN, label: '？？？' })
     }
-    if (precise) return this.with_span_anchor(from, to, this.precise_span(from, to, precise))
+    if (precise) {
+      const precision = precise === true ? 's' : precise
+      return this.with_span_anchor(
+        from,
+        to,
+        this.precise_span(from, to, precision),
+        this.next_precise_span_at(to, precision),
+      )
+    }
     if (Math.abs(diff) < MINUTE) {
-      return this.with_span_anchor(from, to, this.fixed_span(diff, 'second', SECOND, '秒'))
+      return this.with_span_anchor(
+        from,
+        to,
+        this.fixed_span(diff, 'second', SECOND, '秒'),
+        this.next_fixed_span_at(from, to, SECOND),
+      )
     }
     if (Math.abs(diff) < HOUR) {
-      return this.with_span_anchor(from, to, this.fixed_span(diff, 'minute', MINUTE, '分'))
+      return this.with_span_anchor(
+        from,
+        to,
+        this.fixed_span(diff, 'minute', MINUTE, '分'),
+        this.next_fixed_span_at(from, to, MINUTE),
+      )
     }
     if (Math.abs(diff) < this.calc.msec.day) {
-      return this.with_span_anchor(from, to, this.fixed_span(diff, 'hour', HOUR, '時間'))
+      return this.with_span_anchor(
+        from,
+        to,
+        this.fixed_span(diff, 'hour', HOUR, '時間'),
+        this.next_fixed_span_at(from, to, HOUR),
+      )
     }
 
     const parts = this.span_parts(from, to, 'd')
     for (const part of parts) {
       if (part.value) {
-        return this.with_span_anchor(from, to, this.format_span([part], part.value < 0 ? '後' : '前'))
+        return this.with_span_anchor(
+          from,
+          to,
+          this.format_span([part], part.value < 0 ? '後' : '前'),
+          this.to_tempos(to).d.next_at,
+        )
       }
     }
-    return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今' })
+    return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今' }, this.to_tempos(to).d.next_at)
   }
 
-  private with_span_anchor(from: number, to: number, span: Span) {
+  private with_span_anchor(from: number, to: number, span: Span, next_at?: number) {
+    if (Number.isFinite(next_at) && to < next_at!) {
+      span.next_at = next_at
+      span.timeout = next_at! - to
+    }
     Object.defineProperty(span, span_anchor, {
       value: [from, to, this] as const,
       enumerable: false,
@@ -933,11 +967,22 @@ export class FancyDate {
   private precise_span(
     from: number,
     to: number,
-    precision: true | Precision,
+    precision: Precision,
   ): Span {
-    const parts = this.span_parts(from, to, precision === true ? 's' : precision)
+    const parts = this.span_parts(from, to, precision)
 
     return this.format_span(parts, to < from ? '後' : '前')
+  }
+
+  private next_fixed_span_at(target: number, at: number, size: number) {
+    const diff = at - target
+    if (0 <= diff) return target + (Math.floor(diff / size) + 1) * size
+    const count = Math.floor((target - at) / size)
+    return count ? target - (count - 1) * size : target + size
+  }
+
+  private next_precise_span_at(at: number, precision: Precision) {
+    return this.to_tempos(at)[precision].next_at
   }
 
   private span_parts(from: number, to: number, precision: Precision) {

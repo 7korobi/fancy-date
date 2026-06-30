@@ -182,4 +182,35 @@ describe('NAOJ lunisolar fixtures', () => {
     )
     expect(Calendar.定気法.add(base, '1年1刻半1112秒154ミリ秒後')).toBe(target)
   })
+
+  test('定気法 span exposes next label update time', () => {
+    const base = Calendar.GregorianAstronomical.parse('2024年3月10日')
+
+    const seconds = Calendar.定気法.span_obj(base + to_msec('10s'), base)
+    expect(seconds).toMatchObject({
+      label: '10秒後',
+      next_at: base + to_msec('1s'),
+      timeout: to_msec('1s'),
+    })
+
+    const nextDay = Calendar.GregorianAstronomical.parse('2024年3月11日')
+    const day = Calendar.定気法.span_obj(nextDay, base)
+    const dayBoundary = Calendar.定気法.to_tempos(base).d.next_at
+    expect(day).toMatchObject({
+      label: '1日後',
+      next_at: dayBoundary,
+      timeout: dayBoundary - base,
+    })
+
+    const nextYear = Calendar.GregorianAstronomical.parse('2025年2月28日')
+    const precise = Calendar.定気法.span_obj(Calendar.定気法.to_tempos(nextYear).m.next_at, base, {
+      precise: 'm',
+    })
+    const minuteBoundary = Calendar.定気法.to_tempos(base).m.next_at
+    expect(precise).toMatchObject({
+      label: '1年半後',
+      next_at: minuteBoundary,
+      timeout: minuteBoundary - base,
+    })
+  })
 })
