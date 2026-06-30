@@ -26,6 +26,7 @@ import {
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
+  エジプト月名,
   月相,
   月相かな,
   時鐘,
@@ -351,6 +352,31 @@ const Beat = g
   })
   .init()
 
+const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
+const エジプト民用暦 = g
+  .dup()
+  .spot(エジプト民用暦地球, 30, 31, 30)
+  .era('エジプト暦', '紀元前')
+  .calendar(['1年トート1日', 'y年Mod日', g.parse('1900年9月11日')!], [], [
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    null,
+  ])
+  .algo({
+    M: [エジプト月名, null],
+  })
+  .init()
+
 export const Calendar = {
   UTC,
   Gregorian,
@@ -366,4 +392,5 @@ export const Calendar = {
   フランス革命暦,
   Maya,
   Beat,
+  エジプト民用暦,
 }

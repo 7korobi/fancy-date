@@ -622,6 +622,19 @@ describe('Maya', () => {
   })
 })
 
+describe('エジプト民用暦', () => {
+  test('365日固定の月構成で進む', () => {
+    const c = Calendar.エジプト民用暦
+    const epoch = c.parse('1年1月1日')
+
+    expect(c.format(epoch, 'Gy年Mod日')).toBe('エジプト暦1年トート1日')
+    expect(c.format(epoch + to_msec('359d'), 'Gy年Mod日')).toBe('エジプト暦1年メソリ30日')
+    expect(c.format(epoch + to_msec('360d'), 'Gy年Mod日')).toBe('エジプト暦1年余日1日')
+    expect(c.format(epoch + to_msec('364d'), 'Gy年Mod日')).toBe('エジプト暦1年余日5日')
+    expect(c.format(epoch + to_msec('365d'), 'Gy年Mod日')).toBe('エジプト暦2年トート1日')
+  })
+})
+
 describe('火星', () => {
   test('NASA style Mars solar model resolves solar season phases', () => {
     const mars = new MarsSolarOrbital()
