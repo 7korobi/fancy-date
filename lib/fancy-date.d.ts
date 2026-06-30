@@ -15,14 +15,37 @@ type ALGO_DIC = 'A' | 'B' | 'C' | 'E' | 'F' | 'H' | 'M' | 'N' | 'S' | 'V' | 'Z' 
 type MSEC_CALC = 'period' | 'year' | 'season' | 'month' | 'moon' | 'week' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
 type RANGE_CALC = 'year' | 'month' | 'hour' | 'minute' | 'second';
 type ZERO_CALC = 'period' | 'era' | 'year60' | 'year12' | 'year10' | 'year_s' | 'spring' | 'season' | 'moon' | 'week' | 'day60' | 'day28' | 'day12' | 'day10' | 'day_9' | 'day' | 'jd';
-type TempoDiff = TOKENS<ALL_DIC, number>;
-type TempoIdxs = TOKENS<ALL_DIC, number> & {
+export type TempoDiff = TOKENS<ALL_DIC, number>;
+export type TempoIdxs = TOKENS<ALL_DIC, number> & {
     M_is_leap: boolean;
 };
 type TempoMonth = {
     is_leap: boolean;
 };
-type Tempos = {
+export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
+export type Precision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
+export type SpanPart = {
+    unit: Unit;
+    value: number;
+    label: string;
+};
+export type Span = {
+    unit: Unit;
+    value: number;
+    label: string;
+    parts?: readonly SpanPart[];
+};
+export type SpanOptions = {
+    precise?: boolean | Precision;
+};
+export type SpanLike = string | Span | SpanPart | readonly SpanPart[];
+export type RelativeTimeUnit = Unit;
+export type RelativeTimePrecision = Precision;
+export type RelativeTimeDistancePart = SpanPart;
+export type RelativeTimeDistance = Span;
+export type RelativeTimeDistanceOptions = SpanOptions;
+export type RelativeTimeAddition = SpanLike;
+export type Tempos = {
     Zz: Tempo;
     A: Tempo;
     B: Tempo;
@@ -53,6 +76,7 @@ type Tempos = {
     x: Tempo | undefined;
     y: Tempo;
 };
+type DateInput = number | Tempos | string;
 type NUMBER_RANGE = [number, number?];
 type MEASURE = {
     range: NUMBER_RANGE;
@@ -96,11 +120,12 @@ type IndexFactory = (this: Indexer, s: string) => number;
 type LabelFactory = (list: readonly string[] | null, val: Tempo & {
     is_leap: boolean;
 }, size: number) => string;
-type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null];
+type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null] | readonly [readonly string[], readonly string[] | null, string | readonly string[]];
 declare class Indexer {
     tempo?: Tempo;
     list: readonly string[];
     rubys: readonly string[];
+    relatives?: string | readonly string[];
     length: number;
     zero: number;
     regex: string;
@@ -169,16 +194,57 @@ export declare class FancyDate {
     };
     succ_index(diff: string): TempoIdxs;
     back_index(diff: string): TempoIdxs;
-    succ_msec(utc: number, diff: string): number;
-    back_msec(utc: number, diff: string): number;
-    succ(utc: number, diff: string): number;
-    back(utc: number, diff: string): number;
+    succ_msec(utc: number, diff: SpanLike): number;
+    back_msec(utc: number, diff: SpanLike): number;
+    succ(utc: DateInput, diff: SpanLike): number;
+    back(utc: DateInput, diff: SpanLike): number;
     slide(utc: number, diff?: TempoDiff): number;
-    parse(tgt: string, str?: string): number;
-    format(utc: number, str?: string): string;
+    parse(tgt: string | TempoIdxs, str?: string): number;
+    parse_obj(tgt: string | TempoIdxs, str?: string): TempoIdxs;
+    format(utc: DateInput, str?: string): string;
+    add(utc: DateInput, span: SpanLike): number;
+    add_obj(utc: DateInput, span: SpanLike): Tempos;
+    sub(utc: DateInput, span: SpanLike): number;
+    sub_obj(utc: DateInput, span: SpanLike): Tempos;
+    span(to: DateInput, from?: DateInput | SpanOptions, options?: SpanOptions): string;
+    span_obj(to: DateInput, from?: DateInput | SpanOptions, options?: SpanOptions): Span;
+    relative_time_obj(text: string): Span;
+    relative_time_add(utc: DateInput, distance: SpanLike): number;
+    private add_span;
+    relative_time_parse(text: string): Span;
+    private span_like_parts;
+    private invert_span_like;
+    private parse_relative_time_part;
+    private relative_time_target_digits;
+    private normalize_relative_time_target_digits;
+    private relative_time_unit_msec;
+    private find_time_by_relative_digits;
+    private find_relative_time_month;
+    private find_relative_time_year_start;
+    private find_time_in_day_by_relative_digits;
+    private compare_relative_time_digits;
+    private relative_time_interval_for_rank;
+    private relative_time_source_since;
+    private clamp_relative_time_since;
     find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]): number[];
+    relative_time_distance(from: number, to?: number, { precise }?: RelativeTimeDistanceOptions): RelativeTimeDistance;
+    private with_relative_time_anchor;
+    private relative_time_distance_precise;
+    private relative_time_parts;
+    private relative_time_part_label;
+    private relative_time_distance_fixed;
+    private count_full_years;
+    private count_full_months;
+    private is_before_year_anniversary;
+    private count_tempo_boundaries;
     match_find_condition(utc: number, condition: FindCondition): boolean;
     match_find_value(value: string, matcher: FindMatcher): boolean;
+    private to_utc;
+    private to_tempos_input;
+    private is_tempos;
+    private span_from_options;
+    private is_span_options;
+    private is_span_text;
     dup(): FancyDate;
     def_regex(): void;
     def_to_idx(): void;

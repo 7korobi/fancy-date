@@ -222,6 +222,7 @@ export declare const Calendar: {
     アマンタ: FancyDate;
     プールニマンタ: FancyDate;
     平気法: FancyDate;
+    定気法: FancyDate;
     Romulus: FancyDate;
     MarsGregorian: FancyDate;
     Jupiter: FancyDate;

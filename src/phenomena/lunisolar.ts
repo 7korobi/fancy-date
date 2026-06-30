@@ -13,6 +13,8 @@ export type LunisolarDate = {
   month: number
   day: number
   is_leap: boolean
+  year_start_at: number
+  next_year_start_at: number
   day_start_at: number
   last_at: number
   next_at: number
@@ -21,7 +23,10 @@ export type LunisolarDate = {
   principal_term?: LunisolarPrincipalTerm
 }
 
-type LunisolarMonth = Omit<LunisolarDate, 'year' | 'day' | 'day_start_at'> & {
+type LunisolarMonth = Omit<
+  LunisolarDate,
+  'year' | 'day' | 'day_start_at' | 'year_start_at' | 'next_year_start_at'
+> & {
   year?: number
 }
 
@@ -42,10 +47,22 @@ export function lunisolar(options: LunisolarOptions, utc: number): LunisolarDate
   if (!month || month.year == null) {
     throw new Error('failed to resolve lunisolar month')
   }
+  const currentMonth = month
+  const currentYear = month.year
+  const yearStartAt =
+    months.find(({ year, month, is_leap }) =>
+      year === currentYear && month === 1 && !is_leap,
+    )?.last_at ?? currentMonth.last_at
+  const nextYearStartAt =
+    months.find(({ year, month, is_leap }) =>
+      year === currentYear + 1 && month === 1 && !is_leap,
+    )?.last_at ?? currentMonth.next_at
   const day = to_tempo_bare(options.dayMsec, options.dayZero, utc)
   return {
     ...month,
     year: month.year,
+    year_start_at: yearStartAt,
+    next_year_start_at: nextYearStartAt,
     day: Math.floor((day.last_at - month.last_at) / options.dayMsec) + 1,
     day_start_at: day.last_at,
   }

@@ -10,6 +10,8 @@ export type LunisolarDate = {
     month: number;
     day: number;
     is_leap: boolean;
+    year_start_at: number;
+    next_year_start_at: number;
     day_start_at: number;
     last_at: number;
     next_at: number;

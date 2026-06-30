@@ -1,4 +1,4 @@
-import { hasLunarEvents, hasLunarOrbitEvents } from './orbital-model'
+import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import { mod } from './number'
 import type {
   LunarApsisKind,
@@ -23,7 +23,7 @@ import {
   雑節_by_phase as resolve雑節ByPhase,
 } from './phenomena/solar'
 import { prepareSpot } from './prepare'
-import { Tempo, to_tempo_by, to_tempo_bare } from './time'
+import { DAY, HOUR, MINUTE, SECOND, Tempo, to_tempo_by, to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
@@ -113,8 +113,8 @@ type ZERO_CALC =
   | 'day'
   | 'jd'
 
-type TempoDiff = TOKENS<ALL_DIC, number>
-type TempoIdxs = TOKENS<ALL_DIC, number> & {
+export type TempoDiff = TOKENS<ALL_DIC, number>
+export type TempoIdxs = TOKENS<ALL_DIC, number> & {
   M_is_leap: boolean
 }
 type TempoMonth = {
@@ -124,7 +124,55 @@ type TempoDrillDown = {
   length: number
   path: string
 }
-type Tempos = {
+export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
+export type Precision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
+export type SpanPart = {
+  unit: Unit
+  value: number
+  label: string
+}
+export type Span = {
+  unit: Unit
+  value: number
+  label: string
+  parts?: readonly SpanPart[]
+}
+export type SpanOptions = {
+  precise?: boolean | Precision
+}
+export type SpanLike =
+  | string
+  | Span
+  | SpanPart
+  | readonly SpanPart[]
+export type RelativeTimeUnit = Unit
+export type RelativeTimePrecision = Precision
+export type RelativeTimeDistancePart = SpanPart
+export type RelativeTimeDistance = Span
+export type RelativeTimeDistanceOptions = SpanOptions
+export type RelativeTimeAddition = SpanLike
+const relative_time_anchor = Symbol('relative_time_anchor')
+type RelativeTimeAnchoredDistance = Span & {
+  [relative_time_anchor]?: readonly [from: number, to: number, calendar: FancyDate]
+}
+type RelativeTimeTargetDigits = {
+  u: number
+  y: number
+  M: number
+  d: number
+  H: number
+  m: number
+  s: number
+  S: number
+  M_is_leap: boolean
+  changedRank: number
+  near: number
+  sourceDaySince: number
+  sourceHourSince: number
+  sourceMinuteSince: number
+  sourceSecondSince: number
+}
+export type Tempos = {
   Zz: Tempo
   A: Tempo
   B: Tempo
@@ -155,6 +203,7 @@ type Tempos = {
   x: Tempo | undefined
   y: Tempo
 }
+type DateInput = number | Tempos | string
 
 const core_tokens = 'GHMSdmpsy'
 const main_tokens = 'ABCEFabcfx' + core_tokens
@@ -323,11 +372,16 @@ type LabelFactory = (
   size: number,
 ) => string
 
-type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null]
+type IndexerProps =
+  | []
+  | [number]
+  | readonly [readonly string[], readonly string[] | null]
+  | readonly [readonly string[], readonly string[] | null, string | readonly string[]]
 class Indexer {
   tempo?: Tempo
   list: readonly string[] = []
   rubys: readonly string[] = []
+  relatives?: string | readonly string[]
   length: number = 0
   zero: number = 0
   regex: string = ''
@@ -338,7 +392,7 @@ class Indexer {
   to_ruby: LabelFactory = () => ''
 
   constructor(arg: IndexerProps) {
-    const [list, rubys] = arg
+    const [list, rubys, relatives] = arg
     const [zero] = arg.slice(-1)
     if (list instanceof Array) {
       this.list = list
@@ -349,6 +403,22 @@ class Indexer {
     }
     if (rubys instanceof Array && rubys.length === this.length) {
       this.rubys = rubys
+    }
+    if (relatives instanceof Array && relatives.length === this.length) {
+      Object.defineProperty(this, 'relatives', {
+        configurable: true,
+        enumerable: false,
+        value: relatives,
+        writable: false,
+      })
+    }
+    if ('string' === typeof relatives) {
+      Object.defineProperty(this, 'relatives', {
+        configurable: true,
+        enumerable: false,
+        value: relatives,
+        writable: false,
+      })
     }
     if ('number' === typeof zero) {
       this.zero = zero
@@ -545,28 +615,302 @@ export class FancyDate {
     return this.get_diff(diff, (n) => 0 - Number(n))
   }
 
-  succ_msec(utc: number, diff: string) {
+  succ_msec(utc: number, diff: SpanLike) {
     return this.succ(utc, diff) - utc
   }
-  back_msec(utc: number, diff: string) {
+  back_msec(utc: number, diff: SpanLike) {
     return this.back(utc, diff) - utc
   }
 
-  succ(utc: number, diff: string) {
-    return this.slide(utc, this.succ_index(diff))
+  succ(utc: DateInput, diff: SpanLike) {
+    return this.add(utc, diff)
   }
-  back(utc: number, diff: string) {
-    return this.slide(utc, this.back_index(diff))
+  back(utc: DateInput, diff: SpanLike) {
+    return this.sub(utc, diff)
   }
   slide(utc: number, diff?: TempoDiff) {
     return this.slide_by(this.to_tempos(utc), diff)
   }
 
-  parse(tgt: string, str?: string) {
-    return this.parse_by(this.index(tgt, str))
+  parse(tgt: string | TempoIdxs, str?: string) {
+    return this.parse_by(this.parse_obj(tgt, str))
   }
-  format(utc: number, str?: string) {
-    return this.format_by(this.to_tempos(utc), str)
+  parse_obj(tgt: string | TempoIdxs, str?: string) {
+    return 'string' === typeof tgt ? this.index(tgt, str) : cloneValue(tgt)
+  }
+  format(utc: DateInput, str?: string) {
+    return this.format_by(this.to_tempos_input(utc), str)
+  }
+
+  add(utc: DateInput, span: SpanLike) {
+    return this.add_span(this.to_utc(utc), span)
+  }
+  add_obj(utc: DateInput, span: SpanLike) {
+    return this.to_tempos(this.add(utc, span))
+  }
+  sub(utc: DateInput, span: SpanLike) {
+    return this.add_span(this.to_utc(utc), this.invert_span_like(span))
+  }
+  sub_obj(utc: DateInput, span: SpanLike) {
+    return this.to_tempos(this.sub(utc, span))
+  }
+  span(to: DateInput, from?: DateInput | SpanOptions, options?: SpanOptions) {
+    return this.span_obj(to, from, options).label
+  }
+  span_obj(to: DateInput, from?: DateInput | SpanOptions, options: SpanOptions = {}) {
+    if (this.is_span_text(to, from)) return this.relative_time_parse(to)
+    const [fromAt, spanOptions] = this.span_from_options(from, options)
+    return this.relative_time_distance(this.to_utc(to), fromAt, spanOptions)
+  }
+  relative_time_obj(text: string): Span {
+    return this.relative_time_parse(text)
+  }
+
+  relative_time_add(utc: DateInput, distance: SpanLike) {
+    return this.add(utc, distance)
+  }
+
+  private add_span(utc: number, span: SpanLike) {
+    const anchor = (span as RelativeTimeAnchoredDistance)[relative_time_anchor]
+    if (anchor?.[1] === utc && anchor[2] === this) return anchor[0]
+    const parts = this.span_like_parts(span)
+    const target = this.relative_time_target_digits(utc, parts)
+    return this.find_time_by_relative_digits(target, utc)
+  }
+
+  relative_time_parse(text: string): Span {
+    const source = text.trim()
+    if (source === '今') return { unit: 'second', value: 0, label: '今', parts: [] }
+    const match = source.match(/^(.*)(前|後)$/)
+    if (!match) throw new Error(`invalid relative time ${text}`)
+    const [, body, direction] = match
+    if (!body) throw new Error(`invalid relative time ${text}`)
+    const sign = direction === '後' ? -1 : 1
+    let rest = body
+    const parts: SpanPart[] = []
+    while (rest) {
+      const part = this.parse_relative_time_part(rest, sign)
+      if (!part) throw new Error(`invalid relative time ${text}`)
+      parts.push(part)
+      rest = rest.slice(part.label.length)
+    }
+    const activeParts = parts.filter(({ value }) => value)
+    if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
+    const primary = activeParts[0]
+    return {
+      unit: primary.unit,
+      value: primary.value,
+      label: `${activeParts.map(({ label }) => label).join('')}${direction}`,
+      parts: activeParts,
+    }
+  }
+
+  private span_like_parts(span: SpanLike) {
+    if ('string' === typeof span) return this.relative_time_parse(span).parts ?? []
+    if (Array.isArray(span)) return span
+    return 'parts' in span ? (span.parts ?? [span]) : [span]
+  }
+
+  private invert_span_like(span: SpanLike): readonly SpanPart[] {
+    return this.span_like_parts(span).map(({ unit, value, label }) => ({ unit, value: 0 - value, label }))
+  }
+
+  private parse_relative_time_part(text: string, sign: number) {
+    let best: SpanPart | undefined
+    const accept = (unit: Unit, count: number, label: string) => {
+      if (!label) return
+      if (best && best.label.length >= label.length) return
+      best = { unit, value: count * sign, label }
+    }
+    const rows = [
+      ['y', 'year', '年'],
+      ['M', 'month', 'ヶ月'],
+      ['d', 'day', '日'],
+      ['H', 'hour', '時間'],
+      ['m', 'minute', '分'],
+      ['s', 'second', '秒'],
+      ['S', 'msec', 'ミリ秒'],
+    ] as const
+    for (const [token, unit, fallbackUnit] of rows) {
+      const relatives = this.dic[token].relatives
+      if ('string' === typeof relatives) {
+        const match = text.match(new RegExp(`^(\\d+)${escape_regexp(relatives)}`))
+        if (match) accept(unit, Number(match[1]), match[0])
+      }
+      if (relatives instanceof Array) {
+        relatives.forEach((label, count) => {
+          if (label && text.startsWith(label)) accept(unit, count, label)
+        })
+      }
+      const match = text.match(new RegExp(`^(\\d+)${escape_regexp(fallbackUnit)}`))
+      if (match) accept(unit, Number(match[1]), match[0])
+    }
+    return best
+  }
+
+  private relative_time_target_digits(utc: number, parts: readonly RelativeTimeDistancePart[]) {
+    const source = this.to_tempos(utc)
+    const target: RelativeTimeTargetDigits = {
+      u: source.u.now_idx,
+      y: source.y.now_idx,
+      M: source.M.now_idx,
+      d: source.d.now_idx,
+      H: source.H.now_idx,
+      m: source.m.now_idx,
+      s: source.s.now_idx,
+      S: source.S.now_idx,
+      M_is_leap: source.M.is_leap,
+      changedRank: -1,
+      near: utc,
+      sourceDaySince: source.d.since,
+      sourceHourSince: source.H.since,
+      sourceMinuteSince: source.m.since,
+      sourceSecondSince: source.s.since,
+    }
+    for (const { unit, value } of parts) {
+      const token = relative_time_unit_token(unit) as RelativeTimePrecision
+      const amount = 0 - value
+      target[token] += amount
+      if (token === 'y') target.u += amount
+      target.changedRank = Math.max(target.changedRank, relative_time_precision_rank(token))
+      target.near += amount * this.relative_time_unit_msec(unit)
+    }
+    this.normalize_relative_time_target_digits(target)
+    return target
+  }
+
+  private normalize_relative_time_target_digits(target: RelativeTimeTargetDigits) {
+    const carry = (token: 'M' | 'H' | 'm' | 's' | 'S', parent: 'y' | 'd' | 'H' | 'm' | 's', size: number) => {
+      const amount = Math.floor(target[token] / size)
+      target[token] = mod(target[token], size)
+      target[parent] += amount
+    }
+    const rank = target.changedRank
+    if (relative_time_precision_rank('S') <= rank) carry('S', 's', this.dic.S.length)
+    if (relative_time_precision_rank('s') <= rank) {
+      carry('s', 'm', this.dic.s.length)
+      if (this.dic.is_solor && target.m < 0 && target.s === 0) {
+        target.s = this.dic.s.length
+        target.m--
+      }
+    }
+    if (relative_time_precision_rank('m') <= rank) carry('m', 'H', this.dic.m.length)
+    if (relative_time_precision_rank('H') <= rank) carry('H', 'd', this.dic.H.length)
+    if (relative_time_precision_rank('M') <= rank) {
+      const years = Math.floor(target.M / this.dic.M.length)
+      target.M = mod(target.M, this.dic.M.length)
+      target.y += years
+      target.u += years
+    }
+  }
+
+  private relative_time_unit_msec(unit: RelativeTimeUnit) {
+    switch (unit) {
+      case 'year':
+        return this.calc.msec.year
+      case 'month':
+        return this.calc.msec.month
+      case 'day':
+        return DAY
+      case 'hour':
+        return this.calc.msec.hour || HOUR
+      case 'minute':
+        return this.calc.msec.minute || MINUTE
+      case 'second':
+        return SECOND
+      case 'msec':
+        return 1
+    }
+  }
+
+  private find_time_by_relative_digits(target: RelativeTimeTargetDigits, utc: number) {
+    if (target.changedRank < 0) return utc
+    const month = this.find_relative_time_month(target)
+    const dayIndex =
+      target.changedRank <= relative_time_precision_rank('M')
+        ? Math.min(Math.max(target.d, 0), Math.max(0, Math.floor(month.size / DAY) - 1))
+        : target.d
+    const day = this.to_tempos(month.last_at + dayIndex * DAY).d
+    if (target.changedRank <= relative_time_precision_rank('d')) {
+      return this.clamp_relative_time_since(day, target.sourceDaySince)
+    }
+    return this.find_time_in_day_by_relative_digits(day, target)
+  }
+
+  private find_relative_time_month(target: RelativeTimeTargetDigits) {
+    const yearStart = this.find_relative_time_year_start(target.u, target.near)
+    const nextYearStart = this.to_tempos(yearStart).u.next_at
+    let cursor = yearStart
+    let fallback: (Tempo & TempoMonth) | undefined
+    while (cursor < nextYearStart) {
+      const month = this.to_tempos(cursor).M
+      if (month.now_idx === target.M) {
+        if (month.is_leap === target.M_is_leap) return month
+        fallback ??= month
+      }
+      cursor = month.next_at
+    }
+    return fallback ?? this.to_tempos(yearStart).M
+  }
+
+  private find_relative_time_year_start(year: number, near: number) {
+    let tempo = this.to_tempos(near).u
+    while (tempo.now_idx < year) {
+      tempo = this.to_tempos(tempo.next_at).u
+    }
+    while (year < tempo.now_idx) {
+      tempo = this.to_tempos(tempo.last_at - DAY).u
+    }
+    return tempo.last_at
+  }
+
+  private find_time_in_day_by_relative_digits(day: Tempo, target: RelativeTimeTargetDigits) {
+    let from = day.last_at
+    let to = day.next_at
+    while (from < to) {
+      const at = Math.floor((from + to) / 2)
+      const comparison = this.compare_relative_time_digits(this.to_tempos(at), target)
+      if (comparison < 0) {
+        from = at + 1
+      } else {
+        to = at
+      }
+    }
+    const tempos = this.to_tempos(from)
+    const interval = this.relative_time_interval_for_rank(tempos, target.changedRank)
+    return this.clamp_relative_time_since(interval, this.relative_time_source_since(target))
+  }
+
+  private compare_relative_time_digits(tempos: Tempos, target: RelativeTimeTargetDigits) {
+    const rows = [
+      [relative_time_precision_rank('H'), tempos.H.now_idx, target.H],
+      [relative_time_precision_rank('m'), tempos.m.now_idx, target.m],
+      [relative_time_precision_rank('s'), tempos.s.now_idx, target.s],
+      [relative_time_precision_rank('S'), tempos.S.now_idx, target.S],
+    ] as const
+    for (const [rank, actual, expected] of rows) {
+      if (target.changedRank < rank) break
+      if (actual !== expected) return actual < expected ? -1 : 1
+    }
+    return 0
+  }
+
+  private relative_time_interval_for_rank(tempos: Tempos, rank: number) {
+    if (rank <= relative_time_precision_rank('H')) return tempos.H
+    if (rank <= relative_time_precision_rank('m')) return tempos.m
+    if (rank <= relative_time_precision_rank('s')) return tempos.s
+    return tempos.S
+  }
+
+  private relative_time_source_since(target: RelativeTimeTargetDigits) {
+    if (target.changedRank <= relative_time_precision_rank('H')) return target.sourceHourSince
+    if (target.changedRank <= relative_time_precision_rank('m')) return target.sourceMinuteSince
+    if (target.changedRank <= relative_time_precision_rank('s')) return target.sourceSecondSince
+    return 0
+  }
+
+  private clamp_relative_time_since(interval: Tempo, since: number) {
+    return interval.last_at + Math.min(Math.max(0, since), Math.max(0, interval.size - 1))
   }
 
   find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]) {
@@ -597,6 +941,148 @@ export class FancyDate {
     return list
   }
 
+  relative_time_distance(
+    from: number,
+    to: number = Date.now(),
+    { precise = false }: RelativeTimeDistanceOptions = {},
+  ): RelativeTimeDistance {
+    const diff = to - from
+    if (!Number.isFinite(diff)) {
+      return this.with_relative_time_anchor(from, to, { unit: 'year', value: NaN, label: '？？？' })
+    }
+    if (precise) return this.with_relative_time_anchor(from, to, this.relative_time_distance_precise(from, to, precise))
+    if (Math.abs(diff) < MINUTE) {
+      return this.with_relative_time_anchor(from, to, this.relative_time_distance_fixed(diff, 'second', SECOND, '秒'))
+    }
+    if (Math.abs(diff) < HOUR) {
+      return this.with_relative_time_anchor(from, to, this.relative_time_distance_fixed(diff, 'minute', MINUTE, '分'))
+    }
+    if (Math.abs(diff) < this.calc.msec.day) {
+      return this.with_relative_time_anchor(from, to, this.relative_time_distance_fixed(diff, 'hour', HOUR, '時間'))
+    }
+
+    const parts = this.relative_time_parts(from, to, 'd')
+    for (const part of parts) {
+      if (part.value) {
+        return this.with_relative_time_anchor(from, to, {
+          unit: part.unit,
+          value: part.value,
+          label: `${part.label}${part.value < 0 ? '後' : '前'}`,
+        })
+      }
+    }
+    return this.with_relative_time_anchor(from, to, { unit: 'day', value: 0, label: '今' })
+  }
+
+  private with_relative_time_anchor(from: number, to: number, distance: RelativeTimeDistance) {
+    Object.defineProperty(distance, relative_time_anchor, {
+      value: [from, to, this] as const,
+      enumerable: false,
+    })
+    return distance
+  }
+
+  private relative_time_distance_precise(
+    from: number,
+    to: number,
+    precision: true | RelativeTimePrecision,
+  ): RelativeTimeDistance {
+    const parts = this.relative_time_parts(from, to, precision === true ? 's' : precision)
+
+    if (!parts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
+    const primary = parts[0]
+    return {
+      unit: primary.unit,
+      value: primary.value,
+      label: `${parts.map(({ label }) => label).join('')}${to < from ? '後' : '前'}`,
+      parts,
+    }
+  }
+
+  private relative_time_parts(from: number, to: number, precision: RelativeTimePrecision) {
+    const rank = relative_time_precision_rank(precision)
+    const [earlier, later] = from <= to ? [from, to] : [to, from]
+    const sign = from <= to ? 1 : -1
+    const earlierTempos = this.to_tempos(earlier)
+    const laterTempos = this.to_tempos(later)
+    const rows = [
+      ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
+      ['M', 'month', 'ヶ月', earlierTempos.M.now_idx, laterTempos.M.now_idx, this.dic.M.length],
+      ['d', 'day', '日', earlierTempos.d.now_idx, laterTempos.d.now_idx, earlierTempos.M.size / this.calc.msec.day],
+      ['H', 'hour', '時間', earlierTempos.H.now_idx, laterTempos.H.now_idx, this.dic.H.length],
+      ['m', 'minute', '分', earlierTempos.m.now_idx, laterTempos.m.now_idx, this.dic.m.length],
+      ['s', 'second', '秒', earlierTempos.s.now_idx, laterTempos.s.now_idx, this.dic.s.length],
+      ['S', 'msec', 'ミリ秒', earlierTempos.S.now_idx, laterTempos.S.now_idx, this.dic.S.length],
+    ] as const
+    const diffs = rows.map(([, , , start, end]) => end - start)
+    for (let index = Math.min(rank, rows.length - 1); 0 < index; index--) {
+      if (0 <= diffs[index] || !Number.isFinite(rows[index][5])) continue
+      diffs[index] += rows[index][5]
+      diffs[index - 1]--
+    }
+    return rows
+      .slice(0, rank + 1)
+      .map(([token, unit, fallbackUnit], index) => {
+        const count = Math.abs(diffs[index])
+        return {
+          unit,
+          value: diffs[index] * sign,
+          label: this.relative_time_part_label(token, count, fallbackUnit),
+        }
+      })
+      .filter(({ value }) => value)
+  }
+
+  private relative_time_part_label(unit: keyof Tempos, count: number, fallbackUnit: string) {
+    const indexer = this.dic[unit]
+    const relatives = indexer?.relatives
+    if ('string' === typeof relatives) return `${count}${relatives}`
+    const label = relatives?.[count]
+    return label != null ? label : `${count}${fallbackUnit}`
+  }
+
+  private relative_time_distance_fixed(
+    diff: number,
+    unit: RelativeTimeUnit,
+    size: number,
+    labelUnit: string,
+  ): RelativeTimeDistance {
+    const value = Math.trunc(Math.abs(diff) / size) * (diff < 0 ? -1 : 1)
+    return { unit, value, label: relative_time_label(value, labelUnit) }
+  }
+
+  private count_full_years(from: number, to: number, fromTempos: Tempos, toTempos: Tempos) {
+    let count = this.count_tempo_boundaries('y', from, to)
+    if (count && this.is_before_year_anniversary(fromTempos, toTempos)) count--
+    return count
+  }
+
+  private count_full_months(from: number, to: number, fromTempos: Tempos, toTempos: Tempos) {
+    let count = this.count_tempo_boundaries('M', from, to)
+    if (count && toTempos.d.now_idx < fromTempos.d.now_idx) count--
+    return count
+  }
+
+  private is_before_year_anniversary(fromTempos: Tempos, toTempos: Tempos) {
+    const fromMonth = 2 * fromTempos.M.now_idx + (fromTempos.M.is_leap ? 1 : 0)
+    const toMonth = 2 * toTempos.M.now_idx + (toTempos.M.is_leap ? 1 : 0)
+    return toMonth < fromMonth || (toMonth === fromMonth && toTempos.d.now_idx < fromTempos.d.now_idx)
+  }
+
+  private count_tempo_boundaries(unit: keyof Tempos, from: number, to: number) {
+    const first = this.to_tempos(from)[unit]
+    if (!first) return 0
+    let cursor = first.next_at
+    let count = 0
+    while (cursor <= to) {
+      count++
+      const tempo = this.to_tempos(cursor)[unit]
+      if (!tempo) break
+      cursor = tempo.next_at
+    }
+    return count
+  }
+
   match_find_condition(utc: number, condition: FindCondition) {
     return Object.entries(condition).every(([format, matcher]) => {
       if (format === 'note') {
@@ -612,6 +1098,34 @@ export class FancyDate {
       return matcher.test(value)
     }
     return value === matcher
+  }
+
+  private to_utc(utc: DateInput) {
+    if ('number' === typeof utc) return utc
+    if ('string' === typeof utc) return this.parse(utc)
+    return utc.d.write_at
+  }
+
+  private to_tempos_input(utc: DateInput) {
+    return this.is_tempos(utc) ? utc : this.to_tempos(this.to_utc(utc))
+  }
+
+  private is_tempos(utc: DateInput): utc is Tempos {
+    return !!utc && 'object' === typeof utc && utc.d instanceof Tempo && utc.M instanceof Tempo
+  }
+
+  private span_from_options(from: DateInput | SpanOptions | undefined, options: SpanOptions) {
+    if (from == null) return [Date.now(), options] as const
+    if (this.is_span_options(from)) return [Date.now(), from] as const
+    return [this.to_utc(from), options] as const
+  }
+
+  private is_span_options(value: DateInput | SpanOptions | undefined): value is SpanOptions {
+    return !!value && 'object' === typeof value && !this.is_tempos(value as DateInput)
+  }
+
+  private is_span_text(to: DateInput, from: DateInput | SpanOptions | undefined): to is string {
+    return 'string' === typeof to && from == null && (to === '今' || /(?:前|後)$/.test(to))
   }
 
   dup() {
@@ -1444,7 +1958,9 @@ K   = @dic.earthy[2] / 360
     let N: Tempo | undefined
     let Nn: (Tempo & TempoMonth) | undefined
     const moon_msec = this.calc.msec.moon
-    if (this.dic.moony && moon_msec != null) {
+    const usesObservedLunisolar =
+      !this.is_table_month && hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)
+    if (this.dic.moony && moon_msec != null && !usesObservedLunisolar) {
       // 今月と中気
       Nn = to_tempo_bare(moon_msec, this.calc.zero.moon, utc).floor(
         this.calc.msec.day,
@@ -1477,14 +1993,37 @@ K   = @dic.earthy[2] / 360
         M = drill_down(u, 'month') as any
         d = drill_down(M, 'day')
       } else {
-        if (!Nn || !N) {
+        if (usesObservedLunisolar) {
+          const lunisolar = this.lunisolar(utc)
+          const yearSize = lunisolar.next_year_start_at - lunisolar.year_start_at
+          const monthSize = lunisolar.next_at - lunisolar.last_at
+          u = new Tempo(
+            lunisolar.year_start_at - lunisolar.year * yearSize,
+            lunisolar.year,
+            utc,
+            lunisolar.year_start_at,
+            lunisolar.next_year_start_at,
+          )
+          M = new Tempo(
+            lunisolar.last_at - (lunisolar.month - 1) * monthSize,
+            lunisolar.month - 1,
+            utc,
+            lunisolar.last_at,
+            lunisolar.next_at,
+          ) as Tempo & TempoMonth
+          M.is_leap = lunisolar.is_leap
+          d = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
+          d.now_idx = lunisolar.day - 1
+          N = d
+        } else if (!Nn || !N) {
           throw new Error('Lunar month calculation requires a satellite orbital period.')
+        } else {
+          u = to_tempo_bare(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, utc)
+            .floor(moon_msec, this.calc.zero.moon)
+            .floor(this.calc.msec.day, this.calc.zero.day)
+          M = Nn
+          d = N
         }
-        u = to_tempo_bare(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, utc)
-          .floor(moon_msec, this.calc.zero.moon)
-          .floor(this.calc.msec.day, this.calc.zero.day)
-        M = Nn
-        d = N
       }
     }
 
@@ -1860,6 +2399,38 @@ K   = @dic.earthy[2] / 360
       ['Ao Ar', 'Bo Br', 'Co Cr', 'Fo Fr', 'Vo Vr'],
     ]
     return [yyyy, M, d, eeee, H, m, s]
+  }
+}
+
+function relative_time_label(value: number, unit: string) {
+  if (!value) return '今'
+  return value < 0 ? `${Math.abs(value)}${unit}後` : `${value}${unit}前`
+}
+
+function escape_regexp(text: string) {
+  return text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+}
+
+function relative_time_precision_rank(precision: RelativeTimePrecision) {
+  return 'yMdHmsS'.indexOf(precision)
+}
+
+function relative_time_unit_token(unit: RelativeTimeUnit): keyof TempoDiff {
+  switch (unit) {
+    case 'year':
+      return 'y'
+    case 'month':
+      return 'M'
+    case 'day':
+      return 'd'
+    case 'hour':
+      return 'H'
+    case 'minute':
+      return 'm'
+    case 'second':
+      return 's'
+    case 'msec':
+      return 'S'
   }
 }
 
