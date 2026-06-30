@@ -17,6 +17,7 @@ const {
   黒分月軌道,
 } = require('../lib/sample')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
+const { english, jpn, roman } = require('../lib/number')
 const { format } = require('date-fns')
 const { ja: locale } = require('date-fns/locale/ja')
 
@@ -532,6 +533,15 @@ describe('Gregorian', () => {
         '西暦5138年11月16日(水)0時0分0秒',
       ].join('\n'),
     )
+  })
+
+  test('numeral dictionaries format numeric tokens', () => {
+    const msec = g.parse('2024年3月10日')
+    expect(g.dup().numeral(jpn.漢字).init().format(msec, 'y年M月d日')).toBe('二千廿四年三月十日')
+    expect(g.dup().numeral(english.lower).init().format(msec, 'M/d')).toBe('three/ten')
+    expect(g.dup().numeral(english.title).init().format(msec, 'M/d')).toBe('Three/Ten')
+    expect(g.dup().numeral(roman.upper).init().format(msec, 'M/d')).toBe('III/X')
+    expect(g.dup().numeral().init().format(msec, 'yyyy年MM月dd日')).toBe('2024年03月10日')
   })
 
   test('太陽の動き', () => {

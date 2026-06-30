@@ -1,3 +1,4 @@
+import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
 import { Tempo } from './time';
@@ -89,6 +90,7 @@ type IIDX = TOKENS<ALL_DIC, Indexer>;
 type IDIC = IIDX & {
     parse: string;
     format: string;
+    numeral?: Numeral | null;
     sunny: OrbitalModel;
     moony?: OrbitalModel;
     earthy: RotationModel;
@@ -161,6 +163,8 @@ export declare class FancyDate {
     calendar(start?: (string | number)[], leaps?: number[] | null, month_divs?: (number | null)[] | null): this;
     algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this;
     daily(is_solor?: string | boolean): this;
+    numeral(numeral?: Numeral | null): this;
+    private format_number;
     init(): this;
     yeary_table(utc: number): [string, string, string, string, (string[] | undefined)?][];
     monthry_table(utc: number): [string, string, string, string, (string[] | undefined)?][];

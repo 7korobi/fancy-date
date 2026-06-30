@@ -1,5 +1,9 @@
 type TDic = [string, string, string, string]
 
+export type Numeral = {
+  parse(num: number, appendix?: string): string
+}
+
 export function mod(value: number, by: number) {
   return ((value % by) + by) % by
 }
@@ -231,6 +235,85 @@ export const old_jpn = {
     }
     return `${str}${tail}`
   }),
+}
+
+function englishize(num: number) {
+  if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
+  if (num < 0 || 999999 < num) return `${num}`
+  const ones = [
+    'zero',
+    'one',
+    'two',
+    'three',
+    'four',
+    'five',
+    'six',
+    'seven',
+    'eight',
+    'nine',
+    'ten',
+    'eleven',
+    'twelve',
+    'thirteen',
+    'fourteen',
+    'fifteen',
+    'sixteen',
+    'seventeen',
+    'eighteen',
+    'nineteen',
+  ]
+  const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+  const underThousand = (value: number): string => {
+    if (value < 20) return ones[value]
+    if (value < 100) {
+      const tail = value % 10
+      return tail ? `${tens[Math.floor(value / 10)]}-${ones[tail]}` : tens[value / 10]
+    }
+    const tail = value % 100
+    return tail ? `${ones[Math.floor(value / 100)]} hundred ${underThousand(tail)}` : `${ones[value / 100]} hundred`
+  }
+  if (num < 1000) return underThousand(num)
+  const tail = num % 1000
+  const head = `${underThousand(Math.floor(num / 1000))} thousand`
+  return tail ? `${head} ${underThousand(tail)}` : head
+}
+
+function romanize(num: number) {
+  if (!Number.isFinite(num) || num < 1 || num !== Math.floor(num)) return `${num}`
+  const table = [
+    [1000, 'M'],
+    [900, 'CM'],
+    [500, 'D'],
+    [400, 'CD'],
+    [100, 'C'],
+    [90, 'XC'],
+    [50, 'L'],
+    [40, 'XL'],
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ] as const
+  let rest = num
+  let text = ''
+  for (const [value, glyph] of table) {
+    while (value <= rest) {
+      text += glyph
+      rest -= value
+    }
+  }
+  return text
+}
+
+export const english = {
+  lower: { parse: englishize },
+  title: { parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()) },
+}
+
+export const roman = {
+  upper: { parse: romanize },
+  lower: { parse: (num: number) => romanize(num).toLowerCase() },
 }
 
 const _0__59 = [Array(60)].map((_, i) => i).join(' ')

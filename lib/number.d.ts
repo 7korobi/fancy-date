@@ -1,4 +1,7 @@
 type TDic = [string, string, string, string];
+export type Numeral = {
+    parse(num: number, appendix?: string): string;
+};
 export declare function mod(value: number, by: number): number;
 export declare class DIC {
     units: number[];
@@ -28,6 +31,24 @@ export declare const jpn: {
 };
 export declare const old_jpn: {
     rubys: DIC;
+};
+declare function englishize(num: number): string;
+declare function romanize(num: number): string;
+export declare const english: {
+    lower: {
+        parse: typeof englishize;
+    };
+    title: {
+        parse: (num: number) => string;
+    };
+};
+export declare const roman: {
+    upper: {
+        parse: typeof romanize;
+    };
+    lower: {
+        parse: (num: number) => string;
+    };
 };
 export declare const angle: {
     basic: DIC;
