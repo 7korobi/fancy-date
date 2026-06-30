@@ -540,6 +540,18 @@ describe('Gregorian', () => {
     )
   })
 
+  test('span precise supports week-year and day-of-year hierarchy', () => {
+    const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
+    const to = g.parse('2025年3月10日 4時5分6秒', 'y年M月d日 H時m分s秒')
+    const custom = g.dup().span_units({ w: '週目', A: '日巡り' }).init()
+
+    expect(g.span(to, from, { precise: 'Y' })).toBe('1年後')
+    expect(g.span(to, from, { precise: 'w' })).toBe('1年10週後')
+    expect(g.span(to, from, { precise: 'D' })).toBe('1年68日後')
+    expect(custom.span(to, from, { precise: 'w' })).toBe('1年10週目後')
+    expect(custom.span(g.parse('2024年1月2日'), from, { precise: 'A' })).toBe('1日巡り後')
+  })
+
   test('numeral dictionaries format numeric tokens', () => {
     const msec = g.parse('2024年3月10日')
     const kanji = g.dup().numeral(jpn.漢字).init()

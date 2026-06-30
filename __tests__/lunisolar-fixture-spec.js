@@ -231,11 +231,18 @@ describe('NAOJ lunisolar fixtures', () => {
       expect(span.label).toMatch(/(?:前|後)$/)
     }
 
+    expect(Calendar.定気法.span_obj(nextYear, base, { precise: 'a' }).parts?.[0]).toMatchObject({
+      token: 'a',
+      unit: 'year',
+      value: -1,
+      label: '1年干支',
+    })
+
     expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'A' }).parts?.[0]).toMatchObject({
       token: 'A',
       unit: 'day',
       value: -1,
-      label: '1A',
+      label: '1日干支',
     })
   })
 })

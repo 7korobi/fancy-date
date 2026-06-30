@@ -126,6 +126,7 @@ export type Token = ALL_DIC | 'Zz'
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
 export type Precision = CorePrecision | Token
+export type SpanUnitLabels = Partial<Record<Token, string>>
 export type SpanPart = {
   token: Token
   unit: Unit
@@ -221,6 +222,34 @@ type FindMatcher = string | RegExp
 export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatcher }
 type FindBetween = readonly [from: number, to: number]
 
+const DEFAULT_SPAN_UNITS: Readonly<SpanUnitLabels> = {
+  a: '年干支',
+  b: '年支',
+  c: '年干',
+  f: '年九星',
+  A: '日干支',
+  B: '日支',
+  C: '日干',
+  E: '曜日',
+  F: '日九星',
+  V: '宿',
+  N: '月相',
+  Q: '四半期',
+  Z: '節気',
+  Zz: '節気',
+  Y: '年',
+  y: '年',
+  u: '年',
+  w: '週',
+  D: '日',
+  d: '日',
+  M: 'ヶ月',
+  H: '時間',
+  m: '分',
+  s: '秒',
+  S: 'ミリ秒',
+}
+
 type IIDX = TOKENS<ALL_DIC, Indexer>
 type IDIC = IIDX & {
   parse: string
@@ -235,6 +264,7 @@ type IDIC = IIDX & {
   month_divs: number[]
   leaps: number[]
   leap_shift?: number
+  span_units: SpanUnitLabels
   start: [string, string, number]
   is_solor: boolean
 }
@@ -441,6 +471,12 @@ export class FancyDate {
         parse: 'y年M月d日',
         format: 'Gy年M月d日(E)H時m分s秒',
       } as any
+      Object.defineProperty(this.dic, 'span_units', {
+        configurable: true,
+        enumerable: false,
+        value: { ...DEFAULT_SPAN_UNITS },
+        writable: true,
+      })
 
       this.calc = {
         eras: [],
@@ -524,6 +560,11 @@ export class FancyDate {
 
   numeral(numeral: Numeral | null = null) {
     this.dic.numeral = numeral
+    return this
+  }
+
+  span_units(units: SpanUnitLabels) {
+    Object.assign(this.dic.span_units, units)
     return this
   }
 
@@ -1044,21 +1085,13 @@ export class FancyDate {
   }
 
   private span_parts(from: number, to: number, precision: Precision) {
-    if (!is_core_precision(precision)) return this.token_span_parts(from, to, precision)
-    const rank = span_rank(precision)
     const [earlier, later] = from <= to ? [from, to] : [to, from]
     const sign = from <= to ? 1 : -1
     const earlierTempos = this.to_tempos(earlier)
     const laterTempos = this.to_tempos(later)
-    const rows = [
-      ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
-      ['M', 'month', 'ヶ月', earlierTempos.M.now_idx, laterTempos.M.now_idx, this.dic.M.length],
-      ['d', 'day', '日', earlierTempos.d.now_idx, laterTempos.d.now_idx, earlierTempos.M.size / this.calc.msec.day],
-      ['H', 'hour', '時間', earlierTempos.H.now_idx, laterTempos.H.now_idx, this.dic.H.length],
-      ['m', 'minute', '分', earlierTempos.m.now_idx, laterTempos.m.now_idx, this.dic.m.length],
-      ['s', 'second', '秒', earlierTempos.s.now_idx, laterTempos.s.now_idx, this.dic.s.length],
-      ['S', 'msec', 'ミリ秒', earlierTempos.S.now_idx, laterTempos.S.now_idx, this.dic.S.length],
-    ] as const
+    const rows = this.hierarchical_span_rows(precision, earlierTempos, laterTempos)
+    if (!rows) return this.token_span_parts(from, to, precision)
+    const rank = rows.findIndex(([token]) => token === precision)
     const diffs = rows.map(([, , , start, end]) => end - start)
     for (let index = Math.min(rank, rows.length - 1); 0 < index; index--) {
       if (0 <= diffs[index] || !Number.isFinite(rows[index][5])) continue
@@ -1069,14 +1102,41 @@ export class FancyDate {
       .slice(0, rank + 1)
       .map(([token, unit, fallbackUnit], index) => {
         const count = Math.abs(diffs[index])
+        const unitLabel = this.dic.span_units[token] ?? fallbackUnit
         return {
           token,
           unit,
           value: diffs[index] * sign,
-          label: this.span_part_label(token, count, fallbackUnit),
+          label: this.span_part_label(token, count, unitLabel),
         }
       })
       .filter(({ value }) => value)
+  }
+
+  private hierarchical_span_rows(precision: Precision, earlierTempos: Tempos, laterTempos: Tempos) {
+    const coreRows: [Token, Unit, string, number, number, number][] = [
+      ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
+      ['M', 'month', 'ヶ月', earlierTempos.M.now_idx, laterTempos.M.now_idx, this.dic.M.length],
+      ['d', 'day', '日', earlierTempos.d.now_idx, laterTempos.d.now_idx, earlierTempos.M.size / this.calc.msec.day],
+      ['H', 'hour', '時間', earlierTempos.H.now_idx, laterTempos.H.now_idx, this.dic.H.length],
+      ['m', 'minute', '分', earlierTempos.m.now_idx, laterTempos.m.now_idx, this.dic.m.length],
+      ['s', 'second', '秒', earlierTempos.s.now_idx, laterTempos.s.now_idx, this.dic.s.length],
+      ['S', 'msec', 'ミリ秒', earlierTempos.S.now_idx, laterTempos.S.now_idx, this.dic.S.length],
+    ]
+    if (is_core_precision(precision)) return coreRows
+    if ('Y' === precision || 'w' === precision) {
+      return [
+        ['Y', 'year', '年', earlierTempos.Y.now_idx, laterTempos.Y.now_idx, Infinity],
+        ['w', 'day', '週', earlierTempos.w.now_idx, laterTempos.w.now_idx, Math.ceil(earlierTempos.y.size / this.calc.msec.week)],
+      ] as [Token, Unit, string, number, number, number][]
+    }
+    if ('D' === precision) {
+      return [
+        ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
+        ['D', 'day', '日', earlierTempos.D.now_idx, laterTempos.D.now_idx, earlierTempos.y.size / this.calc.msec.day],
+      ] as [Token, Unit, string, number, number, number][]
+    }
+    return undefined
   }
 
   private token_span_parts(from: number, to: number, token: Token) {
@@ -1089,7 +1149,7 @@ export class FancyDate {
         token,
         unit: this.span_part_unit(token),
         value,
-        label: this.span_part_label(token, Math.abs(value), String(token)),
+        label: this.span_part_label(token, Math.abs(value), this.span_part_fallback_unit(token)),
       },
     ].filter(({ value }) => value)
   }
@@ -1099,6 +1159,10 @@ export class FancyDate {
       case 'y':
       case 'u':
       case 'Y':
+      case 'a':
+      case 'b':
+      case 'c':
+      case 'f':
         return 'year'
       case 'M':
       case 'N':
@@ -1124,6 +1188,10 @@ export class FancyDate {
       default:
         return 'msec'
     }
+  }
+
+  private span_part_fallback_unit(token: Token) {
+    return this.dic.span_units[token] ?? String(token)
   }
 
   private span_part_label(unit: keyof Tempos, count: number, fallbackUnit: string) {
