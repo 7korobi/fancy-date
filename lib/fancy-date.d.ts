@@ -30,7 +30,11 @@ export type Token = ALL_DIC | 'Zz';
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec';
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
 export type Precision = CorePrecision | Token;
-export type SpanUnitLabels = Partial<Record<Token, string>>;
+export type SpanLabels = Partial<Record<Token, string>>;
+export type SpanDirection = '前' | '後';
+export type FindOptions = {
+    step?: keyof Tempos;
+};
 export type SpanPart = {
     token: Token;
     unit: Unit;
@@ -82,6 +86,7 @@ export type Tempos = {
     y: Tempo;
 };
 type DateLike = number | Tempos | string;
+type DateRange = readonly [from: DateLike, to: DateLike];
 type NUMBER_RANGE = [number, number?];
 type MEASURE = {
     range: NUMBER_RANGE;
@@ -93,7 +98,7 @@ export type FindCondition = {
 } | {
     [format: string]: FindMatcher;
 };
-type FindBetween = readonly [from: number, to: number];
+type FindBetween = DateRange;
 type IIDX = TOKENS<ALL_DIC, Indexer>;
 type IDIC = IIDX & {
     parse: string;
@@ -108,7 +113,7 @@ type IDIC = IIDX & {
     month_divs: number[];
     leaps: number[];
     leap_shift?: number;
-    span_units: SpanUnitLabels;
+    labels: SpanLabels;
     start: [string, string, number];
     is_solor: boolean;
 };
@@ -174,7 +179,7 @@ export declare class FancyDate {
     algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this;
     daily(is_solor?: string | boolean): this;
     numeral(numeral?: Numeral | null): this;
-    span_units(units: SpanUnitLabels): this;
+    labels(labels: SpanLabels): this;
     private format_number;
     private parse_number;
     private number_pattern;
@@ -214,15 +219,18 @@ export declare class FancyDate {
     add_obj(utc: DateLike, span: SpanLike): Tempos;
     sub(utc: DateLike, span: SpanLike): number;
     sub_obj(utc: DateLike, span: SpanLike): Tempos;
-    span(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions): string;
-    span_obj(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
+    span(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions): string;
+    span_obj(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
+    parse_span(text: string): Span;
+    format_span(span: SpanLike, direction?: SpanDirection): Span;
     private add_span;
-    private parse_span;
-    private format_span;
+    private parse_span_parts;
+    private format_span_parts;
     private span_parts_of;
     private normalize_span_part;
     private invert_span;
     private parse_span_part;
+    private span_parse_rows;
     private span_target;
     private normalize_span_target;
     private unit_msec;
@@ -235,7 +243,11 @@ export declare class FancyDate {
     private interval_for_rank;
     private source_since;
     private clamp_since;
-    find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]): number[];
+    find(between: FindBetween, conditions: readonly FindCondition[], options?: FindOptions): number[];
+    private infer_find_step;
+    private infer_find_step_from_format;
+    private find_step_for_token;
+    private find_step_rank;
     private span_between;
     private with_span_anchor;
     private precise_span;
@@ -252,6 +264,7 @@ export declare class FancyDate {
     private to_utc;
     private to_tempos_input;
     private is_tempos;
+    private is_date_range;
     private span_args;
     private is_span_options;
     private is_span_text;

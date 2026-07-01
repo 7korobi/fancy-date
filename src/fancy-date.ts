@@ -126,7 +126,9 @@ export type Token = ALL_DIC | 'Zz'
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
 export type Precision = CorePrecision | Token
-export type SpanUnitLabels = Partial<Record<Token, string>>
+export type SpanLabels = Partial<Record<Token, string>>
+export type SpanDirection = '前' | '後'
+export type FindOptions = { step?: keyof Tempos }
 export type SpanPart = {
   token: Token
   unit: Unit
@@ -203,6 +205,7 @@ export type Tempos = {
   y: Tempo
 }
 type DateLike = number | Tempos | string
+type DateRange = readonly [from: DateLike, to: DateLike]
 
 const core_tokens = 'GHMSdmpsy'
 const main_tokens = 'ABCEFabcfx' + core_tokens
@@ -220,9 +223,9 @@ type MEASURE = {
 
 type FindMatcher = string | RegExp
 export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatcher }
-type FindBetween = readonly [from: number, to: number]
+type FindBetween = DateRange
 
-const DEFAULT_SPAN_UNITS: Readonly<SpanUnitLabels> = {
+const DEFAULT_LABELS: Readonly<SpanLabels> = {
   a: '年干支',
   b: '年支',
   c: '年干',
@@ -264,7 +267,7 @@ type IDIC = IIDX & {
   month_divs: number[]
   leaps: number[]
   leap_shift?: number
-  span_units: SpanUnitLabels
+  labels: SpanLabels
   start: [string, string, number]
   is_solor: boolean
 }
@@ -471,10 +474,10 @@ export class FancyDate {
         parse: 'y年M月d日',
         format: 'Gy年M月d日(E)H時m分s秒',
       } as any
-      Object.defineProperty(this.dic, 'span_units', {
+      Object.defineProperty(this.dic, 'labels', {
         configurable: true,
         enumerable: false,
-        value: { ...DEFAULT_SPAN_UNITS },
+        value: { ...DEFAULT_LABELS },
         writable: true,
       })
 
@@ -563,8 +566,8 @@ export class FancyDate {
     return this
   }
 
-  span_units(units: SpanUnitLabels) {
-    Object.assign(this.dic.span_units, units)
+  labels(labels: SpanLabels) {
+    Object.assign(this.dic.labels, labels)
     return this
   }
 
@@ -689,14 +692,31 @@ export class FancyDate {
   sub_obj(utc: DateLike, span: SpanLike) {
     return this.to_tempos(this.sub(utc, span))
   }
-  span(to: DateLike, from?: DateLike | SpanOptions, options?: SpanOptions) {
+  span(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions) {
     return this.span_obj(to, from, options).label
   }
-  span_obj(to: DateLike, from?: DateLike | SpanOptions, options: SpanOptions = {}) {
+  span_obj(to: DateLike | DateRange, from?: DateLike | SpanOptions, options: SpanOptions = {}) {
+    if (this.is_date_range(to)) {
+      const spanOptions = this.is_span_options(from) ? from : options
+      return this.span_between(this.to_utc(to[1]), this.to_utc(to[0]), spanOptions)
+    }
     if (this.is_span_text(to, from)) return this.parse_span(to)
     const [fromAt, spanOptions] = this.span_args(from, options)
     return this.span_between(this.to_utc(to), fromAt, spanOptions)
   }
+
+  parse_span(text: string): Span {
+    const { parts, direction } = this.parse_span_parts(text)
+    return this.format_span_parts(parts, direction)
+  }
+
+  format_span(span: SpanLike, direction?: SpanDirection): Span {
+    const parts = this.span_parts_of(span)
+    const activeParts = parts.filter(({ value }) => value)
+    const spanDirection = direction ?? (activeParts[0]?.value < 0 ? '後' : '前')
+    return this.format_span_parts(parts, spanDirection)
+  }
+
   private add_span(utc: number, span: SpanLike) {
     const anchor = (span as AnchoredSpan)[span_anchor]
     if (anchor?.[1] === utc && anchor[2] === this) return anchor[0]
@@ -705,13 +725,13 @@ export class FancyDate {
     return this.find_span_time(target, utc)
   }
 
-  private parse_span(text: string): Span {
+  private parse_span_parts(text: string): { parts: SpanPart[]; direction: SpanDirection } {
     const source = text.trim()
-    if (source === '今') return { unit: 'second', value: 0, label: '今', parts: [] }
+    if (source === '今') return { parts: [], direction: '前' }
     const match = source.match(/^(.*)(前|後)$/)
     if (!match) throw new Error(`invalid relative time ${text}`)
     const [, body] = match
-    const direction = match[2] as '前' | '後'
+    const direction = match[2] as SpanDirection
     if (!body) throw new Error(`invalid relative time ${text}`)
     const sign = direction === '後' ? -1 : 1
     let rest = body
@@ -722,11 +742,14 @@ export class FancyDate {
       parts.push(part)
       rest = rest.slice(part.label.length)
     }
-    return this.format_span(parts, direction)
+    return { parts, direction }
   }
 
-  private format_span(parts: readonly SpanPart[], direction: '前' | '後'): Span {
-    const activeParts = parts.filter(({ value }) => value)
+  private format_span_parts(parts: readonly SpanPart[], direction: SpanDirection): Span {
+    const activeParts = parts.filter(({ value }) => value).map((part) => ({
+      ...part,
+      label: this.span_part_label(part.token, Math.abs(part.value), this.span_part_fallback_unit(part.token)),
+    }))
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
     return {
@@ -761,17 +784,9 @@ export class FancyDate {
       if (best && best.label.length >= label.length) return
       best = { token, unit, value: count * sign, label }
     }
-    const rows = [
-      ['y', 'year', '年'],
-      ['M', 'month', 'ヶ月'],
-      ['d', 'day', '日'],
-      ['H', 'hour', '時間'],
-      ['m', 'minute', '分'],
-      ['s', 'second', '秒'],
-      ['S', 'msec', 'ミリ秒'],
-    ] as const
+    const rows = this.span_parse_rows()
     for (const [token, unit, fallbackUnit] of rows) {
-      const relatives = this.dic[token].relatives
+      const relatives = this.dic[token]?.relatives
       if ('string' === typeof relatives) {
         const match = text.match(new RegExp(`^(\\d+)${escape_regexp(relatives)}`))
         if (match) accept(token, unit, Number(match[1]), match[0])
@@ -785,6 +800,36 @@ export class FancyDate {
       if (match) accept(token, unit, Number(match[1]), match[0])
     }
     return best
+  }
+
+  private span_parse_rows(): [Token, Unit, string][] {
+    return [
+      'y',
+      'M',
+      'd',
+      'H',
+      'm',
+      's',
+      'S',
+      'Y',
+      'w',
+      'D',
+      'a',
+      'b',
+      'c',
+      'f',
+      'A',
+      'B',
+      'C',
+      'E',
+      'F',
+      'V',
+      'N',
+      'Q',
+      'Z',
+      'Zz',
+      'u',
+    ].map((token) => [token as Token, this.span_part_unit(token as Token), this.span_part_fallback_unit(token as Token)])
   }
 
   private span_target(utc: number, parts: readonly SpanPart[]) {
@@ -807,8 +852,19 @@ export class FancyDate {
       sourceSecondSince: source.s.since,
     }
     for (const { token: spanToken, unit, value } of parts) {
-      const token = (spanToken ?? span_unit_token(unit)) as CorePrecision
+      let token = (spanToken ?? span_unit_token(unit)) as Token
       const amount = 0 - value
+      if ('Y' === token) token = 'y'
+      if ('D' === token) token = 'd'
+      if ('w' === token) {
+        target.d += amount * this.dic.E.length
+        target.changedRank = Math.max(target.changedRank, span_rank('d'))
+        target.near += amount * this.dic.E.length * this.unit_msec('day')
+        continue
+      }
+      if (!is_core_precision(token)) {
+        throw new Error(`cannot add cyclic span token ${token}`)
+      }
       target[token] += amount
       if (token === 'y') target.u += amount
       target.changedRank = Math.max(target.changedRank, span_rank(token))
@@ -979,8 +1035,10 @@ export class FancyDate {
     return interval.last_at + Math.min(Math.max(0, since), Math.max(0, interval.size - 1))
   }
 
-  find(unit: keyof Tempos, between: FindBetween, conditions: readonly FindCondition[]) {
-    const [from, to] = between
+  find(between: FindBetween, conditions: readonly FindCondition[], options: FindOptions = {}) {
+    const [fromLike, toLike] = between
+    const from = this.to_utc(fromLike)
+    const to = this.to_utc(toLike)
     if (from == null || to == null || from >= to) {
       throw new Error(`invalid range ${from}..${to}`)
     }
@@ -988,8 +1046,9 @@ export class FancyDate {
       throw new Error('find requires conditions')
     }
 
+    const unit = options.step ?? this.infer_find_step(conditions)
     const first = this.to_tempos(from)[unit]
-    if (!first) {
+    if (!first || typeof first.succ !== 'function') {
       throw new Error(`invalid unit ${String(unit)}`)
     }
     let tempo = first
@@ -1005,6 +1064,90 @@ export class FancyDate {
       tempo = tempo.succ()
     }
     return list
+  }
+
+  private infer_find_step(conditions: readonly FindCondition[]): keyof Tempos {
+    let step: keyof Tempos = 'y'
+    for (const condition of conditions) {
+      for (const format of Object.keys(condition)) {
+        const inferred = format === 'note' ? 'd' : this.infer_find_step_from_format(format)
+        if (this.find_step_rank(step) < this.find_step_rank(inferred)) {
+          step = inferred
+        }
+      }
+    }
+    return step
+  }
+
+  private infer_find_step_from_format(format: string): keyof Tempos {
+    let step: keyof Tempos = 'y'
+    const tokens = format.match(reg_token) ?? []
+    for (const token of tokens) {
+      const candidate = this.find_step_for_token(token[0] as Token)
+      if (this.find_step_rank(step) < this.find_step_rank(candidate)) {
+        step = candidate
+      }
+    }
+    return step
+  }
+
+  private find_step_for_token(token: Token): keyof Tempos {
+    switch (token) {
+      case 'S':
+        return 'S'
+      case 's':
+        return 's'
+      case 'm':
+        return 'm'
+      case 'H':
+        return 'H'
+      case 'M':
+      case 'N':
+      case 'Q':
+        return 'M'
+      case 'Z':
+        return 'Z'
+      case 'Zz':
+        return 'Zz'
+      case 'd':
+      case 'D':
+      case 'w':
+      case 'A':
+      case 'B':
+      case 'C':
+      case 'E':
+      case 'F':
+      case 'V':
+      case 'J':
+        return 'd'
+      default:
+        return 'y'
+    }
+  }
+
+  private find_step_rank(unit: keyof Tempos) {
+    switch (unit) {
+      case 'S':
+        return 8
+      case 's':
+        return 7
+      case 'm':
+        return 6
+      case 'H':
+        return 5
+      case 'd':
+        return 4
+      case 'Z':
+        return 3.5
+      case 'M':
+      case 'N':
+        return 3
+      case 'Zz':
+        return 2
+      case 'y':
+      default:
+        return 1
+    }
   }
 
   private span_between(
@@ -1045,7 +1188,7 @@ export class FancyDate {
         return this.with_span_anchor(
           from,
           to,
-          this.format_span([part], part.value < 0 ? '後' : '前'),
+          this.format_span_parts([part], part.value < 0 ? '後' : '前'),
           toTempos.d.next_at,
         )
       }
@@ -1072,7 +1215,7 @@ export class FancyDate {
   ): Span {
     const parts = this.span_parts(from, to, precision)
 
-    return this.format_span(parts, to < from ? '後' : '前')
+    return this.format_span_parts(parts, to < from ? '後' : '前')
   }
 
   private next_precise_span_at(at: number, precision: Precision) {
@@ -1102,7 +1245,7 @@ export class FancyDate {
       .slice(0, rank + 1)
       .map(([token, unit, fallbackUnit], index) => {
         const count = Math.abs(diffs[index])
-        const unitLabel = this.dic.span_units[token] ?? fallbackUnit
+        const unitLabel = this.dic.labels[token] ?? fallbackUnit
         return {
           token,
           unit,
@@ -1191,7 +1334,7 @@ export class FancyDate {
   }
 
   private span_part_fallback_unit(token: Token) {
-    return this.dic.span_units[token] ?? String(token)
+    return this.dic.labels[token] ?? String(token)
   }
 
   private span_part_label(unit: keyof Tempos, count: number, fallbackUnit: string) {
@@ -1231,6 +1374,10 @@ export class FancyDate {
 
   private is_tempos(utc: DateLike): utc is Tempos {
     return !!utc && 'object' === typeof utc && utc.d instanceof Tempo && utc.M instanceof Tempo
+  }
+
+  private is_date_range(value: DateLike | DateRange): value is DateRange {
+    return Array.isArray(value) && value.length === 2
   }
 
   private span_args(from: DateLike | SpanOptions | undefined, options: SpanOptions) {
