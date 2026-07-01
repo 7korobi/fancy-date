@@ -214,23 +214,29 @@ describe('Gregorio calculate', () => {
 
   test('find day cycle in range', () => {
     const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
-    const found = g.find('d', between, [{ Ao: '甲子' }])
+    const found = g.find(between, [{ Ao: '甲子' }])
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年01月22日 甲子'])
   })
 
   test('find note in range', () => {
     const between = [g.parse('2020年3月1日'), g.parse('2020年4月1日')]
-    const found = g.find('d', between, [{ note: '春分' }])
+    const found = g.find(between, [{ note: '春分' }])
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2020年03月20日'])
   })
 
   test('find with regexp condition', () => {
     const between = [g.parse('2020年3月1日'), g.parse('2020年10月1日')]
-    const found = g.find('d', between, [{ note: /春分|秋分/ }])
+    const found = g.find(between, [{ note: /春分|秋分/ }])
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual([
       '2020年03月20日',
       '2020年09月19日',
     ])
+  })
+
+  test('find can override inferred step', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年3月2日')]
+    const found = g.find(between, [{ H: '12' }], { step: 'H' })
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 HH時'))).toEqual(['2020年03月01日 12時'])
   })
 })
 
@@ -543,13 +549,24 @@ describe('Gregorian', () => {
   test('span precise supports week-year and day-of-year hierarchy', () => {
     const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
     const to = g.parse('2025年3月10日 4時5分6秒', 'y年M月d日 H時m分s秒')
-    const custom = g.dup().span_units({ w: '週目', A: '日巡り' }).init()
+    const custom = g.dup().labels({ w: '週目', A: '日巡り' }).init()
 
-    expect(g.span(to, from, { precise: 'Y' })).toBe('1年後')
-    expect(g.span(to, from, { precise: 'w' })).toBe('1年10週後')
-    expect(g.span(to, from, { precise: 'D' })).toBe('1年68日後')
-    expect(custom.span(to, from, { precise: 'w' })).toBe('1年10週目後')
+    expect(g.span([from, to], { precise: 'Y' })).toBe('1年後')
+    expect(g.span([from, to], { precise: 'w' })).toBe('1年10週後')
+    expect(g.span([from, to], { precise: 'D' })).toBe('1年68日後')
+    expect(custom.span([from, to], { precise: 'w' })).toBe('1年10週目後')
     expect(custom.span(g.parse('2024年1月2日'), from, { precise: 'A' })).toBe('1日巡り後')
+    expect(custom.parse_span('1日巡り後').parts?.[0]).toMatchObject({
+      token: 'A',
+      unit: 'day',
+      value: -1,
+      label: '1日巡り',
+    })
+    expect(custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label).toBe(
+      '1日巡り後',
+    )
+    expect(custom.add(from, '1週目後')).toBe(g.parse('2024年1月8日'))
+    expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token A/)
   })
 
   test('numeral dictionaries format numeric tokens', () => {
