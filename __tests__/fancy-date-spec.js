@@ -233,6 +233,44 @@ describe('Gregorio calculate', () => {
     ])
   })
 
+  test('find can order and limit results', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年10月1日')]
+    const found = g.find(between, [{ note: /春分|秋分/ }], { order: -1, limit: 1 })
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2020年09月19日'])
+  })
+
+  test('find supports next and prev style unbounded search with limit', () => {
+    const next = g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }], { limit: 1 })
+    expect(next.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年03月22日 甲子'])
+
+    const prev = g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
+      order: -1,
+      limit: 1,
+    })
+    expect(prev.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年01月22日 甲子'])
+    expect(() => g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }])).toThrow(
+      /unbounded find requires limit/,
+    )
+  })
+
+  // order が指すアンカー側(order=1なら from, order=-1なら to)は探索開始点になるため、
+  // 無限値を渡すと有効な Tempo を作れない。アンカー側が有限でない場合は明示的にエラーにする。
+  test('find throws when the anchor side implied by order is not finite', () => {
+    expect(() =>
+      g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], { limit: 1 }),
+    ).toThrow(/finite anchor/)
+    expect(() =>
+      g.find([g.parse('2020年1月1日'), Infinity], [{ Ao: '甲子' }], { order: -1, limit: 1 }),
+    ).toThrow(/finite anchor/)
+  })
+
+  // JS 利用時は型で守られないため、limit と同様に不正な order を明示的にエラーにする。
+  test('find rejects an invalid order value', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年10月1日')]
+    expect(() => g.find(between, [{ note: /春分|秋分/ }], { order: 0 })).toThrow(/invalid order/)
+    expect(() => g.find(between, [{ note: /春分|秋分/ }], { order: 2 })).toThrow(/invalid order/)
+  })
+
   test('find can override inferred step', () => {
     const between = [g.parse('2020年3月1日'), g.parse('2020年3月2日')]
     const found = g.find(between, [{ H: '12' }], { step: 'H' })
@@ -567,6 +605,21 @@ describe('Gregorian', () => {
     )
     expect(custom.add(from, '1週目後')).toBe(g.parse('2024年1月8日'))
     expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token A/)
+  })
+
+  // 上の 'span precise supports week-year and day-of-year hierarchy' は
+  // from が1月1日固定のため、日番号(day-of-month)と年内通日(day-of-year)の基準が
+  // たまたま一致しており、month をまたいで year もまたぐケースの不具合を検出できていなかった。
+  // D/w 精度は年初基準の座標なので、from の月に関係なく year をまたぐ span を正しく再構成する。
+  test('span add reconstructs D/w precise spans across a year boundary from a non-January source', () => {
+    const from = g.parse('2024年3月15日 0時0分0秒', 'y年M月d日 H時m分s秒')
+    const to = g.parse('2025年6月20日 0時0分0秒', 'y年M月d日 H時m分s秒')
+
+    const dSpan = g.parse_span(g.span([from, to], { precise: 'D' }))
+    expect(g.format(g.add(from, dSpan), 'yyyy年MM月dd日')).toBe('2025年06月20日')
+
+    const wSpan = g.parse_span(g.span([from, to], { precise: 'w' }))
+    expect(g.format(g.add(from, wSpan), 'yyyy年MM月dd日')).toBe('2025年06月20日')
   })
 
   test('numeral dictionaries format numeric tokens', () => {

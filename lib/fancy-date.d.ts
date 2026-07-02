@@ -32,8 +32,11 @@ type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S';
 export type Precision = CorePrecision | Token;
 export type SpanLabels = Partial<Record<Token, string>>;
 export type SpanDirection = '前' | '後';
+export type FindOrder = 1 | -1;
 export type FindOptions = {
     step?: keyof Tempos;
+    order?: FindOrder;
+    limit?: number;
 };
 export type SpanPart = {
     token: Token;
@@ -225,6 +228,7 @@ export declare class FancyDate {
     format_span(span: SpanLike, direction?: SpanDirection): Span;
     private add_span;
     private parse_span_parts;
+    private disambiguate_span_parts;
     private format_span_parts;
     private span_parts_of;
     private normalize_span_part;
@@ -232,6 +236,7 @@ export declare class FancyDate {
     private parse_span_part;
     private span_parse_rows;
     private span_target;
+    private resolve_span_week_target;
     private normalize_span_target;
     private unit_msec;
     private find_span_time;

@@ -128,7 +128,8 @@ type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
 export type Precision = CorePrecision | Token
 export type SpanLabels = Partial<Record<Token, string>>
 export type SpanDirection = '前' | '後'
-export type FindOptions = { step?: keyof Tempos }
+export type FindOrder = 1 | -1
+export type FindOptions = { step?: keyof Tempos; order?: FindOrder; limit?: number }
 export type SpanPart = {
   token: Token
   unit: Unit
@@ -168,6 +169,9 @@ type SpanTarget = {
   M_is_leap: boolean
   changedRank: number
   near: number
+  week?: number
+  sourceDayOfYear: number
+  sourceWeekSince: number
   sourceDaySince: number
   sourceHourSince: number
   sourceMinuteSince: number
@@ -742,7 +746,15 @@ export class FancyDate {
       parts.push(part)
       rest = rest.slice(part.label.length)
     }
-    return { parts, direction }
+    return { parts: this.disambiguate_span_parts(parts), direction }
+  }
+
+  private disambiguate_span_parts(parts: SpanPart[]): SpanPart[] {
+    if (this.span_part_fallback_unit('d') !== this.span_part_fallback_unit('D')) return parts
+    const hasYear = parts.some(({ token }) => token === 'y' || token === 'Y')
+    const hasMonth = parts.some(({ token }) => token === 'M')
+    if (!hasYear || hasMonth) return parts
+    return parts.map((part) => (part.token === 'd' ? { ...part, token: 'D' as Token } : part))
   }
 
   private format_span_parts(parts: readonly SpanPart[], direction: SpanDirection): Span {
@@ -846,6 +858,8 @@ export class FancyDate {
       M_is_leap: source.M.is_leap,
       changedRank: -1,
       near: utc,
+      sourceDayOfYear: source.D.now_idx,
+      sourceWeekSince: source.w.since,
       sourceDaySince: source.d.since,
       sourceHourSince: source.H.since,
       sourceMinuteSince: source.m.since,
@@ -855,9 +869,16 @@ export class FancyDate {
       let token = (spanToken ?? span_unit_token(unit)) as Token
       const amount = 0 - value
       if ('Y' === token) token = 'y'
-      if ('D' === token) token = 'd'
+      if ('D' === token) {
+        target.M = 0
+        target.M_is_leap = false
+        target.d = target.sourceDayOfYear + amount
+        target.changedRank = Math.max(target.changedRank, span_rank('d'))
+        target.near += amount * this.unit_msec('day')
+        continue
+      }
       if ('w' === token) {
-        target.d += amount * this.dic.E.length
+        target.week = (target.week ?? source.w.now_idx) + amount
         target.changedRank = Math.max(target.changedRank, span_rank('d'))
         target.near += amount * this.dic.E.length * this.unit_msec('day')
         continue
@@ -871,7 +892,23 @@ export class FancyDate {
       target.near += amount * this.unit_msec(unit)
     }
     this.normalize_span_target(target)
+    this.resolve_span_week_target(target)
     return target
+  }
+
+  private resolve_span_week_target(target: SpanTarget) {
+    if (target.week == null) return
+    const yearStart = this.find_span_year_start(target.u, target.near)
+    const yearWeek = this.to_tempos(yearStart).w
+    const week = yearWeek.slide_to(target.week)
+    const at = week.last_at + Math.min(Math.max(0, target.sourceWeekSince), Math.max(0, week.size - 1))
+    const tempos = this.to_tempos(at)
+    target.u = tempos.u.now_idx
+    target.y = tempos.y.now_idx
+    target.M = tempos.M.now_idx
+    target.d = tempos.d.now_idx
+    target.M_is_leap = tempos.M.is_leap
+    target.near = at
   }
 
   private normalize_span_target(target: SpanTarget) {
@@ -1045,23 +1082,51 @@ export class FancyDate {
     if (!conditions.length) {
       throw new Error('find requires conditions')
     }
+    if (options.limit != null && (!Number.isInteger(options.limit) || options.limit < 0)) {
+      throw new Error(`invalid limit ${options.limit}`)
+    }
+    if (!Number.isFinite(to - from) && options.limit == null) {
+      throw new Error('unbounded find requires limit')
+    }
 
     const unit = options.step ?? this.infer_find_step(conditions)
-    const first = this.to_tempos(from)[unit]
-    if (!first || typeof first.succ !== 'function') {
-      throw new Error(`invalid unit ${String(unit)}`)
+    const order = options.order ?? 1
+    if (order !== 1 && order !== -1) {
+      throw new Error(`invalid order ${order}`)
     }
-    let tempo = first
-    if (tempo.last_at < from) {
-      tempo = tempo.succ()
+    const limit = options.limit ?? Infinity
+    const anchor = order === 1 ? from : to
+    if (!Number.isFinite(anchor)) {
+      throw new Error(`find requires finite anchor for order ${order}`)
+    }
+    const first = this.to_tempos(anchor)[unit]
+    if (!first || typeof first.succ !== 'function' || typeof first.back !== 'function') {
+      throw new Error(`invalid unit ${String(unit)}`)
     }
 
     const list: number[] = []
-    while (tempo.last_at < to) {
-      if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
-        list.push(tempo.last_at)
+    if (order === 1) {
+      let tempo = first
+      if (tempo.last_at < from) {
+        tempo = tempo.succ()
       }
-      tempo = tempo.succ()
+      while (tempo.last_at < to && list.length < limit) {
+        if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
+          list.push(tempo.last_at)
+        }
+        tempo = tempo.succ()
+      }
+    } else {
+      let tempo = first
+      if (to <= tempo.last_at) {
+        tempo = tempo.back()
+      }
+      while (from <= tempo.last_at && list.length < limit) {
+        if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
+          list.push(tempo.last_at)
+        }
+        tempo = tempo.back()
+      }
     }
     return list
   }
