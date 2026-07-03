@@ -19,9 +19,21 @@ import {
   solar_term as resolveSolarTerm,
   solar_terms as resolveSolarTerms,
   to_tempo_by_solor as resolveTempoBySolor,
+  雑節_by_mean as resolve雑節ByMean,
   雑節_by_phase as resolve雑節ByPhase,
 } from './phenomena/solar'
 import { prepareSpot } from './prepare'
+import {
+  CachedTempoRule,
+  envelope_of,
+  MeanLunarPhaseTempoRule,
+  OrbitalPhaseTempoRule,
+  SolarDayHourTempoRule,
+  SubdivideTempoRule,
+  TableTempoRule,
+  TempoView,
+} from './tempo-model'
+import type { SolarDayHourBase, TempoBase, TempoLike } from './tempo-model'
 import { Tempo, to_tempo_by, to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
@@ -178,35 +190,35 @@ type SpanTarget = {
   sourceSecondSince: number
 }
 export type Tempos = {
-  Zz: Tempo
-  A: Tempo
-  B: Tempo
-  C: Tempo
-  D: Tempo
-  E: Tempo
-  F: Tempo
-  G: Tempo
-  H: Tempo
-  J: Tempo
-  M: Tempo & TempoMonth
-  N: Tempo | undefined
-  Q: Tempo
-  S: Tempo
-  V: Tempo
-  Y: Tempo
-  Z: Tempo
-  a: Tempo
-  b: Tempo
-  c: Tempo
-  d: Tempo
-  f: Tempo
-  m: Tempo
-  p: Tempo | undefined
-  s: Tempo
-  u: Tempo
-  w: Tempo
-  x: Tempo | undefined
-  y: Tempo
+  Zz: TempoLike
+  A: TempoLike
+  B: TempoLike
+  C: TempoLike
+  D: TempoLike
+  E: TempoLike
+  F: TempoLike
+  G: TempoLike
+  H: TempoLike
+  J: TempoLike
+  M: TempoLike & TempoMonth
+  N: TempoLike | undefined
+  Q: TempoLike
+  S: TempoLike
+  V: TempoLike
+  Y: TempoLike
+  Z: TempoLike
+  a: TempoLike
+  b: TempoLike
+  c: TempoLike
+  d: TempoLike
+  f: TempoLike
+  m: TempoLike
+  p: TempoLike | undefined
+  s: TempoLike
+  u: TempoLike
+  w: TempoLike
+  x: TempoLike | undefined
+  y: TempoLike
 }
 type DateLike = number | Tempos | string
 type DateRange = readonly [from: DateLike, to: DateLike]
@@ -389,7 +401,7 @@ type RegexFactory = (list: readonly string[]) => string
 type IndexFactory = (this: Indexer, s: string) => number
 type LabelFactory = (
   list: readonly string[] | null,
-  val: Tempo & { is_leap: boolean },
+  val: TempoLike & { is_leap?: boolean },
   size: number,
 ) => string
 
@@ -469,6 +481,15 @@ export class FancyDate {
       }
     }
   }
+
+  // TempoRule インスタンスの使い回し(D: TempoEnvelope キャッシュ)。
+  // to_tempos() のたびに new すると、規則インスタンス内部に持たせた
+  // 直近解決キャッシュ(CachedTempoRule / SolarDayHourTempoRule 自身の
+  // 日次テーブルキャッシュ)が効かないため、初回アクセス時に1度だけ
+  // 構築して保持する。init() 実行時にリセットする(暦の再設定に追従する)。
+  private _orbital_season_rule?: CachedTempoRule<TempoBase>
+  private _solar_hour_rule?: CachedTempoRule<SolarDayHourBase>
+  private _lunisolar_cache?: LunisolarDate
 
   constructor(o?: FancyDate) {
     if (o) {
@@ -594,6 +615,12 @@ export class FancyDate {
   }
 
   init() {
+    // 暦設定が(再)確定するたびに、直近解決キャッシュを破棄する
+    // (古い設定に基づく envelope/lunisolar 結果を持ち越さないため)。
+    this._orbital_season_rule = undefined
+    this._solar_hour_rule = undefined
+    this._lunisolar_cache = undefined
+
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
     const year = daily_measure(sunny.periodMsec, earthy.periodMsec)
     const day = daily_define(earthy.periodMsec, earthy.periodMsec)
@@ -642,7 +669,21 @@ export class FancyDate {
   }
 
   lunisolar(utc: number): LunisolarDate {
-    return resolveLunisolar(
+    // D: TempoEnvelope キャッシュ。直近解決した月がまだ utc を覆っている
+    // (last_at <= utc < next_at)場合、37ヶ月窓の朔・節気探索
+    // (lunisolar_months_around)をやり直さず、日番号だけ軽量に再計算する
+    // (phenomena/lunisolar.ts の lunisolar() 自身が day/day_start_at を
+    // 求める式と同じ式を、キャッシュ済みの月境界に対して適用するだけ)。
+    const cached = this._lunisolar_cache
+    if (cached && cached.last_at <= utc && utc < cached.next_at) {
+      const day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
+      return {
+        ...cached,
+        day: Math.floor((day.last_at - cached.last_at) / this.calc.msec.day) + 1,
+        day_start_at: day.last_at,
+      }
+    }
+    return (this._lunisolar_cache = resolveLunisolar(
       {
         moony: this.dic.moony,
         geo: this.dic.geo,
@@ -652,7 +693,7 @@ export class FancyDate {
         solarPhase: (phase, near) => this.solar_phase(phase, near),
       },
       utc,
-    )
+    ))
   }
 
   solar_term(utc: number, phase: number) {
@@ -971,7 +1012,7 @@ export class FancyDate {
     return this.find_span_time_in_day(day, target)
   }
 
-  private find_span_time_in_day_direct(day: Tempo, target: SpanTarget) {
+  private find_span_time_in_day_direct(day: TempoLike, target: SpanTarget) {
     if (target.changedRank < span_rank('H')) return null
     const firstHour = this.to_tempos(day.last_at).H
     const hour = firstHour.succ(target.H)
@@ -1000,7 +1041,7 @@ export class FancyDate {
     const yearStart = this.find_span_year_start(target.u, target.near)
     const nextYearStart = this.to_tempos(yearStart).u.next_at
     let cursor = yearStart
-    let fallback: (Tempo & TempoMonth) | undefined
+    let fallback: (TempoLike & TempoMonth) | undefined
     while (cursor < nextYearStart) {
       const month = this.to_tempos(cursor).M
       if (month.now_idx === target.M) {
@@ -1023,7 +1064,7 @@ export class FancyDate {
     return tempo.last_at
   }
 
-  private find_span_time_in_day(day: Tempo, target: SpanTarget) {
+  private find_span_time_in_day(day: TempoLike, target: SpanTarget) {
     let from = day.last_at
     let to = day.next_at
     while (from < to) {
@@ -1068,7 +1109,7 @@ export class FancyDate {
     return 0
   }
 
-  private clamp_since(interval: Tempo, since: number) {
+  private clamp_since(interval: TempoLike, since: number) {
     return interval.last_at + Math.min(Math.max(0, since), Math.max(0, interval.size - 1))
   }
 
@@ -1438,7 +1479,12 @@ export class FancyDate {
   }
 
   private is_tempos(utc: DateLike): utc is Tempos {
-    return !!utc && 'object' === typeof utc && utc.d instanceof Tempo && utc.M instanceof Tempo
+    return (
+      !!utc &&
+      'object' === typeof utc &&
+      typeof (utc as Tempos).d?.last_at === 'number' &&
+      typeof (utc as Tempos).M?.last_at === 'number'
+    )
   }
 
   private is_date_range(value: DateLike | DateRange): value is DateRange {
@@ -2111,102 +2157,7 @@ K   = @dic.earthy[2] / 360
   }
 
   雑節(utc: number, { Zz, d } = this.to_tempos(utc)) {
-    const d0 = d.reset(Zz.zero)
-    let [
-      立春,
-      入梅,
-      春分,
-      半夏生,
-      夏土用,
-      立夏,
-      夏至,
-      秋土用,
-      立秋,
-      秋分,
-      冬土用,
-      立冬,
-      冬至,
-      春土用,
-      立春2,
-    ] = [
-      1 / 8,
-      80 / 360,
-      2 / 8,
-      100 / 360,
-      13 / 40,
-      3 / 8,
-      4 / 8,
-      23 / 40,
-      5 / 8,
-      6 / 8,
-      33 / 40,
-      7 / 8,
-      8 / 8,
-      43 / 40,
-      9 / 8,
-    ].map((n) => {
-      const now = Zz.last_at + (n - 1 / 8) * Zz.size
-      return to_tempo_bare(d.size, d0.last_at, now)
-    })
-
-    const [八十八夜, 二百十日, 二百二十日] = [88, 210, 220].map((n) => 立春.succ(n - 1))
-
-    const [春彼岸, 秋彼岸] = [春分, 秋分].map((dd) => {
-      return Tempo.join(dd.back(3), dd.succ(3))
-    })
-    const [春社日, 秋社日] = [春分, 秋分].map((dd) => {
-      const C = to_tempo_bare(this.calc.msec.day, this.calc.zero.day10, dd.write_at)
-      C.now_idx = mod(C.now_idx, this.dic.C.length)
-      return C.slide(this.dic.C.length / 2 - C.now_idx - 1)
-    })
-
-    const 春 = Tempo.join(立春, 夏土用.back())
-    const 夏節分 = 立夏.back()
-    const 夏 = Tempo.join(立夏, 秋土用.back())
-    const 秋節分 = 立秋.back()
-    const 秋 = Tempo.join(立秋, 冬土用.back())
-    const 冬節分 = 立冬.back()
-    const 冬 = Tempo.join(立冬, 春土用.back())
-    const 春節分 = 立春2.back()
-    const 節分 = 春節分
-
-    夏土用 = Tempo.join(夏土用, 夏節分)
-    秋土用 = Tempo.join(秋土用, 秋節分)
-    冬土用 = Tempo.join(冬土用, 冬節分)
-    春土用 = Tempo.join(春土用, 立春2)
-
-    return {
-      立春,
-      立夏,
-      立秋,
-      立冬,
-      冬至,
-      春分,
-      夏至,
-      秋分,
-      入梅,
-      半夏生,
-      春,
-      夏,
-      秋,
-      冬,
-      春社日,
-      秋社日,
-      春土用,
-      夏土用,
-      秋土用,
-      冬土用,
-      春節分,
-      夏節分,
-      秋節分,
-      冬節分,
-      節分,
-      春彼岸,
-      秋彼岸,
-      八十八夜,
-      二百十日,
-      二百二十日,
-    }
+    return resolve雑節ByMean(Zz, d, this.calc.msec.day, this.calc.zero.day10, this.dic.C.length)
   }
 
   雑節_by_phase(utc: number) {
@@ -2233,6 +2184,78 @@ K   = @dic.earthy[2] / 360
       utc,
       day,
     )
+  }
+
+  /**
+   * 実軌道(sunny.timeOfPhase)による二十四節気の解決(定気法)。
+   * calc.idx.Z = dic.Z.length/8 という既存の zero 設計により、
+   * 等角分割の Z.now_idx は解析的な sekkiPhase*dic.Z.length から
+   * 常に 1/8 だけずれる。この 1/8 を referencePhaseOffset に使うことで、
+   * 実軌道版でも等角版と同じ now_idx 番号(=同じラベル)を維持できる
+   * (実測で検証済み: 立春/立夏/夏至/立秋/秋分/立冬/冬至/次立春が一致)。
+   *
+   * ラベル参照(def_to_label の at())は now_idx をそのまま配列添字に使う
+   * (mod を取らない)ため、0..length-1 に収まっている必要がある。
+   * OrbitalPhaseTempoRule.at() が返す now_idx は sunny.epochMsec からの
+   * 連番でありこの並びとは基準が異なる(epochMsec の位相が0とは限らない)ため、
+   * ここでは last_at の時点の位相(sunny.phaseAt)から直接 idx を再計算する。
+   *
+   * TempoView へ載せない理由: 補正後の now_idx/zero は
+   * OrbitalPhaseTempoRule.slide() 自身の基準(sunny.epochMsec 起点の連番)とは
+   * 一致しないため、この補正済み envelope を rule.slide() にそのまま渡すと
+   * 誤った遷移になる。succ()/back() が呼ばれる想定もないため、素の Tempo の
+   * ままにしておく。
+   */
+  private resolve_orbital_season(utc: number): Tempo & { path: string } {
+    const divisions = this.dic.Z.length
+    const referencePhaseOffset = 1 / 8
+    const env = this.orbital_season_rule().at(utc, { write_at: utc })
+    const avgSize = this.dic.sunny.periodMsec / divisions
+    const now_idx = mod(
+      Math.round(mod(this.dic.sunny.phaseAt(env.last_at) + referencePhaseOffset, 1) * divisions),
+      divisions,
+    )
+    const zero = env.last_at - now_idx * avgSize
+    const tempo = new Tempo(zero, now_idx, utc, env.last_at, env.next_at) as Tempo & {
+      path: string
+    }
+    tempo.path = 'season'
+    return tempo
+  }
+
+  /**
+   * resolve_orbital_season() で使う OrbitalPhaseTempoRule を CachedTempoRule
+   * で包んで使い回す(D: TempoEnvelope キャッシュ)。実軌道の位相探索は
+   * 反復計算を伴うため、season(24節気で約15日幅)の範囲内で write_at を
+   * 繰り返し問い合わせる場合(to_table() の日次走査など)、2回目以降は
+   * 実際の探索を経ずに直近の envelope を再利用できる。
+   */
+  private orbital_season_rule(): CachedTempoRule<TempoBase> {
+    return (this._orbital_season_rule ??= new CachedTempoRule(
+      new OrbitalPhaseTempoRule(this.dic.sunny, this.dic.Z.length, 1 / 8),
+    ))
+  }
+
+  /**
+   * H(不定時法)で使う SolarDayHourTempoRule を使い回す(D: TempoEnvelope
+   * キャッシュ)。この規則自身が直近1日分の時刻テーブルを内部キャッシュ
+   * するため(SolarDayHourTempoRule.hour_table_cached 参照)、インスタンスを
+   * 使い回すことで初めてそのキャッシュが効く。CachedTempoRule でも包み、
+   * 同じ時刻(1時間内)への再問い合わせもテーブル参照だけで済ませる。
+   */
+  private solar_hour_rule(): CachedTempoRule<SolarDayHourBase> {
+    return (this._solar_hour_rule ??= new CachedTempoRule(
+      new SolarDayHourTempoRule(
+        this.dic.sunny,
+        this.dic.earthy,
+        this.dic.geo,
+        this.calc.msec.day,
+        this.calc.zero.day,
+        this.calc.msec.year,
+        this.calc.zero.season,
+        this.dic.H.length,
+      ),
+    ))
   }
 
   note(
@@ -2269,26 +2292,13 @@ K   = @dic.earthy[2] / 360
   }
 
   to_tempos(utc: number): Tempos {
-    let d: Tempo, H: Tempo, m: Tempo, M: Tempo & TempoMonth, p: Tempo | undefined, u: Tempo
+    let d: TempoLike,
+      H: TempoLike,
+      m: TempoLike,
+      M: TempoLike & TempoMonth,
+      p: TempoLike | undefined,
+      u: TempoLike
     if (utc == null) throw new Error(`invalid timestamp ${utc}`)
-
-    const drill_down = (base: Tempo, path: MSEC_CALC, at = utc) => {
-      let o: Tempo & {
-        length: number
-        path: string
-      }
-      const data = this.table.msec[path]
-      const table: number[] = data?.[base.size] || data
-      if (table) {
-        o = to_tempo_by(table, base.last_at, at) as any
-      } else {
-        const b_size = this.calc.msec[path]
-        o = to_tempo_bare(b_size, base.last_at, at) as any
-        o.length = base.size / o.size
-      }
-      o.path = path
-      return o
-    }
 
     const to_tempo = (path, write_at = utc) => {
       return to_tempo_bare(this.calc.msec[path], this.calc.zero[path], write_at)
@@ -2298,24 +2308,56 @@ K   = @dic.earthy[2] / 360
 
     // season in year_of_planet
     const Zz = to_tempo_bare(this.calc.msec.year, this.calc.zero.season, utc) // 太陽年
-    const Z = drill_down(Zz, 'season') // 太陽年の二十四節気
+    // 実軌道(sunny.timeOfPhase)を持つ場合は定気法(実際の黄経)で二十四節気を解決する。
+    // そうでなければ従来通り平気法(等角分割、SubdivideTempoRule)のまま。
+    const usesOrbitalSeasons = hasSolarEvents(this.dic.sunny)
+    const seasonRule = new SubdivideTempoRule(this.calc.msec.season)
+    const ZzEnvelope = envelope_of(Zz)
+    const resolve_season = (at: number) =>
+      usesOrbitalSeasons
+        ? this.resolve_orbital_season(at)
+        : TempoView.at(seasonRule, { write_at: at, parent: ZzEnvelope })
+    const Z = resolve_season(utc) // 太陽年の二十四節気
 
-    let N: Tempo | undefined
-    let Nn: (Tempo & TempoMonth) | undefined
+    let N: TempoLike | undefined
+    let Nn: (TempoLike & TempoMonth) | undefined
     const moon_msec = this.calc.msec.moon
     const usesObservedLunisolar =
       !this.is_table_month && hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)
     if (this.dic.moony && moon_msec != null && !usesObservedLunisolar) {
-      // 今月と中気
-      Nn = to_tempo_bare(moon_msec, this.calc.zero.moon, utc).floor(
+      // 今月と中気(平均朔望月+日境界切り詰め = MeanLunarPhaseTempoRule)。
+      // Nn.now_idx はこの後「連番の朔望月カウント」から「年内の月番号
+      // (0-11、閏月判定に応じて後で書き換える)」へ意味を変えて上書きする。
+      // TempoView(rule 委譲の slide())のままだと、この上書き後に
+      // succ()/back() が呼ばれた場合 MeanLunarPhaseTempoRule.slide() が
+      // 誤って「年内月番号」を「朔望月カウント」として扱ってしまう
+      // (resolve_orbital_season の Z と同じ理由で、素の Tempo にしておく)。
+      const NnEnvelope = new MeanLunarPhaseTempoRule(
+        moon_msec,
+        this.calc.zero.moon,
         this.calc.msec.day,
         this.calc.zero.day,
+      ).at(utc)
+      Nn = new Tempo(
+        NnEnvelope.zero,
+        NnEnvelope.now_idx,
+        utc,
+        NnEnvelope.last_at,
+        NnEnvelope.next_at,
       ) as Tempo & TempoMonth
-      N = drill_down(Nn, 'day')
+      N = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+        write_at: utc,
+        parent: envelope_of(Nn),
+      })
 
-      let Zs = drill_down(Zz, 'season', Nn.last_at)
+      // 閏月判定・月番号も、Z 本体と同じ基準(実軌道 or 平気法)で解決する。
+      // ここだけ等角のままだと、hasSolarEvents(sunny) な暦で Tempos.Z は
+      // 実軌道なのに閏月判定は平気法のまま、という内部矛盾が起きる
+      // (実測: 40年間で閏月判定23ヶ月/496ヶ月、月番号29ヶ月が食い違うため
+      // 「差が小さく無視できる」とは言えないと判明した)。
+      let Zs = resolve_season(Nn.last_at)
       if (!Nn.is_cover(Zs.moderate_at)) {
-        Zs = drill_down(Zz, 'season', Nn.next_at)
+        Zs = resolve_season(Nn.next_at)
         if (!Nn.is_cover(Zs.moderate_at)) {
           Nn.is_leap = true
         }
@@ -2325,20 +2367,35 @@ K   = @dic.earthy[2] / 360
 
     if (this.is_table_leap) {
       p = to_tempo('period')
-      u = drill_down(p, 'year')
+      u = TempoView.at(new TableTempoRule(this.table.msec.year, p.last_at), { write_at: utc })
       u.now_idx += p.now_idx * this.dic.p.length
-      M = drill_down(u, 'month') as any
-      d = drill_down(M, 'day')
+      M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+        write_at: utc,
+      }) as TempoLike & TempoMonth
+      d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+        write_at: utc,
+        parent: envelope_of(M),
+      })
     } else {
       if (this.is_table_month) {
+        // 「季節等分割+日境界切り詰め」という単発の組み合わせなので、
+        // 単一利用のためだけに新しい規則クラスを作らずそのままにする。
         u = to_tempo_bare(this.calc.msec.year, this.calc.zero.spring, utc).floor(
           this.calc.msec.day,
           this.calc.zero.day,
         )
-        M = drill_down(u, 'month') as any
-        d = drill_down(M, 'day')
+        M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+          write_at: utc,
+        }) as TempoLike & TempoMonth
+        d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+          write_at: utc,
+          parent: envelope_of(M),
+        })
       } else {
         if (usesObservedLunisolar) {
+          // lunisolar() は月・年・日をまとめて1回の探索で解決する。ここで
+          // ObservedLunisolarMonthRule に置き換えると同じ探索を二重に行う
+          // ことになり性能退行するため、既存の直接呼び出しのままにする。
           const lunisolar = this.lunisolar(utc)
           const yearSize = lunisolar.next_year_start_at - lunisolar.year_start_at
           const monthSize = lunisolar.next_at - lunisolar.last_at
@@ -2363,6 +2420,8 @@ K   = @dic.earthy[2] / 360
         } else if (!Nn || !N) {
           throw new Error('Lunar month calculation requires a satellite orbital period.')
         } else {
+          // Fixed→floor(moon)→floor(day) という単発の組み合わせなので、
+          // 単一利用のためだけに新しい規則クラスを作らずそのままにする。
           u = to_tempo_bare(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, utc)
             .floor(moon_msec, this.calc.zero.moon)
             .floor(this.calc.msec.day, this.calc.zero.day)
@@ -2374,15 +2433,29 @@ K   = @dic.earthy[2] / 360
 
     // hour minute second  in day
     if (this.dic.is_solor) {
-      H = this.to_tempo_by_solor(utc, d)
-      const size = H.size / this.dic.m.length
-      m = to_tempo_bare(size, H.last_at, utc)
+      H = TempoView.at(this.solar_hour_rule(), { write_at: utc, day: envelope_of(d) })
+      m = TempoView.at(new SubdivideTempoRule(H.size / this.dic.m.length), {
+        write_at: utc,
+        parent: envelope_of(H),
+      })
     } else {
-      H = drill_down(d, 'hour')
-      m = drill_down(H, 'minute')
+      H = TempoView.at(new SubdivideTempoRule(this.calc.msec.hour), {
+        write_at: utc,
+        parent: envelope_of(d),
+      })
+      m = TempoView.at(new SubdivideTempoRule(this.calc.msec.minute), {
+        write_at: utc,
+        parent: envelope_of(H),
+      })
     }
-    const s = drill_down(m, 'second')
-    const S = drill_down(s, 'msec')
+    const s = TempoView.at(new SubdivideTempoRule(this.calc.msec.second), {
+      write_at: utc,
+      parent: envelope_of(m),
+    })
+    const S = TempoView.at(new SubdivideTempoRule(this.calc.msec.msec), {
+      write_at: utc,
+      parent: envelope_of(s),
+    })
 
     let G = {} as Tempo
     if (this.table.msec.era != null) {
@@ -2403,8 +2476,14 @@ K   = @dic.earthy[2] / 360
 
     // 年初来番号
     const w0 = to_tempo('week', u.last_at)
-    const w = drill_down(w0, 'week')
-    const D = drill_down(u, 'day')
+    const w = TempoView.at(new SubdivideTempoRule(this.calc.msec.week), {
+      write_at: utc,
+      parent: envelope_of(w0),
+    })
+    const D = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+      write_at: utc,
+      parent: envelope_of(u),
+    })
 
     const Y = { now_idx: u.now_idx } as Tempo
     if (u.next_at < w.next_at) {

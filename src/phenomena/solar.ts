@@ -1,6 +1,7 @@
 import type { OrbitalModel, RotationModel, TIMEZONE } from '../orbital-model'
 import { mod } from '../number'
 import { hasSolarEvents } from '../orbital-model'
+import type { TempoLike } from '../tempo-model'
 import { Tempo, to_tempo_by, to_tempo_bare } from '../time'
 
 export function solar_phase(sunny: OrbitalModel, phase: number, near: number) {
@@ -149,13 +150,70 @@ export function solor(
   return { K, lat, 時角, 方向, 高度, 真夜中, 日の出, 南中時刻, 日の入 }
 }
 
-export function 雑節_by_phase(
-  sunny: OrbitalModel,
+type SolarTerms = ReturnType<typeof solar_terms>
+
+/**
+ * solar_terms_mean: 平気法(等角分割)版の二十四節気+雑節の基準15項目。
+ * solar_terms() が実軌道(sunny.timeOfPhase())で求めるのに対し、
+ * こちらは Zz(平均太陽年)の span を比例配分するだけで求める。
+ * 既存 FancyDate.雑節() が内部で行っていた計算をそのまま抽出したもの。
+ *
+ * Zz/d は呼び出し側の to_tempos() が解決した Tempo をそのまま渡すこと
+ * (暦によって d の zero 基準が異なる場合があるため、ここで作り直さない)。
+ */
+export function solar_terms_mean(Zz: TempoLike, d: TempoLike): SolarTerms {
+  const d0 = d.reset(Zz.zero)
+  const phases = {
+    立春: 1 / 8,
+    入梅: 80 / 360,
+    春分: 2 / 8,
+    半夏生: 100 / 360,
+    夏土用: 13 / 40,
+    立夏: 3 / 8,
+    夏至: 4 / 8,
+    秋土用: 23 / 40,
+    立秋: 5 / 8,
+    秋分: 6 / 8,
+    冬土用: 33 / 40,
+    立冬: 7 / 8,
+    冬至: 8 / 8,
+    春土用: 43 / 40,
+    次立春: 9 / 8,
+  }
+  const term = (phase: number) => {
+    const now = Zz.last_at + (phase - phases.立春) * Zz.size
+    return to_tempo_bare(d.size, d0.last_at, now)
+  }
+  return {
+    立春: term(phases.立春),
+    入梅: term(phases.入梅),
+    春分: term(phases.春分),
+    半夏生: term(phases.半夏生),
+    夏土用: term(phases.夏土用),
+    立夏: term(phases.立夏),
+    夏至: term(phases.夏至),
+    秋土用: term(phases.秋土用),
+    立秋: term(phases.立秋),
+    秋分: term(phases.秋分),
+    冬土用: term(phases.冬土用),
+    立冬: term(phases.立冬),
+    冬至: term(phases.冬至),
+    春土用: term(phases.春土用),
+    次立春: term(phases.次立春),
+  }
+}
+
+/**
+ * 雑節_from_terms: 二十四節気+雑節の基準15項目から、八十八夜・二百十日・
+ * 二百二十日・彼岸・社日・土用・節分などの雑節一式を組み立てる共通部分。
+ * 基準15項目を実軌道(solar_terms)で求めるか平気法(solar_terms_mean)で
+ * 求めるかだけが 雑節_by_phase / 雑節_by_mean の違いになる。
+ */
+export function 雑節_from_terms(
   dayMsec: number,
-  dayZero: number,
   day10Zero: number,
   stemLength: number,
-  utc: number,
+  terms: SolarTerms,
 ) {
   let {
     立春,
@@ -173,7 +231,7 @@ export function 雑節_by_phase(
     冬至,
     春土用,
     次立春: 立春2,
-  } = solar_terms(sunny, dayMsec, dayZero, utc)
+  } = terms
 
   const [八十八夜, 二百十日, 二百二十日] = [88, 210, 220].map((n) => 立春.succ(n - 1))
 
@@ -233,6 +291,36 @@ export function 雑節_by_phase(
     二百十日,
     二百二十日,
   }
+}
+
+/**
+ * 雑節_by_mean: 平気法(等角分割)版。solar_terms_mean() で基準項目を求め、
+ * 雑節_from_terms() で残りを組み立てる。既存 FancyDate.雑節() と同じ結果になる。
+ */
+export function 雑節_by_mean(
+  Zz: TempoLike,
+  d: TempoLike,
+  dayMsec: number,
+  day10Zero: number,
+  stemLength: number,
+) {
+  return 雑節_from_terms(dayMsec, day10Zero, stemLength, solar_terms_mean(Zz, d))
+}
+
+export function 雑節_by_phase(
+  sunny: OrbitalModel,
+  dayMsec: number,
+  dayZero: number,
+  day10Zero: number,
+  stemLength: number,
+  utc: number,
+) {
+  return 雑節_from_terms(
+    dayMsec,
+    day10Zero,
+    stemLength,
+    solar_terms(sunny, dayMsec, dayZero, utc),
+  )
 }
 
 export function to_tempo_by_solor(

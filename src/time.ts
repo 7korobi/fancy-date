@@ -189,10 +189,14 @@ export class Tempo {
       const now_idx = this.now_idx + n
       const idx = mod(now_idx, this.table.length)
 
-      const new_table_idx = Math.floor(now_idx / this.table.length)
-      const now_table_idx = Math.floor(this.now_idx / this.table.length)
-      const table_idx_diff = new_table_idx - now_table_idx
-      const table_diff = table_idx_diff ? this.table[this.table.length - 1] * table_idx_diff : 0
+      // table_idx は zero からの絶対量として扱う(this.now_idx との差分では
+      // 計算しない)。this.last_at/this.next_at 自身が this.now_idx の
+      // table_idx を反映しているとは限らない(table_idx !== 0 の状態を
+      // to_tempo_by() や slide() の外から素の Tempo として渡された場合など)
+      // ため、差分方式だと経路依存(呼び出し順序で結果が変わる)になっていた。
+      const table_idx = Math.floor(now_idx / this.table.length)
+      const table_size = this.table[this.table.length - 1]
+      const table_diff = table_idx ? table_size * table_idx : 0
 
       const last_at = this.zero + table_diff + (this.table[idx - 1] || 0)
       const next_at = this.zero + table_diff + this.table[idx]
@@ -319,8 +323,14 @@ export function to_tempo_by(table: number[], zero: number, write_at: number) {
     }
   }
 
-  const last_at = zero + (table[now_idx - 1] || 0)
-  next_at = zero + table[now_idx]
+  // table_idx (zero から何周期分ずれているか)を last_at/next_at にも
+  // 反映する。now_idx だけに反映して last_at/next_at には反映しないと、
+  // 1周期を越えた write_at で今の周期と無関係な日時を返してしまう
+  // (zero から1周期以内に write_at が収まる呼び出し方しかしていない
+  // 既存コードでは table_idx が常に0のため気づかれなかった)。
+  const table_diff = table_idx ? table_size * table_idx : 0
+  const last_at = zero + table_diff + (table[now_idx - 1] || 0)
+  next_at = zero + table_diff + table[now_idx]
   now_idx += table_idx * table.length
 
   return new Tempo(zero, now_idx, write_at, last_at, next_at, table)

@@ -17,6 +17,7 @@ const {
   黒分月,
   黒分月軌道,
 } = require('../lib/sample')
+const { 天文地球 } = require('../lib/sample/astro')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
 const { MarsSolarOrbital } = require('../lib/nasa')
@@ -692,6 +693,40 @@ describe('Gregorian', () => {
     expect(shifted.format(mean.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
     expect(shifted.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
     expect(shifted.format(phase.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
+  })
+
+  // Z (Tempos.Z) は sunny が solarEvents を持つ(=hasSolarEvents)場合、
+  // 等角分割(平気法相当)ではなく実軌道(定気法)の二十四節気で解決される。
+  // GregorianAstronomical(ga)は天文東京を使うため対象になり、solar_terms()の
+  // 8つの主要な節気(立春/春分/立夏/夏至/立秋/秋分/立冬/冬至)とラベルが一致する。
+  test('Z resolves true solar terms (定気法) once sunny exposes solarEvents precision', () => {
+    const terms = ga.solar_terms(g.parse('2020年6月1日'))
+    for (const name of ['立春', '春分', '立夏', '夏至', '立秋', '秋分', '立冬', '冬至']) {
+      expect(ga.format(terms[name].write_at, 'Z')).toBe(name)
+    }
+  })
+
+  // 旧暦(Nn/N)経路の閘月判定・月番号も、Tempos.Zと同じ基準(hasSolarEvents(sunny))で
+  // 切り替わらないと内部矛盾になる(実測: sunnyのみ精密な合成暦では、
+  // 40年間のうち閘月判定が23ヶ月/496ヶ月、月番号が29ヶ月で食い違うと判明したため、
+  // 「差が小さく無視できる」とは言えない)。
+  // sunnyのみ天文精度(平気法の moony はそのまま)にした合成暦で、
+  // 既知の閘月判定が実軌道基準に切り替わっていることを確認する。
+  test('Nn/Zs leap-month detection also switches to orbital phase alongside Z', () => {
+    const testCal = 平気法
+      .dup()
+      .spot([天文地球, 月[1], 月[2]], 東京[1], 東京[2], 東京[3])
+      .init()
+    expect(testCal.dic.sunny.solarEvents || testCal.dic.sunny.timeOfPhase).toBeTruthy()
+
+    // 以前の等角(平気法)ロジックでは mean=false だったが、
+    // 実軌道ではこの月が閘月になる(2003-10-24T14:00 付近の月)。
+    const leapMonth = testCal.to_tempos(Date.UTC(2003, 10, 1)).M
+    expect(leapMonth.is_leap).toBe(true)
+
+    // 以前の等角ロジックでは mean=true だったが、実軌道では通常月(2006-11-19付近)。
+    const nonLeapMonth = testCal.to_tempos(Date.UTC(2006, 10, 25)).M
+    expect(nonLeapMonth.is_leap).toBeFalsy()
   })
 })
 

@@ -1,6 +1,7 @@
 import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
+import type { TempoLike } from './tempo-model';
 import { Tempo } from './time';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
@@ -58,35 +59,35 @@ export type SpanOptions = {
 };
 export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[];
 export type Tempos = {
-    Zz: Tempo;
-    A: Tempo;
-    B: Tempo;
-    C: Tempo;
-    D: Tempo;
-    E: Tempo;
-    F: Tempo;
-    G: Tempo;
-    H: Tempo;
-    J: Tempo;
-    M: Tempo & TempoMonth;
-    N: Tempo | undefined;
-    Q: Tempo;
-    S: Tempo;
-    V: Tempo;
-    Y: Tempo;
-    Z: Tempo;
-    a: Tempo;
-    b: Tempo;
-    c: Tempo;
-    d: Tempo;
-    f: Tempo;
-    m: Tempo;
-    p: Tempo | undefined;
-    s: Tempo;
-    u: Tempo;
-    w: Tempo;
-    x: Tempo | undefined;
-    y: Tempo;
+    Zz: TempoLike;
+    A: TempoLike;
+    B: TempoLike;
+    C: TempoLike;
+    D: TempoLike;
+    E: TempoLike;
+    F: TempoLike;
+    G: TempoLike;
+    H: TempoLike;
+    J: TempoLike;
+    M: TempoLike & TempoMonth;
+    N: TempoLike | undefined;
+    Q: TempoLike;
+    S: TempoLike;
+    V: TempoLike;
+    Y: TempoLike;
+    Z: TempoLike;
+    a: TempoLike;
+    b: TempoLike;
+    c: TempoLike;
+    d: TempoLike;
+    f: TempoLike;
+    m: TempoLike;
+    p: TempoLike | undefined;
+    s: TempoLike;
+    u: TempoLike;
+    w: TempoLike;
+    x: TempoLike | undefined;
+    y: TempoLike;
 };
 type DateLike = number | Tempos | string;
 type DateRange = readonly [from: DateLike, to: DateLike];
@@ -133,8 +134,8 @@ type TOKENS<K extends string, T> = {
     [key in K]: T;
 };
 type IndexFactory = (this: Indexer, s: string) => number;
-type LabelFactory = (list: readonly string[] | null, val: Tempo & {
-    is_leap: boolean;
+type LabelFactory = (list: readonly string[] | null, val: TempoLike & {
+    is_leap?: boolean;
 }, size: number) => string;
 type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null] | readonly [readonly string[], readonly string[] | null, string | readonly string[]];
 declare class Indexer {
@@ -174,6 +175,9 @@ export declare class FancyDate {
             };
         };
     };
+    private _orbital_season_rule?;
+    private _solar_hour_rule?;
+    private _lunisolar_cache?;
     constructor(o?: FancyDate);
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;
@@ -428,6 +432,43 @@ export declare class FancyDate {
         二百二十日: Tempo;
     };
     to_tempo_by_solor(utc: number, day: any): Tempo;
+    /**
+     * 実軌道(sunny.timeOfPhase)による二十四節気の解決(定気法)。
+     * calc.idx.Z = dic.Z.length/8 という既存の zero 設計により、
+     * 等角分割の Z.now_idx は解析的な sekkiPhase*dic.Z.length から
+     * 常に 1/8 だけずれる。この 1/8 を referencePhaseOffset に使うことで、
+     * 実軌道版でも等角版と同じ now_idx 番号(=同じラベル)を維持できる
+     * (実測で検証済み: 立春/立夏/夏至/立秋/秋分/立冬/冬至/次立春が一致)。
+     *
+     * ラベル参照(def_to_label の at())は now_idx をそのまま配列添字に使う
+     * (mod を取らない)ため、0..length-1 に収まっている必要がある。
+     * OrbitalPhaseTempoRule.at() が返す now_idx は sunny.epochMsec からの
+     * 連番でありこの並びとは基準が異なる(epochMsec の位相が0とは限らない)ため、
+     * ここでは last_at の時点の位相(sunny.phaseAt)から直接 idx を再計算する。
+     *
+     * TempoView へ載せない理由: 補正後の now_idx/zero は
+     * OrbitalPhaseTempoRule.slide() 自身の基準(sunny.epochMsec 起点の連番)とは
+     * 一致しないため、この補正済み envelope を rule.slide() にそのまま渡すと
+     * 誤った遷移になる。succ()/back() が呼ばれる想定もないため、素の Tempo の
+     * ままにしておく。
+     */
+    private resolve_orbital_season;
+    /**
+     * resolve_orbital_season() で使う OrbitalPhaseTempoRule を CachedTempoRule
+     * で包んで使い回す(D: TempoEnvelope キャッシュ)。実軌道の位相探索は
+     * 反復計算を伴うため、season(24節気で約15日幅)の範囲内で write_at を
+     * 繰り返し問い合わせる場合(to_table() の日次走査など)、2回目以降は
+     * 実際の探索を経ずに直近の envelope を再利用できる。
+     */
+    private orbital_season_rule;
+    /**
+     * H(不定時法)で使う SolarDayHourTempoRule を使い回す(D: TempoEnvelope
+     * キャッシュ)。この規則自身が直近1日分の時刻テーブルを内部キャッシュ
+     * するため(SolarDayHourTempoRule.hour_table_cached 参照)、インスタンスを
+     * 使い回すことで初めてそのキャッシュが効く。CachedTempoRule でも包み、
+     * 同じ時刻(1時間内)への再問い合わせもテーブル参照だけで済ませる。
+     */
+    private solar_hour_rule;
     note(utc: number, tempos?: Tempos, arg1?: {
         立春: Tempo;
         立夏: Tempo;

@@ -6,4 +6,5 @@ export * from './prepare';
 export * from './naoj';
 export * from './nasa';
 export * from './time';
+export * from './tempo-model';
 export * from './number';
