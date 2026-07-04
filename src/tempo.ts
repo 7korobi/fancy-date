@@ -24,6 +24,22 @@ export type TempoEnvelope = {
    * succ()/back() が誤った(等間隔の)遷移をしてしまう。
    */
   table?: readonly number[]
+  /**
+   * EraAdjustedTempoRule が now_idx を元号内相対年へ書き換える前の、
+   * 調整前(通し番号)の now_idx。元号を持たない暦(EraAdjustedTempoRule を
+   * 経由しない envelope)では設定されない。
+   *
+   * fancy-date.ts の span_target()/find_span_year_start() は「目標の年へ
+   * 何年分移動するか」を検算するため、ある年から別の年への距離を
+   * now_idx の差分(や絶対値への到達)で計算している。now_idx が元号ごとに
+   * 1 へリセットされる値だと、この距離計算が意味を失い(例: 平成31年→
+   * 令和1年は本来1年の移動だが、31→1という見かけの差分は-30になる)、
+   * 目標に到達するまでのループが暴走して無関係な年まで進んでしまう
+   * (実測: 平気法/定気法で元号を跨ぐ年送りをすると数十年先に飛ぶ、
+   * または探索ループが数十回余分に走り体感できる遅延が出た)。
+   * raw_now_idx は常に単調な通し番号を保つため、この距離計算に使う。
+   */
+  raw_now_idx?: number
 }
 
 /**
@@ -575,7 +591,7 @@ export class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements
     const era = this.eras[eraEnv.now_idx]
     if (!era?.[0]) return raw
     const now_idx = raw.now_idx + 1 - era[2]
-    return { ...raw, now_idx }
+    return { ...raw, now_idx, raw_now_idx: raw.now_idx }
   }
 
   at(write_at: number, base: Base): TempoEnvelope {
@@ -1021,6 +1037,15 @@ export class Tempo<Base extends TempoBase = TempoBase> implements TempoLike {
   }
   set is_leap(value: boolean | undefined) {
     this.envelope = { ...this.envelope, is_leap: value }
+  }
+  /**
+   * EraAdjustedTempoRule が元号内相対年へ書き換える前の、常に単調な
+   * 通し番号。元号調整を経由しない envelope(raw_now_idx 未設定)では
+   * now_idx をそのまま返す(グレゴリオ暦等、既存の動作を変えない)。
+   * TempoEnvelope.raw_now_idx のドキュメント参照。
+   */
+  get raw_now_idx() {
+    return this.envelope.raw_now_idx ?? this.envelope.now_idx
   }
   /**
    * 既存 Tempo.table と同じ役割。TableTempoRule/SolarDayHourTempoRule が

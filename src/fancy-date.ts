@@ -40,7 +40,7 @@ import {
   TableTempoRule,
   Tempo,
 } from './tempo'
-import type { SolarDayHourBase, TempoBase, TempoLabelLike, TempoLike } from './tempo'
+import type { SolarDayHourBase, SubdivideBase, TempoBase, TempoLabelLike, TempoLike } from './tempo'
 import { to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
@@ -206,35 +206,35 @@ type SpanTarget = {
   sourceSecondSince: number
 }
 export type Tempos = {
-  Zz: TempoLike
-  A: TempoLike
-  B: TempoLike
-  C: TempoLike
-  D: TempoLike
+  Zz: Tempo<TempoBase>
+  A: Tempo<TempoBase>
+  B: Tempo<TempoBase>
+  C: Tempo<TempoBase>
+  D: Tempo<SubdivideBase>
   E: TempoLike | TempoLabelLike
-  F: TempoLike
+  F: Tempo<TempoBase>
   G: TempoLike | TempoLabelLike
   H: TempoLike
-  J: TempoLike
-  M: TempoLike & TempoMonth
-  N: TempoLike | undefined
+  J: Tempo<TempoBase>
+  M: Tempo<TempoBase> & TempoMonth
+  N: Tempo<SubdivideBase> | undefined
   Q: TempoLabelLike
-  S: TempoLike
+  S: Tempo<SubdivideBase>
   V: TempoLike | TempoLabelLike
   Y: TempoLabelLike
-  Z: TempoLike
+  Z: Tempo<TempoBase>
   a: TempoLabelLike
   b: TempoLabelLike
   c: TempoLabelLike
-  d: TempoLike
+  d: Tempo<SubdivideBase>
   f: TempoLabelLike
-  m: TempoLike
-  p: TempoLike | undefined
-  s: TempoLike
-  u: TempoLike
-  w: TempoLike
+  m: Tempo<SubdivideBase>
+  p: Tempo<TempoBase> | undefined
+  s: Tempo<SubdivideBase>
+  u: Tempo<TempoBase>
+  w: Tempo<SubdivideBase>
   x: TempoLabelLike | undefined
-  y: TempoLike
+  y: Tempo<TempoBase>
 }
 type DateLike = number | Tempos | string
 type DateRange = readonly [from: DateLike, to: DateLike]
@@ -945,7 +945,11 @@ export class FancyDate {
   private span_target(utc: number, parts: readonly SpanPart[]) {
     const source = this.to_tempos(utc)
     const target: SpanTarget = {
-      u: source.u.now_idx,
+      // u は元号内相対年(now_idx)ではなく raw_now_idx(単調な通し番号)で
+      // 初期化する。元号を跨ぐ年送りで find_span_year_start() が目標年に
+      // 到達できず暴走する不具合(平成31年+1年が「令和32年」まで飛ぶ)の
+      // 修正。TempoEnvelope.raw_now_idx のドキュメント参照。
+      u: source.u.raw_now_idx,
       y: source.y.now_idx,
       M: source.M.now_idx,
       d: source.d.now_idx,
@@ -981,6 +985,25 @@ export class FancyDate {
         target.near += amount * this.dic.E.length * this.unit_msec('day')
         continue
       }
+      if ('M' === token) {
+        // target.M += amount という単純な番号加算だと、次の月が閏月
+        // (is_leap=true、now_idx は前月と同じ)であるケースを一切
+        // 考慮できず、閏月をまるごと読み飛ばしてしまう不具合があった
+        // (実測: 平気法/定気法とも、閏月を挟む区間で succ('1ヶ月後')を
+        // 繰り返すと閏月に一度もヒットしないまま次の月へ進む)。
+        // M(Tempo)自身の succ()/back()(MeanLunisolarMonthRule/
+        // ObservedLunisolarMonthRule.slide() 経由)は実際の暦上の隣接月を
+        // 1つずつ辿るため閏月も正しく経由する。1ヶ月ずつ繰り返すことで
+        // これを利用する(amount は通常小さいためコストは問題にならない)。
+        const shifted = this.step_month(source.M, amount)
+        target.M = shifted.now_idx
+        target.M_is_leap = shifted.is_leap
+        // 月の移動で年をまたいだ分(閏月の有無によらず正確)を u へ反映する。
+        target.u += this.to_tempos(shifted.last_at).u.raw_now_idx - source.u.raw_now_idx
+        target.changedRank = Math.max(target.changedRank, span_rank('M'))
+        target.near += amount * this.unit_msec('month')
+        continue
+      }
       if (!is_core_precision(token)) {
         throw new Error(`cannot add cyclic span token ${token}`)
       }
@@ -994,6 +1017,33 @@ export class FancyDate {
     return target
   }
 
+  /**
+   * source.M から amount 回、実際の隣接月(閏月を含む)を1つずつ辿る。
+   *
+   * Tempo 自身の succ()/back()(= rule.slide())を連続で使わないのは、
+   * TableTempoRule(グレゴリオ暦等、is_table_leap 系の暦の M が使う)の
+   * now_idx が「year の zero を起点にした通し番号」であり、mod されずに
+   * そのまま蓄積される仕様のため(u(年)には正しい仕様だが、年内で
+   * 0-11 にリセットされるべき M にはそのまま流用できない)。実測で
+   * M.succ() を11回連鎖させると now_idx が 1→12(本来は次の年の 0)まで
+   * 蓄積し、to_tempos() が都度再構築する新鮮な M(必ず 0-11 に収まる)と
+   * 食い違って年が余分に1つ進む不具合があった。都度 to_tempos() で
+   * 再構築すれば、暦の種類によらず常に正しい年内番号の M が得られる。
+   */
+  private step_month(month: Tempo<TempoBase> & TempoMonth, amount: number): Tempo<TempoBase> & TempoMonth {
+    let result = month
+    let remaining = amount
+    while (remaining > 0) {
+      result = this.to_tempos(result.next_at).M
+      remaining--
+    }
+    while (remaining < 0) {
+      result = this.to_tempos(result.last_at - 1).M
+      remaining++
+    }
+    return result
+  }
+
   private resolve_span_week_target(target: SpanTarget) {
     if (target.week == null) return
     const yearStart = this.find_span_year_start(target.u, target.near)
@@ -1001,7 +1051,7 @@ export class FancyDate {
     const week = yearWeek.slide_to(target.week)
     const at = week.last_at + Math.min(Math.max(0, target.sourceWeekSince), Math.max(0, week.size - 1))
     const tempos = this.to_tempos(at)
-    target.u = tempos.u.now_idx
+    target.u = tempos.u.raw_now_idx
     target.y = tempos.y.now_idx
     target.M = tempos.M.now_idx
     target.d = tempos.d.now_idx
@@ -1091,7 +1141,7 @@ export class FancyDate {
 
   private find_span_month(target: SpanTarget) {
     const near = this.to_tempos(target.near)
-    if (near.u.now_idx === target.u && near.M.now_idx === target.M && near.M.is_leap === target.M_is_leap) {
+    if (near.u.raw_now_idx === target.u && near.M.now_idx === target.M && near.M.is_leap === target.M_is_leap) {
       return near.M
     }
 
@@ -1111,11 +1161,15 @@ export class FancyDate {
   }
 
   private find_span_year_start(year: number, near: number) {
+    // year/tempo.now_idx ではなく tempo.raw_now_idx で比較する。now_idx は
+    // 元号ごとに1へリセットされるため、絶対値としての到達判定に使えない
+    // (例: 平成31年から令和1年へ進んだだけなのに 31→1 は差分-30に見える)。
+    // raw_now_idx は元号を跨いでも単調なので、この探索が正しく収束する。
     let tempo = this.to_tempos(near).u
-    while (tempo.now_idx < year) {
+    while (tempo.raw_now_idx < year) {
       tempo = this.to_tempos(tempo.next_at).u
     }
-    while (year < tempo.now_idx) {
+    while (year < tempo.raw_now_idx) {
       tempo = this.to_tempos(tempo.last_at - this.calc.msec.day).u
     }
     return tempo.last_at
@@ -1615,7 +1669,15 @@ export class FancyDate {
     ;(() => {
       H = N = Q = V = d = m = s = strategy
       const M = (list: string[]) => {
-        if (list && list.length) {
+        // list に null(ロムルス暦の暦外期間ラベルのように、一部の要素だけ
+        // ラベルを持ち残りは数値表示にフォールバックさせる設計、
+        // sample/locale.ts の ロムルス月ラベル 参照)が混ざる場合、
+        // 正規表現全体を1パターンに畳めない(null は join で空文字列に
+        // なり、意図しないマッチを生む)ため、パース用正規表現は
+        // 素直に数値パターンへフォールバックする。表示(to_label)側は
+        // 要素ごとに個別フォールバックできるが、パースは全体で1つの
+        // パターンが要るため、この違いを許容する。
+        if (list && list.length && list.every((s) => null != s)) {
           if (list.every((s) => 1 === s.length)) {
             return `(閏?[${list.join('')}])`
           }
@@ -1774,6 +1836,19 @@ export class FancyDate {
     }
 
     const G = (__, val) => val.label
+    // M(月、サフィックスなし=to_value)は常に数値のまま(list を見ない)。
+    // 一見 at() 経由にして list(月名/暦外ラベル)を反映させたくなるが、
+    // 既存の暦定義の多くは .lang() を呼ばずデフォルトの format
+    // ('Gy年M月d日(E)H時m分s秒' 等、M の直後にリテラル「月」が続く)を
+    // そのまま使っており、M が数値ではなく list の月名文字列を返すように
+    // なると、その月名の直後に元のリテラル「月」がそのまま残ってしまい
+    // 「霧月月1日」のような重複表示になる不具合が実際に起きた
+    // (フランス革命暦のデフォルト format で実測、table-spec.js の
+    // スナップショットで発覚)。list を使った月名/暦外ラベル表示は
+    // 引き続き Mo(to_label、at() 経由)側だけの役割とし、month_divs の
+    // null(暦外期間)を持つ暦を新規に定義する場合は、この Mo を使う
+    // ように .lang() で明示的に format/parse を設定する
+    // (calendars.ts の Romulus 定義参照)。
     let M = month(integer(1))
     let H = (N = m = s = S = Y = u = y = integer(0))
     const D = (Q = d = p = w = integer(1))
@@ -2260,7 +2335,7 @@ K   = @dic.earthy[2] / 360
    * 再計算は不要で、TempoView.at() でそのまま包める
    * (以前はここで now_idx を都度再計算し、素の Tempo にしていた)。
    */
-  private resolve_orbital_season(utc: number): TempoLike {
+  private resolve_orbital_season(utc: number): Tempo<TempoBase> {
     return Tempo.at(this.orbital_season_rule(), { write_at: utc })
   }
 
@@ -2337,12 +2412,12 @@ K   = @dic.earthy[2] / 360
   }
 
   to_tempos(utc: number): Tempos {
-    let d: TempoLike,
+    let d: Tempo<SubdivideBase>,
       H: TempoLike,
-      m: TempoLike,
-      M: TempoLike & TempoMonth,
-      p: TempoLike | undefined,
-      u: TempoLike
+      m: Tempo<SubdivideBase>,
+      M: Tempo<TempoBase> & TempoMonth,
+      p: Tempo<TempoBase> | undefined,
+      u: Tempo<TempoBase>
     if (utc == null) throw new Error(`invalid timestamp ${utc}`)
 
     const J = Tempo.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
@@ -2364,8 +2439,8 @@ K   = @dic.earthy[2] / 360
         : Tempo.at(seasonRule, { write_at: at, parent: ZzEnvelope })
     const Z = resolve_season(utc) // 太陽年の二十四節気
 
-    let N: TempoLike | undefined
-    let Nn: (TempoLike & TempoMonth) | undefined
+    let N: Tempo<SubdivideBase> | undefined
+    let Nn: (Tempo<TempoBase> & TempoMonth) | undefined
     const moon_msec = this.calc.msec.moon
     const usesObservedLunisolar =
       !this.is_table_month && hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)
@@ -2393,7 +2468,7 @@ K   = @dic.earthy[2] / 360
           resolve_season,
         ),
         { write_at: utc },
-      ) as TempoLike & TempoMonth
+      ) as Tempo<TempoBase> & TempoMonth
       N = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
         write_at: utc,
         parent: envelope_of(Nn),
@@ -2426,7 +2501,7 @@ K   = @dic.earthy[2] / 360
       })
       M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
         write_at: utc,
-      }) as TempoLike & TempoMonth
+      }) as Tempo<TempoBase> & TempoMonth
       d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
         write_at: utc,
         parent: envelope_of(M),
@@ -2441,7 +2516,7 @@ K   = @dic.earthy[2] / 360
         )
         M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
           write_at: utc,
-        }) as TempoLike & TempoMonth
+        }) as Tempo<TempoBase> & TempoMonth
         d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
           write_at: utc,
           parent: envelope_of(M),
@@ -2477,7 +2552,7 @@ K   = @dic.earthy[2] / 360
           )
           M = Tempo.at(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec), {
             write_at: utc,
-          }) as TempoLike & TempoMonth
+          }) as Tempo<TempoBase> & TempoMonth
           // d(月内日)は M の実区間(last_at)からの経過日数として求まる値
           // (lunisolar.day - 1 と数値的に同じ)。SubdivideTempoRule で
           // 構築すれば、通常の(TempoView)succ()/back() がそのまま安全に

@@ -3,7 +3,6 @@ export declare const SECOND: number;
 export declare const MINUTE: number;
 export declare const HOUR: number;
 export declare const DAY: number;
-type Distance = readonly [limit: number, interval: number, base: number, label: string];
 /**
  * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
  * tempo.ts(旧 tempo-model.ts)の TempoView が Tempo としてリネームされた)は
@@ -15,10 +14,19 @@ type Distance = readonly [limit: number, interval: number, base: number, label: 
  * FloorTempoRule 等の新設計に役割が引き継がれたため移植していない。
  * deg/is_hit/tick/sleep(呼び出し元は同様にゼロだが、単純な式のため
  * 後方互換のために温存)は TempoView 側に移植済み。
+ *
+ * WEEK/YEAR/tempo_zero/to_tempo(文字列指定版)は、かつてここに存在したが
+ * 削除した。SECOND/MINUTE/HOUR/DAY(上記、本体が実際に使う物理定数)とは異なり、
+ * これらは実質的にグレゴリオ暦(1週=7日という文化的な区切り、暦の平均年、
+ * 曜日起点でタイムゾーンを考慮した zero 値)を暗黙の前提にした値であり、
+ * fancy-date 自身が「暦は FancyDate のインスタンスとして表現する」という
+ * 思想と矛盾していた(実際、本体からは一切参照されておらず、外部向けの
+ * 飾りとして残っていただけだった)。これらが必要な場面では
+ * Calendar.Gregorian.calc.msec.{year,week} /
+ * Calendar.Gregorian.calc.zero.{day,week,...} を直接使う(暦の定義から
+ * 導出された値を使うことで、YEAR=31556925.147(固定近似)のような不正確さも
+ * 生まれない)。
  */
-export declare function to_tempo(size_str: string, zero_str?: string, write_at?: number | Date): Tempo<{
-    write_at: number;
-}>;
 export declare function to_tempo_bare(size: number, zero: number, write_at_src: number | Date): Tempo<{
     write_at: number;
 }>;
@@ -30,6 +38,3 @@ export type DurationOptions = {
 };
 export declare function to_msec(str: string, options?: DurationOptions): number;
 export declare function to_sec(str: string, { strict }?: DurationOptions): number;
-export declare function to_timer(msec: number, unit_mode?: number): string;
-export declare function to_relative_time_distance(msec: number): Distance;
-export {};

@@ -2,7 +2,7 @@ import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
 import { Tempo } from './tempo';
-import type { TempoBase, TempoLabelLike, TempoLike } from './tempo';
+import type { SubdivideBase, TempoBase, TempoLabelLike, TempoLike } from './tempo';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
 export { MarsSolarOrbital } from './nasa';
@@ -68,35 +68,35 @@ export type SpanOptions = {
 };
 export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[];
 export type Tempos = {
-    Zz: TempoLike;
-    A: TempoLike;
-    B: TempoLike;
-    C: TempoLike;
-    D: TempoLike;
+    Zz: Tempo<TempoBase>;
+    A: Tempo<TempoBase>;
+    B: Tempo<TempoBase>;
+    C: Tempo<TempoBase>;
+    D: Tempo<SubdivideBase>;
     E: TempoLike | TempoLabelLike;
-    F: TempoLike;
+    F: Tempo<TempoBase>;
     G: TempoLike | TempoLabelLike;
     H: TempoLike;
-    J: TempoLike;
-    M: TempoLike & TempoMonth;
-    N: TempoLike | undefined;
+    J: Tempo<TempoBase>;
+    M: Tempo<TempoBase> & TempoMonth;
+    N: Tempo<SubdivideBase> | undefined;
     Q: TempoLabelLike;
-    S: TempoLike;
+    S: Tempo<SubdivideBase>;
     V: TempoLike | TempoLabelLike;
     Y: TempoLabelLike;
-    Z: TempoLike;
+    Z: Tempo<TempoBase>;
     a: TempoLabelLike;
     b: TempoLabelLike;
     c: TempoLabelLike;
-    d: TempoLike;
+    d: Tempo<SubdivideBase>;
     f: TempoLabelLike;
-    m: TempoLike;
-    p: TempoLike | undefined;
-    s: TempoLike;
-    u: TempoLike;
-    w: TempoLike;
+    m: Tempo<SubdivideBase>;
+    p: Tempo<TempoBase> | undefined;
+    s: Tempo<SubdivideBase>;
+    u: Tempo<TempoBase>;
+    w: Tempo<SubdivideBase>;
     x: TempoLabelLike | undefined;
-    y: TempoLike;
+    y: Tempo<TempoBase>;
 };
 type DateLike = number | Tempos | string;
 type DateRange = readonly [from: DateLike, to: DateLike];
@@ -281,6 +281,20 @@ export declare class FancyDate {
     private parse_span_part;
     private span_parse_rows;
     private span_target;
+    /**
+     * source.M から amount 回、実際の隣接月(閏月を含む)を1つずつ辿る。
+     *
+     * Tempo 自身の succ()/back()(= rule.slide())を連続で使わないのは、
+     * TableTempoRule(グレゴリオ暦等、is_table_leap 系の暦の M が使う)の
+     * now_idx が「year の zero を起点にした通し番号」であり、mod されずに
+     * そのまま蓄積される仕様のため(u(年)には正しい仕様だが、年内で
+     * 0-11 にリセットされるべき M にはそのまま流用できない)。実測で
+     * M.succ() を11回連鎖させると now_idx が 1→12(本来は次の年の 0)まで
+     * 蓄積し、to_tempos() が都度再構築する新鮮な M(必ず 0-11 に収まる)と
+     * 食い違って年が余分に1つ進む不具合があった。都度 to_tempos() で
+     * 再構築すれば、暦の種類によらず常に正しい年内番号の M が得られる。
+     */
+    private step_month;
     private resolve_span_week_target;
     private normalize_span_target;
     private unit_msec;

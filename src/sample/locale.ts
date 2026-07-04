@@ -224,6 +224,50 @@ export const 時鐘かな = [
   'よるよつ',
 ] as const
 
+/**
+ * ロムルス暦の月ラベル。伝統的なロムルス暦は10ヶ月(304日)だけを暦月とし、
+ * 残りの約61日は暦に属さない「冬籠もりのための暦外期間」だったとされる
+ * (calendars.ts の Romulus 定義、month_divs の11番目=null が担う可変長月に対応)。
+ * 11番目だけ「暦外」という説明的なラベルにする。IndexerProps.list の型は
+ * readonly string[] だが、実行時は null 混在を許容する実装のため、
+ * ここでは意図的にキャストしている。
+ *
+ * 数値版(10ヶ月分は list[0..9]=null にして既存の数値表示 1〜10 に
+ * フォールバックさせる、Indexer.to_label の内部実装が list[idx] が
+ * null/undefined ならフォールバックする挙動を利用する)と、ラテン語版
+ * (伝統的な月名 Martius〜December を割り当てる)の両方を用意し、
+ * どちらを list に選ぶかは呼び出し側(calendars.ts)に委ねる。
+ */
+export const ロムルス月ラベル数値 = [...Array(10).fill(null), '暦外'] as unknown as readonly string[]
+export const ロムルス月ラベル数値かな = [...Array(10).fill(null), 'れきがい'] as unknown as readonly string[]
+
+export const ロムルス月ラベルラテン語 = [
+  'Martius',
+  'Aprilis',
+  'Maius',
+  'Junius',
+  'Quintilis',
+  'Sextilis',
+  'September',
+  'October',
+  'November',
+  'December',
+  '暦外',
+] as const
+export const ロムルス月ラベルラテン語かな = [
+  'マルティウス',
+  'アプリリス',
+  'マイウス',
+  'ユニウス',
+  'クィンティリス',
+  'セクスティリス',
+  'セプテンベル',
+  'オクトーベル',
+  'ノウェンベル',
+  'デケンベル',
+  'れきがい',
+] as const
+
 export const 和風月名 = [
   '睦月',
   '如月',

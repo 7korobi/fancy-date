@@ -6,6 +6,7 @@ export declare const Calendar: {
     UTC: FancyDate;
     Gregorian: FancyDate;
     GregorianAstronomical: FancyDate;
+    LocalGregorian: FancyDate;
     Julian: FancyDate;
     アマンタ: FancyDate;
     プールニマンタ: FancyDate;

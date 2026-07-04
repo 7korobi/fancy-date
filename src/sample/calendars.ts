@@ -23,6 +23,8 @@ import {
   十二支かな,
   和風月名,
   和風月名かな,
+  ロムルス月ラベルラテン語,
+  ロムルス月ラベルラテン語かな,
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
@@ -47,6 +49,7 @@ import {
   天文東京,
   東京,
   火星,
+  月,
 } from './astro'
 
 // ---  -  I  L -OP R TUVWX -
@@ -89,6 +92,25 @@ const GregorianAstronomical = g
   .dup()
   .spot(...天文東京)
   .init()
+
+/**
+ * LocalGregorian: ブラウザ(実行環境)のタイムゾーンを反映した「現地グレゴリオ暦」。
+ *
+ * Gregorian は東京固定(spot(...東京))のため、そのまま使うと東京以外の
+ * タイムゾーンでは「今日」「今週」の区切りがズレる。Gregorian は
+ * daily('Sunny')(日の出・日の入りに基づく不定時法)を使っていないため
+ * 緯度・経度には依存せず、タイムゾーンだけ差し替えれば動的に「現地版」を
+ * 作れる(dup().spot(...) は fancy-date が「同じ暦を別地点/別タイムゾーンで
+ * 複製する」ために元々用意している機構)。
+ *
+ * timezoneDeg は経度換算(15度 = 1時間)。getTimezoneOffset() は
+ * 「UTCより遅れている分数」を返す(例: 東京は -540)ため符号を反転する。
+ * ブラウザ以外(SSR等)では window が無いため、東京(UTC+9)を既定値とする。
+ */
+const has_window = 'undefined' !== typeof window && window !== null
+const timezoneOffsetMinutes = has_window ? new Date().getTimezoneOffset() : -540
+const timezoneDeg = (-timezoneOffsetMinutes / 60) * 15
+const LocalGregorian = Gregorian.dup().spot(月, 0, 0, timezoneDeg).init()
 
 const Julian = g
   .dup()
@@ -176,6 +198,16 @@ const 定気法 = g
 
 const Romulus = g
   .dup()
+  // M(サフィックスなし)は常に数値のまま(def_to_label() 参照)なので、
+  // 暦外ラベルを反映するには Mo(list 参照あり)を明示的に使う書式に
+  // する必要がある。既定の 'Gy年M月d日...' のような「M+リテラル月」
+  // の組み合わせのままだと、Mo に変えても暦外の位置で「暦外月1日」の
+  // ような不自然な表示になるため、月を表す助字自体を書式から外す。
+  // parse は他の暦(平気法/定気法等)と同様、format より要素を絞った
+  // 最小形にする(曜日(E)や干支(a-A)は表示専用の付加情報であり、
+  // parse 側にまで同じ要素を含めると、その通りの文字列でなければ
+  // parse できなくなり format() の出力と噛み合わなくなる)。
+  .lang('y年Mo d日', 'Gy年Mo d日(E)H時m分s秒')
   .spot(...Romus)
   .era('ロムルス暦', '紀元前')
   .calendar(['754年1月16日(H) 辛酉-己亥', 'y年M月d日(E) a-A', g.parse('1年3月22日')!], null, [
@@ -192,7 +224,15 @@ const Romulus = g
     null,
   ])
   .algo({
-    M: [11],
+    // 11番目(month_divs の null が担う可変長月、約60日)は暦月ではなく
+    // 冬籠もりのための暦外期間(10月の後に置かれるのは正しい配置)。
+    // 伝統的なロムルス暦の月名(ラテン語、Martius〜December)を割り当て、
+    // 11番目だけ「暦外」ラベルにする(ロムルス月ラベルラテン語/
+    // ロムルス月ラベルラテン語かな のドキュメント参照。数値のみ版が
+    // 欲しい場合は ロムルス月ラベル数値/ロムルス月ラベル数値かな に
+    // 差し替える)。上の .lang() で Mo(list 参照あり)を使う書式に
+    // しているため、通常の月はラテン語名、11番目は「暦外」になる。
+    M: [ロムルス月ラベルラテン語, ロムルス月ラベルラテン語かな],
     E: [[...'ABCDEFGH'], null] as const,
   })
   .init()
@@ -409,6 +449,7 @@ export const Calendar = {
   UTC,
   Gregorian,
   GregorianAstronomical,
+  LocalGregorian,
   Julian,
   アマンタ,
   プールニマンタ,

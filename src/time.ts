@@ -1,51 +1,11 @@
 import { FixedTempoRule, TableTempoRule, Tempo } from './tempo'
 
+// SI単位系ベースの物理的な時間量。naoj/astro-math.ts のユリウス日計算等、
+// 暦を介さない生の天文計算(本体)が実際に使う。
 export const SECOND = to_msec('1s')
 export const MINUTE = to_msec('1m')
 export const HOUR = to_msec('1h')
 export const DAY = to_msec('1d')
-const WEEK = to_msec('1w')
-const MONTH = to_msec('30d')
-const YEAR = to_msec('1y')
-const INTERVAL = 0x7fffffff // 31bits.
-const VALID = 0xfffffffffffff // 52bits.
-
-const has_window = 'undefined' !== typeof window && window !== null
-const timezone = has_window ? MINUTE * new Date().getTimezoneOffset() : to_msec('-9h')
-const tempo_zero = -new Date(0).getDay() * DAY + timezone
-
-const TIMERS: [string, string, number][] = [
-  ['年', 'y', YEAR],
-  ['週', 'w', WEEK],
-  ['日', 'd', DAY],
-  ['時', 'h', HOUR],
-  ['分', 'm', MINUTE],
-  ['秒', 's', SECOND],
-]
-
-type Distance = readonly [limit: number, interval: number, base: number, label: string]
-
-const DISTANCE_NAN: Distance = [-VALID, INTERVAL, YEAR, '？？？']
-const DISTANCE_LONG_AGO: Distance = [Infinity, INTERVAL, VALID, '昔']
-const DISTANCES: Distance[] = [
-  DISTANCE_NAN,
-  [-YEAR, INTERVAL, YEAR, '%s年後'],
-  [-MONTH, INTERVAL, MONTH, '%sヶ月後'],
-  [-WEEK, WEEK, WEEK, '%s週間後'],
-  [-DAY, DAY, DAY, '%s日後'],
-  [-HOUR, HOUR, HOUR, '%s時間後'],
-  [-MINUTE, MINUTE, MINUTE, '%s分後'],
-  [-25000, SECOND, SECOND, '%s秒後'],
-  [25000, 25000, 25000, '今'],
-  [MINUTE, SECOND, SECOND, '%s秒前'],
-  [HOUR, MINUTE, MINUTE, '%s分前'],
-  [DAY, HOUR, HOUR, '%s時間前'],
-  [WEEK, DAY, DAY, '%s日前'],
-  [MONTH, WEEK, WEEK, '%s週間前'],
-  [YEAR, INTERVAL, MONTH, '%sヶ月前'],
-  [VALID, INTERVAL, YEAR, '%s年前'],
-  DISTANCE_LONG_AGO,
-]
 
 /**
  * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
@@ -58,21 +18,25 @@ const DISTANCES: Distance[] = [
  * FloorTempoRule 等の新設計に役割が引き継がれたため移植していない。
  * deg/is_hit/tick/sleep(呼び出し元は同様にゼロだが、単純な式のため
  * 後方互換のために温存)は TempoView 側に移植済み。
+ *
+ * WEEK/YEAR/tempo_zero/to_tempo(文字列指定版)は、かつてここに存在したが
+ * 削除した。SECOND/MINUTE/HOUR/DAY(上記、本体が実際に使う物理定数)とは異なり、
+ * これらは実質的にグレゴリオ暦(1週=7日という文化的な区切り、暦の平均年、
+ * 曜日起点でタイムゾーンを考慮した zero 値)を暗黙の前提にした値であり、
+ * fancy-date 自身が「暦は FancyDate のインスタンスとして表現する」という
+ * 思想と矛盾していた(実際、本体からは一切参照されておらず、外部向けの
+ * 飾りとして残っていただけだった)。これらが必要な場面では
+ * Calendar.Gregorian.calc.msec.{year,week} /
+ * Calendar.Gregorian.calc.zero.{day,week,...} を直接使う(暦の定義から
+ * 導出された値を使うことで、YEAR=31556925.147(固定近似)のような不正確さも
+ * 生まれない)。
  */
-export function to_tempo(
-  size_str: string,
-  zero_str: string = '0s',
-  write_at: number | Date = Date.now(),
-) {
-  const size = to_msec(size_str)
-  const zero = to_msec(zero_str) + tempo_zero
-  return to_tempo_bare(size, zero, write_at)
-}
-
 export function to_tempo_bare(size: number, zero: number, write_at_src: number | Date) {
   const write_at = Number(write_at_src)
   return Tempo.at(new FixedTempoRule(size, zero), { write_at })
 }
+
+
 
 export function to_tempo_by(table: number[], zero: number, write_at: number) {
   return Tempo.at(new TableTempoRule(table, zero), { write_at })
@@ -150,34 +114,4 @@ export function to_sec(str: string, { strict = false }: DurationOptions = {}): n
     throw new Error(`invalid duration ${str}`)
   }
   return timeout
-}
-
-export function to_timer(msec: number, unit_mode: number = 1) {
-  let str = ''
-  const _limit = TIMERS.length
-  for (let at = 0; at < _limit; ++at) {
-    const unit = TIMERS[at][unit_mode]
-    const base = TIMERS[at][2]
-    const idx = Math.floor(msec / base)
-    if (idx) {
-      msec = msec % base
-      str += `${idx}${unit}`
-    }
-  }
-  return str
-}
-
-export function to_relative_time_distance(msec: number) {
-  if (msec < -VALID || VALID < msec || Number.isNaN(msec)) {
-    return DISTANCE_NAN
-  }
-  const _limit = DISTANCES.length
-  for (let at = 0; at < _limit; ++at) {
-    const o = DISTANCES[at]
-    const limit = o[0]
-    if (msec < limit) {
-      return o
-    }
-  }
-  return DISTANCE_LONG_AGO
 }
