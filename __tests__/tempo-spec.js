@@ -17,10 +17,10 @@ const {
   ObservedLunisolarMonthRule,
   ObservedLunisolarYearRule,
   EraAdjustedTempoRule,
-  TempoView,
+  Tempo,
   envelope_of,
-  to_tempo_like,
-} = require('../lib/tempo-model')
+  join,
+} = require('../lib/tempo')
 
 const DAY = 86400000
 const ZERO = Date.UTC(2000, 0, 1)
@@ -35,6 +35,35 @@ function envelopeOf(tempo) {
   }
 }
 
+// 旧 time.ts の Tempo.floor(sub1, sub2, subf=to_tempo_bare)(Tempo への
+// 統合に伴いクラスごと削除済み)と同じロジックをテストヘルパーとして
+// 複製したもの。FloorTempoRule/MeanLunarPhaseTempoRule(closed-form 計算)を、
+// 全く別ロジック(探索ベース)の旧実装とクロスチェックする目的のみに使う
+// (本体側に探索系メソッドを復活させるのではなく、テストの独立性を保つため
+// テスト側にのみ残す)。
+function floorTempo(tempo, sub1, sub2) {
+  let { last_at, write_at, next_at, now_idx, size } = tempo
+  const do2 = to_tempo_bare(sub1, sub2, next_at)
+
+  if (do2.last_at <= write_at) {
+    const slid = tempo.slide(1)
+    next_at = slid.next_at
+    size = slid.size
+    const do3 = to_tempo_bare(sub1, sub2, next_at)
+    last_at = do2.last_at
+    next_at = do3.last_at
+    now_idx++
+  } else {
+    const do1 = to_tempo_bare(sub1, sub2, last_at)
+    last_at = do1.last_at
+    next_at = do2.last_at
+  }
+  const zero = last_at - now_idx * size
+  const envelope = { zero, now_idx, last_at, next_at }
+  const rule = new FixedTempoRule(size, zero)
+  return new Tempo(envelope, { write_at }, rule)
+}
+
 // 4年に1回366日、それ以外365日の周期テーブル(累積ms)。to_tempo_by が期待する形。
 function buildYearTable() {
   const days = [365, 365, 365, 366]
@@ -47,11 +76,47 @@ function buildYearTable() {
   return table
 }
 
-describe('tempo-model', () => {
-  describe('to_tempo_like', () => {
-    test('is an identity conversion (no clone/mutation)', () => {
-      const tempo = to_tempo_bare(DAY, ZERO, ZERO + 1000)
-      expect(to_tempo_like(tempo)).toBe(tempo)
+describe('tempo', () => {
+  describe('join', () => {
+    // 旧 time.ts の静的 Tempo.join(a, b)(Tempo への統合に伴いクラスごと
+    // 削除済み)と数値的に一致することを確認していた式を、その場でインライン
+    // 計算して検証する(phenomena/solar.ts の 雑節_from_terms() が彼岸・
+    // 土用・四季の区間を求めるのに使う)。
+    test('at() matches the historical Tempo.join() formula for non-adjacent TempoLike intervals sharing the same zero', () => {
+      const a = to_tempo_bare(DAY, ZERO, ZERO + 5.5 * DAY)
+      const b = to_tempo_bare(DAY, ZERO, ZERO + 8.5 * DAY)
+      const last_at = Math.min(a.last_at, b.last_at)
+      const next_at = Math.max(a.next_at, b.next_at)
+      const write_at = (a.write_at + b.write_at) / 2
+      const expected = to_tempo_bare(next_at - last_at, last_at, write_at)
+      const actual = join(a, b)
+      expect(actual.zero).toBe(expected.zero)
+      expect(actual.now_idx).toBe(expected.now_idx)
+      expect(actual.last_at).toBe(expected.last_at)
+      expect(actual.next_at).toBe(expected.next_at)
+      expect(actual.write_at).toBe(expected.write_at)
+    })
+
+    test('throws when zero differs', () => {
+      const a = to_tempo_bare(DAY, ZERO, ZERO + 100)
+      const b = to_tempo_bare(DAY, ZERO + DAY, ZERO + 200)
+      expect(() => join(a, b)).toThrow()
+    })
+
+    // join() は TempoLike を受け取るため Tempo 同士でも機能することを
+    // 確認する。戻り値自体も Tempo(succ()/back()/is_cover() が安全に
+    // 使える)であることを確認する。
+    test('works with Tempo inputs and returns a steppable Tempo', () => {
+      const rule = new FixedTempoRule(DAY, ZERO)
+      const a = Tempo.at(rule, { write_at: ZERO + 5.5 * DAY })
+      const b = Tempo.at(rule, { write_at: ZERO + 8.5 * DAY })
+      const result = join(a, b)
+      expect(result.last_at).toBe(Math.min(a.last_at, b.last_at))
+      expect(result.next_at).toBe(Math.max(a.next_at, b.next_at))
+      expect(result.is_cover(result.write_at)).toBe(true)
+      expect(typeof result.succ).toBe('function')
+      const next = result.succ()
+      expect(next.last_at).toBe(result.next_at)
     })
   })
 
@@ -210,7 +275,7 @@ describe('tempo-model', () => {
       const start = moonZero - 50 * moonMsec
       for (let i = 0; i < 100; i++) {
         const write_at = start + i * moonMsec * 0.97
-        const expected = envelopeOf(to_tempo_bare(moonMsec, moonZero, write_at).floor(daySize, dayZero))
+        const expected = envelopeOf(floorTempo(to_tempo_bare(moonMsec, moonZero, write_at), daySize, dayZero))
         expect(rule.at(write_at)).toEqual(expected)
       }
     })
@@ -244,11 +309,11 @@ describe('tempo-model', () => {
     // 同じものを組み立てて注入する。
     const g = Calendar.平気法
     const seasonRule = new SubdivideTempoRule(g.calc.msec.season)
-    const seedZz = TempoView.at(new FixedTempoRule(g.calc.msec.year, g.calc.zero.season), {
+    const seedZz = Tempo.at(new FixedTempoRule(g.calc.msec.year, g.calc.zero.season), {
       write_at: Date.UTC(1980, 0, 1),
     })
     const ZzEnvelope = envelope_of(seedZz)
-    const resolveSeason = (at) => TempoView.at(seasonRule, { write_at: at, parent: ZzEnvelope })
+    const resolveSeason = (at) => Tempo.at(seasonRule, { write_at: at, parent: ZzEnvelope })
     const rule = new MeanLunisolarMonthRule(
       g.calc.msec.moon,
       g.calc.zero.moon,
@@ -289,7 +354,7 @@ describe('tempo-model', () => {
     // この規則は now_idx を使わず last_at 基準+moonMsec 定数ステップで
     // slide() するため、この不具合を起こさないことを確認する。
     test('slide() via succ() never repeats the same month (regression for the yeary_table duplicate bug)', () => {
-      let current = TempoView.at(rule, { write_at: Date.UTC(1980, 0, 1) })
+      let current = Tempo.at(rule, { write_at: Date.UTC(1980, 0, 1) })
       let prevKey = null
       for (let i = 0; i < 300; i++) {
         const key = `${current.last_at}_${current.now_idx}_${current.is_leap}`
@@ -303,7 +368,7 @@ describe('tempo-model', () => {
     // また succ() の連鎖が隙間なく(last_at が直前の next_at と一致)
     // 繋がっていることを確認する。
     test('slide() chains gaplessly and succ()/back() are inverses', () => {
-      const base = TempoView.at(rule, { write_at: Date.UTC(1980, 0, 1) })
+      const base = Tempo.at(rule, { write_at: Date.UTC(1980, 0, 1) })
       let cursor = base
       for (let i = 0; i < 40; i++) {
         const next = cursor.succ()
@@ -333,7 +398,7 @@ describe('tempo-model', () => {
       for (let i = 0; i < 60; i++) {
         const write_at = start + i * yearMsec * 0.37
         const expected = envelopeOf(
-          to_tempo_bare(yearMsec, springZero, write_at).floor(rgDaySize, rgDayZero),
+          floorTempo(to_tempo_bare(yearMsec, springZero, write_at), rgDaySize, rgDayZero),
         )
         expect(singleRule.at(write_at)).toEqual(expected)
       }
@@ -361,9 +426,11 @@ describe('tempo-model', () => {
       for (let i = 0; i < 60; i++) {
         const write_at = start + i * yearMsec * 0.41
         const expected = envelopeOf(
-          to_tempo_bare(yearMsec, seasonZero, write_at)
-            .floor(moonMsec, moonZero)
-            .floor(heikiDaySize, heikiDayZero),
+          floorTempo(
+            floorTempo(to_tempo_bare(yearMsec, seasonZero, write_at), moonMsec, moonZero),
+            heikiDaySize,
+            heikiDayZero,
+          ),
         )
         expect(doubleRule.at(write_at)).toEqual(expected)
       }
@@ -448,6 +515,93 @@ describe('tempo-model', () => {
         const direct = rule.at(middle)
         expect(direct).toEqual(next)
       }
+    })
+  })
+
+  describe('CyclicDayTempoRule for the 社日-style "read wrapped now_idx, then slide()" pattern', () => {
+    // phenomena/solar.ts の 雑節_from_terms() 社日計算(C移行前、現状のまま):
+    //   const C = to_tempo_bare(dayMsec, zero, write_at)
+    //   C.now_idx = mod(C.now_idx, stemLength)
+    //   return C.slide(stemLength / 2 - C.now_idx - 1)
+    // という「now_idx を書き換えてから slide() する」パターンを、
+    // CyclicDayTempoRule + Tempo で置き換えられるかを検証する。
+    const dayMsec = DAY
+    const zero = ZERO
+    const stemLength = 10
+    const targetRemainder = stemLength / 2 - 1 // 「戊」相当(十干なら index 4)
+
+    function oldPattern(write_at) {
+      // 生の day envelope を算術式で直接計算する(to_tempo_bare 経由だと、
+      // その内部実装が Tempo+FixedTempoRule になった今、まさにこの
+      // テストが検証したい「now_idx を書き換えた状態で slide() すると
+      // FixedTempoRule は last_at 基準の再導出をせず壊れる」という
+      // PITFALL を oldPattern 自身が踏んでしまうため、独立した算術式に
+      // 留める)。
+      const now_idx = Math.floor((write_at - zero) / dayMsec)
+      const last_at = now_idx * dayMsec + zero
+      const wrapped = mod(now_idx, stemLength)
+      const amount = stemLength / 2 - wrapped - 1
+      const shiftedLastAt = last_at + amount * dayMsec
+      return { last_at: shiftedLastAt, next_at: shiftedLastAt + dayMsec }
+    }
+
+    function newPatternViaCyclicDayTempoRule(write_at) {
+      const rule = new CyclicDayTempoRule(dayMsec, zero, stemLength)
+      const view = Tempo.at(rule, { write_at })
+      const amount = stemLength / 2 - view.now_idx - 1
+      return view.slide(amount)
+    }
+
+    // 基準点の違い(旧: write_at(瞬間)基準でシフト、新: CyclicDayTempoRule.slide()
+    // は envelope.last_at(日の開始)を起点に中間点を作って再導出)が、
+    // 実際に同じ結果になるかを、日の途中の様々な時刻・様々な曜日位置で
+    // 広く検証する。1周期(10日)を超える範囲を使い、0〜9全ての剰余
+    // (stemLength個)を必ず踏むことも合わせて確認する。
+    test('at() + wrapped now_idx + slide() matches the old to_tempo_bare()-based pattern across all 10 stem remainders', () => {
+      const seenRemainders = new Set()
+      for (let i = -50; i <= 50; i++) {
+        const write_at = zero + i * dayMsec + 12345 // 日の途中の時刻
+        const old = oldPattern(write_at)
+        const next = newPatternViaCyclicDayTempoRule(write_at)
+        expect(next.last_at).toBe(old.last_at)
+        expect(next.next_at).toBe(old.next_at)
+        seenRemainders.add(mod(Math.floor((write_at - zero) / dayMsec), stemLength))
+      }
+      expect(seenRemainders.size).toBe(stemLength)
+    })
+
+    // 新実装の結果が、実際に「目標剰余(戊相当)」の日に着地していることも
+    // 独立に確認する(oldPattern との一致だけでなく、計算の意図自体が
+    // 正しいことの検証)。amount=0(既にその日が目標剰余、シフト不要)の
+    // ケースも自然にこの範囲に含まれる。
+    test('the shifted result always lands exactly on the target remainder day', () => {
+      for (let i = -50; i <= 50; i++) {
+        const write_at = zero + i * dayMsec + 12345
+        const result = newPatternViaCyclicDayTempoRule(write_at)
+        const resultRemainder = mod(Math.floor((result.last_at - zero) / dayMsec), stemLength)
+        expect(resultRemainder).toBe(targetRemainder)
+      }
+    })
+
+    // 落とし穴の実証(このまま繰り返さないための記録): FixedTempoRule.slide()
+    // は envelope.now_idx + amount を絶対値として直接計算する(last_at
+    // からの再導出ではない)。now_idx を mod でラップした状態のenvelopeを
+    // FixedTempoRule.slide() に渡すと、ラップ後の小さい値を絶対 now_idx
+    // として扱ってしまい、zero(day10Zero相当)付近の全く無関係な日へ
+    // 飛んでしまう。CyclicDayTempoRule(last_at 基準の再導出方式)だけが
+    // この「now_idx を書き換えてから slide() する」パターンで安全に使える
+    // 理由をspecとして残す。
+    test('PITFALL (documented so it is not repeated): FixedTempoRule breaks when now_idx is wrapped before slide()', () => {
+      const rule = new FixedTempoRule(dayMsec, zero)
+      const write_at = zero + 45 * dayMsec + 12345
+      const view = Tempo.at(rule, { write_at })
+      const wrappedNowIdx = mod(view.now_idx, stemLength)
+      view.now_idx = wrappedNowIdx // 旧コードの C.now_idx = mod(...) と同じ上書き操作
+      const amount = stemLength / 2 - wrappedNowIdx - 1
+      const broken = view.slide(amount)
+
+      const correct = oldPattern(write_at)
+      expect(broken.last_at).not.toBe(correct.last_at)
     })
   })
 
@@ -580,7 +734,7 @@ describe('ObservedLunisolarMonthRule', () => {
     expect(compared).toBeGreaterThan(400)
   })
 
-  // 実コードでもこの規則を TempoView 配線したことで、月の遷移は succ()/back()
+  // 実コードでもこの規則を Tempo 配線したことで、月の遷移は succ()/back()
   // (rule.slide() 経由)でも正しく動作するようになった(以前は素の Tempo に
   // now_idx=月番号-1 を上書きしていたため、succ() が Tempo.slide() の非テーブル
   // 分岐(今の月の実サイズを固定長とみなす式)を使い、年境界でリセットされる
@@ -696,7 +850,7 @@ describe('EraAdjustedTempoRule', () => {
   // (last_at 基準だと since を無視した誤った比較になる、というこの
   // セッションで得た教訓)。
   test('succ() chain matches fresh re-derivation across a real mid-year era transition (延文→康安, 1361-05-12)', () => {
-    let cursor = TempoView.at(rule, { write_at: Date.UTC(1355, 0, 1) })
+    let cursor = Tempo.at(rule, { write_at: Date.UTC(1355, 0, 1) })
     for (let i = 0; i < 10; i++) {
       const next = cursor.succ()
       const fresh = rule.at(next.write_at)
@@ -709,7 +863,7 @@ describe('EraAdjustedTempoRule', () => {
   // succ() で進めた分だけ back() すれば、改元をまたぐ場合も含めて経路非依存で
   // ちょうど元に戻ることを確認する。
   test('succ()/back() are inverses across a real era transition', () => {
-    const base = TempoView.at(rule, { write_at: Date.UTC(1355, 0, 1) })
+    const base = Tempo.at(rule, { write_at: Date.UTC(1355, 0, 1) })
     let cursor = base
     for (let i = 0; i < 10; i++) cursor = cursor.succ()
     for (let i = 0; i < 10; i++) cursor = cursor.back()

@@ -1,9 +1,5 @@
-import { mod } from './number'
-import type { OrbitalModel, RotationModel, TIMEZONE } from './orbital-model'
-import type { LunisolarDate } from './phenomena/lunisolar'
-import { noon, solar_phase, solor } from './phenomena/solar'
-import { Tempo } from './time'
-
+import type { OrbitalModel, RotationModel, TIMEZONE } from './orbital-model';
+import type { LunisolarDate } from './phenomena/lunisolar';
 /**
  * TempoEnvelope: 再利用可能な「暦区間」情報。
  *
@@ -11,32 +7,30 @@ import { Tempo } from './time'
  * キャッシュを共有できる（将来の TempoEnvelope キャッシュ構想の土台）。
  */
 export type TempoEnvelope = {
-  zero: number
-  now_idx: number
-  last_at: number
-  next_at: number
-  label?: string
-  is_leap?: boolean
-  /**
-   * テーブル参照で幅が決まる envelope の場合のみ設定する。
-   * 既存 Tempo.slide() はテーブルの有無で挙動(等間隔 or テーブル参照)を
-   * 切り替えるため、TableTempoRule/SolarDayHourTempoRule から生成した
-   * envelope を実 Tempo へ変換する際は、この table を引き継がないと
-   * succ()/back() が誤った(等間隔の)遷移をしてしまう。
-   */
-  table?: readonly number[]
-}
-
+    zero: number;
+    now_idx: number;
+    last_at: number;
+    next_at: number;
+    label?: string;
+    is_leap?: boolean;
+    /**
+     * テーブル参照で幅が決まる envelope の場合のみ設定する。
+     * 既存 Tempo.slide() はテーブルの有無で挙動(等間隔 or テーブル参照)を
+     * 切り替えるため、TableTempoRule/SolarDayHourTempoRule から生成した
+     * envelope を実 Tempo へ変換する際は、この table を引き継がないと
+     * succ()/back() が誤った(等間隔の)遷移をしてしまう。
+     */
+    table?: readonly number[];
+};
 /**
  * TempoBase: envelope を解決するときに渡す最小限の文脈。
  * 兄弟トークンの値が必要な特殊な規則(観測太陰太陽暦など)は、
  * より広い文脈(例: Tempos)を型引数として指定する。
  */
 export type TempoBase = {
-  label?: string
-  write_at: number
-}
-
+    label?: string;
+    write_at: number;
+};
 /**
  * TempoRule: envelope の初期化(at)と遷移(slide)の規則。
  *
@@ -44,10 +38,9 @@ export type TempoBase = {
  * 不定時法などのバリエーションは、すべてこのインターフェースの実装になる。
  */
 export interface TempoRule<Base = TempoBase> {
-  at(write_at: number, base: Base): TempoEnvelope
-  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope
+    at(write_at: number, base: Base): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope;
 }
-
 /**
  * CachedTempoRule: 他の TempoRule をラップし、直近に解決した envelope を
  * 再利用するデコレータ。
@@ -70,64 +63,39 @@ export interface TempoRule<Base = TempoBase> {
  * 現状 slide() は at() ほど頻繁に(重い探索を伴って)呼ばれないため
  * 単純化のため省略する。
  */
-export class CachedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
-  private cached?: TempoEnvelope
-
-  constructor(private readonly rule: TempoRule<Base>) {}
-
-  at(write_at: number, base: Base): TempoEnvelope {
-    const cached = this.cached
-    if (cached && cached.last_at <= write_at && write_at < cached.next_at) {
-      return cached
-    }
-    return (this.cached = this.rule.at(write_at, base))
-  }
-
-  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
-    return this.rule.slide(envelope, amount, base)
-  }
+export declare class CachedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
+    private readonly rule;
+    private cached?;
+    constructor(rule: TempoRule<Base>);
+    at(write_at: number, base: Base): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope;
 }
-
 /**
  * TempoLike: Tempos の各トークンが実際に要求する最小限の構造。
  *
- * 既存の Tempo クラスは変更なしにこれを満たす
- * (下部の to_tempo_like で型検査として確認している)。
  * round/ceil/floor/to_list/upto/tick/sleep/table など、
  * 固定Tempo固有の機能はここには含めない。
  */
 export interface TempoLike {
-  readonly zero: number
-  readonly write_at: number
-  // 既存 to_tempos() が now_idx を解決後に直接書き換える箇所
-  // (閏月番号の再割当て、元号切替に伴う年番号調整など)があるため、
-  // readonly にはしない。
-  now_idx: number
-  readonly last_at: number
-  readonly next_at: number
-  readonly size: number
-  readonly since: number
-  readonly center_at: number
-  readonly moderate_at: number
-  label?: string
-  is_leap?: boolean
-  is_cover(at: number): boolean
-  succ(n?: number): TempoLike
-  back(n?: number): TempoLike
-  slide(n: number): TempoLike
-  slide_to(n: number): TempoLike
-  copy(): TempoLike
-  reset(now?: number): TempoLike
+    readonly zero: number;
+    readonly write_at: number;
+    now_idx: number;
+    readonly last_at: number;
+    readonly next_at: number;
+    readonly size: number;
+    readonly since: number;
+    readonly center_at: number;
+    readonly moderate_at: number;
+    label?: string;
+    is_leap?: boolean;
+    is_cover(at: number): boolean;
+    succ(n?: number): TempoLike;
+    back(n?: number): TempoLike;
+    slide(n: number): TempoLike;
+    slide_to(n: number): TempoLike;
+    copy(): TempoLike;
+    reset(now?: number): TempoLike;
 }
-
-/**
- * 既存の Tempo を TempoLike の境界へ渡すための変換関数。
- * Tempo が構造的に TempoLike を満たさなくなった場合、ここで型エラーになる。
- */
-export function to_tempo_like(tempo: Tempo): TempoLike {
-  return tempo
-}
-
 /**
  * TempoLabelLike: 親トークンの位置(now_idx)から派生する「周期ラベル」の
  * 最小限の構造。TempoLike と異なり succ()/back()/slide()/slide_to()/
@@ -143,14 +111,13 @@ export function to_tempo_like(tempo: Tempo): TempoLike {
  * すら持っていなかった)。ここでは「持っている情報だけ」を正直に表現する。
  */
 export interface TempoLabelLike {
-  readonly now_idx: number
-  readonly last_at: number
-  readonly next_at: number
-  label?: string
-  is_leap?: boolean
-  is_cover(at: number): boolean
+    readonly now_idx: number;
+    readonly last_at: number;
+    readonly next_at: number;
+    label?: string;
+    is_leap?: boolean;
+    is_cover(at: number): boolean;
 }
-
 /**
  * cyclic_label(): 親トークンと同じ実区間(last_at/next_at)を持ち、
  * now_idx だけを差し替えたラベルを作る。TempoRule/TempoView を経由しない
@@ -160,88 +127,38 @@ export interface TempoLabelLike {
  * now_idx の計算(mod によるラップや、別トークンの now_idx からの
  * 四半期計算など)は呼び出し側の関心事とし、ここでは受け取らない。
  */
-export function cyclic_label(parent: TempoEnvelope, now_idx: number): TempoLabelLike {
-  return {
-    now_idx,
-    last_at: parent.last_at,
-    next_at: parent.next_at,
-    is_cover: (at: number) => parent.last_at <= at && at < parent.next_at,
-  }
-}
-
-function fixed_envelope(size: number, zero: number, write_at: number): TempoEnvelope {
-  let now_idx = Math.floor((write_at - zero) / size)
-  // 既存 to_tempo_bare と同じ式・同じ演算順序にする。
-  // (last_at + size と (now_idx+1)*size+zero は数学的には同じだが、
-  // 浮動小数点では丸め誤差が変わりうる。端数の出るサイズ(火星のsolを
-  // 24分割する等)で succ() を繰り返すとこの誤差が蓄積し、後段で
-  // to_tempos() が同じ write_at を再計算したときの now_idx が
-  // 1つずれてしまうことがあるため、既存コードとビット単位で一致させる)
-  let last_at = (now_idx + 0) * size + zero
-  let next_at = (now_idx + 1) * size + zero
-  // zero が write_at に対して絶対値の大きい(≒起点から遠い)場合、
-  // (write_at-zero)/size が本来ちょうど整数になるはずなのに浮動小数点の
-  // 丸め誤差で 0.999999999... のようにわずかに小さく計算され、floor が
-  // 1つ小さい now_idx を返すことがある(実測: 火星暦の端数サイズ時刻で
-  // 発生し、succ() で得た境界をそのまま write_at として使い回すと
-  // 同じ場所に戻り続けて実質的な無限ループになった)。
-  // 実際の区間 [last_at, next_at) に write_at が収まっているかを検証し、
-  // 外れていれば 1 つ補正する(is_cover() の不変条件を保証する)。
-  if (next_at <= write_at) {
-    now_idx += 1
-    last_at = next_at
-    next_at = (now_idx + 1) * size + zero
-  } else if (write_at < last_at) {
-    now_idx -= 1
-    next_at = last_at
-    last_at = now_idx * size + zero
-  }
-  return { zero, now_idx, last_at, next_at }
-}
-
-/**
- * fixed_envelope_by_idx: now_idx が既知(整数)のときに last_at/next_at を
- * 直接組み立てる。fixed_envelope(size, zero, envelope.last_at + amount*size)
- * のように「差分を加算した write_at からもう一度 floor((write_at-zero)/size)
- * で now_idx を逆算する」経路は、write_at が zero から遠い(絶対値が大きい)
- * 場合に浮動小数点の丸め誤差で floor の結果が1つずれることがある
- * (実測: 火星暦の端数サイズで 16.999999999... になり 17 ではなく 16 に
- * floor され、succ() が実質的に進まず無限ループになった)。
- * now_idx を除算で逆算せず整数演算のまま渡せる場面(slide)ではこちらを使う。
- */
-function fixed_envelope_by_idx(size: number, zero: number, now_idx: number): TempoEnvelope {
-  const last_at = now_idx * size + zero
-  const next_at = (now_idx + 1) * size + zero
-  return { zero, now_idx, last_at, next_at }
-}
-
+export declare function cyclic_label(parent: TempoEnvelope, now_idx: number): TempoLabelLike;
 /**
  * FixedTempoRule: 固定幅(等間隔)の Tempo を解決する規則。
  * 既存の to_tempo_bare / Tempo.slide の非テーブル分岐と同じ計算をする。
  */
-export class FixedTempoRule implements TempoRule {
-  constructor(
-    private readonly size: number,
-    private readonly zero = 0,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    return fixed_envelope(this.size, this.zero, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    return fixed_envelope_by_idx(this.size, envelope.zero, envelope.now_idx + amount)
-  }
+export declare class FixedTempoRule implements TempoRule {
+    private readonly size;
+    private readonly zero;
+    constructor(size: number, zero?: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
+/**
+ * join: 2つの TempoLike を「両方を覆う最小区間」へ結合した TempoView を作る。
+ * 既存 time.ts の `Tempo.join(a, b)` (静的メソッド)と数値的に同じ式
+ * (a.zero !== b.zero はエラー、last_at=min、next_at=max、
+ * write_at=(a.write_at+b.write_at)/2)を、TempoLike 向けに再実装したもの
+ * (phenomena/solar.ts の雑節_from_terms() が 彼岸/土用/四季の区間を
+ * 求めるのに使う。既存の静的メソッドは a/b に生の Tempo を要求するため、
+ * TempoView(a/bがsolar_terms()由来でTempoView化されると必要になる)を
+ * 渡せない)。結合後の区間は「last_at を零点とする幅 size の1区間」なので
+ * FixedTempoRule(size, last_at) で構築すれば now_idx=0 かつ
+ * succ()/back()/is_cover() が正しく機能する TempoView になる。
+ */
+export declare function join(a: TempoLike, b: TempoLike): Tempo;
 /**
  * SubdivideBase: 等角分割の解決に必要な文脈。
  * 分割元になる親 Tempo の envelope(特に last_at)を毎回渡す必要がある。
  */
 export type SubdivideBase = TempoBase & {
-  parent: TempoEnvelope
-}
-
+    parent: TempoEnvelope;
+};
 /**
  * SubdivideTempoRule: 親 Tempo の位置(last_at)を動的な zero として使い、
  * 固定幅で等分割する規則。
@@ -258,61 +175,20 @@ export type SubdivideBase = TempoBase & {
  * 一度 envelope が解決された後の slide() は、zero が envelope 側に
  * 保持されるため FixedTempoRule と全く同じ式になる。
  */
-export class SubdivideTempoRule implements TempoRule<SubdivideBase> {
-  constructor(private readonly size: number) {}
-
-  at(write_at: number, base: SubdivideBase): TempoEnvelope {
-    return fixed_envelope(this.size, base.parent.last_at, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    return fixed_envelope_by_idx(this.size, envelope.zero, envelope.now_idx + amount)
-  }
+export declare class SubdivideTempoRule implements TempoRule<SubdivideBase> {
+    private readonly size;
+    constructor(size: number);
+    at(write_at: number, base: SubdivideBase): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
-/**
- * fixed_envelope で作った区間を、より粗い単位(例: 日)の境界に
- * 外向きに切り詰める。既存 Tempo.floor(sub1, sub2, subf=to_tempo_bare) を
- * envelope レベルで再現したもの。
- *
- * write_at を境に「次の粗い境界がすでに write_at 以前まで来ている」場合は
- * 1周期先へずらしてから切り詰める(元の実装の分岐と同じ)。
- * 結果の zero は、切り詰め後の last_at / now_idx / size から逆算して
- * 再定義する(元の実装同様、以後の slide がこの粗い境界を基準にするため)。
- */
-function floor_envelope(
-  envelope: TempoEnvelope,
-  size: number,
-  coarseSize: number,
-  coarseZero: number,
-  write_at: number,
-): TempoEnvelope {
-  const nextCoarse = fixed_envelope(coarseSize, coarseZero, envelope.next_at)
-  if (nextCoarse.last_at <= write_at) {
-    // 元の Tempo.slide(1) と同じ基準点(write_at + size)を使う。
-    // envelope.next_at を基準にすると、size が期ごとに変動する
-    // (floor 済みの区間を再度 floor するなど)場合に誤った周期先へ
-    // ずれてしまう。
-    const nextPeriod = fixed_envelope(size, envelope.zero, write_at + size)
-    const nextNextCoarse = fixed_envelope(coarseSize, coarseZero, nextPeriod.next_at)
-    const now_idx = envelope.now_idx + 1
-    const last_at = nextCoarse.last_at
-    const next_at = nextNextCoarse.last_at
-    return { zero: last_at - now_idx * size, now_idx, last_at, next_at }
-  }
-  const lastCoarse = fixed_envelope(coarseSize, coarseZero, envelope.last_at)
-  const now_idx = envelope.now_idx
-  const last_at = lastCoarse.last_at
-  const next_at = nextCoarse.last_at
-  return { zero: last_at - now_idx * size, now_idx, last_at, next_at }
-}
-
 /**
  * FloorStep: FloorTempoRule が順番に適用する「外向きに切り詰める先」の
  * 単位(例: 月境界、日境界)。
  */
-export type FloorStep = { size: number; zero: number }
-
+export type FloorStep = {
+    size: number;
+    zero: number;
+};
 /**
  * FloorTempoRule: 固定幅の envelope を起点に、1つ以上の粗い境界へ
  * 順番に外向き切り詰めをする規則。既存 to_tempos() の
@@ -338,28 +214,14 @@ export type FloorStep = { size: number; zero: number }
  * このずれの分だけ目標周期を外してしまうため、必ず envelope.last_at
  * (今の実際の境界)を起点にする。
  */
-export class FloorTempoRule implements TempoRule {
-  constructor(
-    private readonly size: number,
-    private readonly zero: number,
-    private readonly floors: readonly FloorStep[],
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    let envelope = fixed_envelope(this.size, this.zero, write_at)
-    for (const floor of this.floors) {
-      const coarseSize = envelope.next_at - envelope.last_at
-      envelope = floor_envelope(envelope, coarseSize, floor.size, floor.zero, write_at)
-    }
-    return envelope
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const midpoint = envelope.last_at + (amount + 0.5) * this.size
-    return this.at(midpoint)
-  }
+export declare class FloorTempoRule implements TempoRule {
+    private readonly size;
+    private readonly zero;
+    private readonly floors;
+    constructor(size: number, zero: number, floors: readonly FloorStep[]);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * CyclicDayTempoRule: 固定長(日など)を length 個で 1 周するラベルとして
  * 解決する規則。既存 to_tempos() が
@@ -381,30 +243,14 @@ export class FloorTempoRule implements TempoRule {
  * 可能性はゼロではないため、FloorTempoRule/MeanLunarPhaseTempoRule と同様、
  * 目標日の中央付近の write_at で at() を再実行する slide() を用意しておく。
  */
-export class CyclicDayTempoRule implements TempoRule {
-  constructor(
-    private readonly daySize: number,
-    private readonly zero: number,
-    private readonly length: number,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const raw = fixed_envelope(this.daySize, this.zero, write_at)
-    const now_idx = mod(raw.now_idx, this.length)
-    return {
-      zero: raw.last_at - now_idx * this.daySize,
-      now_idx,
-      last_at: raw.last_at,
-      next_at: raw.next_at,
-    }
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const midpoint = envelope.last_at + (amount + 0.5) * this.daySize
-    return this.at(midpoint)
-  }
+export declare class CyclicDayTempoRule implements TempoRule {
+    private readonly daySize;
+    private readonly zero;
+    private readonly length;
+    constructor(daySize: number, zero: number, length: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * MeanLunarPhaseTempoRule: 平均朔望月(固定周期)の月境界を、日境界へ
  * 切り詰めて解決する規則。
@@ -420,26 +266,15 @@ export class CyclicDayTempoRule implements TempoRule {
  * 規則を包む上位のトークン(Nn/M、下記 MeanLunisolarMonthRule 参照)は
  * to_table() の yeary_table() 経由で実際に succ() が呼ばれる。
  */
-export class MeanLunarPhaseTempoRule implements TempoRule<TempoBase> {
-  constructor(
-    private readonly moonMsec: number,
-    private readonly moonZero: number,
-    private readonly daySize: number,
-    private readonly dayZero: number,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const raw = fixed_envelope(this.moonMsec, this.moonZero, write_at)
-    return floor_envelope(raw, this.moonMsec, this.daySize, this.dayZero, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const targetIdx = envelope.now_idx + amount
-    const midpoint = this.moonZero + (targetIdx + 0.5) * this.moonMsec
-    return this.at(midpoint)
-  }
+export declare class MeanLunarPhaseTempoRule implements TempoRule<TempoBase> {
+    private readonly moonMsec;
+    private readonly moonZero;
+    private readonly daySize;
+    private readonly dayZero;
+    constructor(moonMsec: number, moonZero: number, daySize: number, dayZero: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * MeanLunisolarMonthRule: MeanLunarPhaseTempoRule が解決する生の朔望月
  * (moonZero からの連続カウント)から、年内の月番号(0-11、閏月は前月と
@@ -473,46 +308,17 @@ export class MeanLunarPhaseTempoRule implements TempoRule<TempoBase> {
  * 年間表で実際に確認)。この規則の slide() は moonMsec という定数長を
  * 使うため、この不具合を起こさない。
  */
-export class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
-  constructor(
-    private readonly moonMsec: number,
-    private readonly moonZero: number,
-    private readonly daySize: number,
-    private readonly dayZero: number,
-    private readonly termCount: number,
-    private readonly resolveSeason: (write_at: number) => TempoLike,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const raw = fixed_envelope(this.moonMsec, this.moonZero, write_at)
-    const month = floor_envelope(raw, this.moonMsec, this.daySize, this.dayZero, write_at)
-    const is_cover = (at: number) => month.last_at <= at && at < month.next_at
-
-    let season = this.resolveSeason(month.last_at)
-    let is_leap = false
-    if (!is_cover(season.moderate_at)) {
-      season = this.resolveSeason(month.next_at)
-      if (!is_cover(season.moderate_at)) {
-        is_leap = true
-      }
-    }
-    const now_idx = mod(season.now_idx, this.termCount) >> 1
-
-    return {
-      zero: month.last_at - now_idx * this.moonMsec,
-      now_idx,
-      last_at: month.last_at,
-      next_at: month.next_at,
-      is_leap,
-    }
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const midpoint = envelope.last_at + (amount + 0.5) * this.moonMsec
-    return this.at(midpoint)
-  }
+export declare class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
+    private readonly moonMsec;
+    private readonly moonZero;
+    private readonly daySize;
+    private readonly dayZero;
+    private readonly termCount;
+    private readonly resolveSeason;
+    constructor(moonMsec: number, moonZero: number, daySize: number, dayZero: number, termCount: number, resolveSeason: (write_at: number) => TempoLike);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * EraAdjustedTempoRule: 内側の規則が返す「通し年」を、元号(のような
  * 紀年法)の開始年を1年とする相対年に変換する規則。
@@ -543,43 +349,17 @@ export class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
  * amount による目標年の特定(inner rule への再問い合わせ)には目安点で
  * 構わないが、元号自体の解決は「対応する時刻(same-since)」で行う。
  */
-export class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
-  constructor(
-    private readonly innerRule: TempoRule<Base>,
-    private readonly avgYearMsec: number,
-    private readonly eraTable: readonly number[],
-    private readonly eraZero: number,
-    private readonly eras: readonly (readonly [string, number, number])[],
-  ) {}
-
-  private with_era(raw: TempoEnvelope, era_at: number): TempoEnvelope {
-    // def_eras() 自身が this.table.msec.era を構築する最中(まだ未設定)に
-    // this.to_tempos() を呼ぶ(各元号の開始年の raw な now_idx を得るため)
-    // ため、この規則もその構築の最中に呼ばれうる。その場合は元号調整
-    // 前の raw な値を返す(既存 to_tempos() が `if (this.table.msec.era
-    // != null)` で同じ状況をガードしていたのと同じ理由)。
-    if (!this.eraTable) return raw
-    const eraEnv = table_envelope(this.eraTable, this.eraZero, era_at)
-    const era = this.eras[eraEnv.now_idx]
-    if (!era?.[0]) return raw
-    const now_idx = raw.now_idx + 1 - era[2]
-    return { ...raw, now_idx }
-  }
-
-  at(write_at: number, base: Base): TempoEnvelope {
-    const raw = this.innerRule.at(write_at, base)
-    return this.with_era(raw, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
-    const since = base.write_at - envelope.last_at
-    const midpoint = envelope.last_at + (amount + 0.5) * this.avgYearMsec
-    const raw = this.innerRule.at(midpoint, base)
-    const era_at = Math.min(Math.max(raw.last_at + since, raw.last_at), raw.next_at - 1)
-    return this.with_era(raw, era_at)
-  }
+export declare class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
+    private readonly innerRule;
+    private readonly avgYearMsec;
+    private readonly eraTable;
+    private readonly eraZero;
+    private readonly eras;
+    constructor(innerRule: TempoRule<Base>, avgYearMsec: number, eraTable: readonly number[], eraZero: number, eras: readonly (readonly [string, number, number])[]);
+    private with_era;
+    at(write_at: number, base: Base): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope;
 }
-
 /**
  * ObservedLunisolarYearRule: 観測太陰太陽暦(実朔・実節気)の年を解決する
  * 規則。既存 lunisolar()(37ヶ月窓の朔・節気探索という重い天文計算)を
@@ -591,64 +371,16 @@ export class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements
  * 再解決で行われているため、slide() も他の規則と同様に目標年の中央付近の
  * write_at で at() を再実行する設計にする。
  */
-export class ObservedLunisolarYearRule implements TempoRule<TempoBase> {
-  constructor(
-    private readonly resolveYear: (write_at: number) => {
-      year_start_at: number
-      next_year_start_at: number
-      year: number
-    },
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const { year_start_at, next_year_start_at, year } = this.resolveYear(write_at)
-    const yearSize = next_year_start_at - year_start_at
-    return {
-      zero: year_start_at - year * yearSize,
-      now_idx: year,
-      last_at: year_start_at,
-      next_at: next_year_start_at,
-    }
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const avgSize = envelope.next_at - envelope.last_at
-    const midpoint = envelope.last_at + (amount + 0.5) * avgSize
-    return this.at(midpoint)
-  }
+export declare class ObservedLunisolarYearRule implements TempoRule<TempoBase> {
+    private readonly resolveYear;
+    constructor(resolveYear: (write_at: number) => {
+        year_start_at: number;
+        next_year_start_at: number;
+        year: number;
+    });
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
-function table_envelope_by_idx(table: readonly number[], zero: number, now_idx: number): TempoEnvelope {
-  const idx = mod(now_idx, table.length)
-  const table_idx = Math.floor(now_idx / table.length)
-  const table_diff = table_idx ? table[table.length - 1] * table_idx : 0
-  const last_at = zero + table_diff + (table[idx - 1] || 0)
-  const next_at = zero + table_diff + table[idx]
-  return { zero, now_idx, last_at, next_at, table }
-}
-
-function table_envelope(table: readonly number[], zero: number, write_at: number): TempoEnvelope {
-  let scan_at = write_at - zero
-  const table_size = table[table.length - 1]
-  const table_idx = Math.floor(scan_at / table_size)
-  if (table_idx) {
-    scan_at -= table_idx * table_size
-  }
-
-  let now_idx = table.length
-  let top_idx = 0
-  while (top_idx < now_idx) {
-    const mid_idx = (top_idx + now_idx) >>> 1
-    if (table[mid_idx] <= scan_at) {
-      top_idx = mid_idx + 1
-    } else {
-      now_idx = mid_idx
-    }
-  }
-
-  return table_envelope_by_idx(table, zero, now_idx + table_idx * table.length)
-}
-
 /**
  * TableTempoRule: テーブル参照で幅が決まる Tempo を解決する規則。
  * zero から見て最初の1周期(table_idx===0)の範囲では、既存の
@@ -662,30 +394,21 @@ function table_envelope(table: readonly number[], zero: number, write_at: number
  * 反映するため経路依存になる)。ここでは zero からの絶対量として
  * 一貫した(経路に依存しない)計算に統一している。
  */
-export class TableTempoRule implements TempoRule {
-  constructor(
-    private readonly table: readonly number[],
-    private readonly zero = 0,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    return table_envelope(this.table, this.zero, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    return table_envelope_by_idx(this.table, this.zero, envelope.now_idx + amount)
-  }
+export declare class TableTempoRule implements TempoRule {
+    private readonly table;
+    private readonly zero;
+    constructor(table: readonly number[], zero?: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * SolarDayHourBase: 不定時法の時刻を解決するための文脈。
  * 対象の暦日(day)の envelope を毎回渡す必要がある
  * (日の出・入りは日ごとに変わるため)。
  */
 export type SolarDayHourBase = TempoBase & {
-  day: TempoEnvelope
-}
-
+    day: TempoEnvelope;
+};
 /**
  * SolarDayHourTempoRule: 不定時法(見かけの日の出・入りを基準にした
  * 長さが変わる「時」)を解決する規則。
@@ -711,82 +434,20 @@ export type SolarDayHourBase = TempoBase & {
  * テーブルを使い回すと、この差が2回目以降のクエリに残ってしまうため
  * 採用しない。at() は常に hour_table() を呼び直す。
  */
-export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
-  constructor(
-    private readonly sunny: OrbitalModel,
-    private readonly earthy: RotationModel,
-    private readonly geo: TIMEZONE,
-    private readonly dayMsec: number,
-    private readonly dayZero: number,
-    private readonly yearMsec: number,
-    private readonly seasonZero: number,
-    private readonly hourLength: number,
-  ) {}
-
-  at(write_at: number, base: SolarDayHourBase): TempoEnvelope {
-    const list = this.hour_table(write_at, base.day)
-    return table_envelope(list, base.day.last_at, write_at)
-  }
-
-  slide(envelope: TempoEnvelope, amount: number, base: SolarDayHourBase): TempoEnvelope {
-    const now_idx = envelope.now_idx + amount
-    if (envelope.table && 0 <= now_idx && now_idx < envelope.table.length) {
-      return table_envelope_by_idx(envelope.table, envelope.zero, now_idx)
-    }
-    const list = this.hour_table(base.write_at, base.day)
-    return table_envelope_by_idx(list, base.day.last_at, now_idx)
-  }
-
-  private hour_table(write_at: number, dayEnvelope: TempoEnvelope): number[] {
-    const day = new Tempo(
-      dayEnvelope.zero,
-      dayEnvelope.now_idx,
-      write_at,
-      dayEnvelope.last_at,
-      dayEnvelope.next_at,
-    )
-    const solarNoon = noon(this.sunny, this.dayMsec, this.dayZero, this.yearMsec, this.seasonZero, write_at, day)
-    const { 日の出, 日の入 } = solor(
-      this.sunny,
-      this.earthy,
-      this.geo,
-      this.dayMsec,
-      this.dayZero,
-      this.yearMsec,
-      this.seasonZero,
-      write_at,
-      4,
-      solarNoon,
-    )
-    const size = this.hourLength / 4
-    const list: number[] = []
-
-    let next_at = 0
-    let msec = (日の出 - day.last_at) / size
-    for (let idx = 0, end = 1 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = 日の出 - day.last_at
-    msec = (日の入 - 日の出) / (2 * size)
-    for (let idx = 1 * size, end = 3 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = day.size
-    msec = (day.next_at - 日の入) / size
-    const tails: number[] = []
-    for (let idx = 3 * size, end = 4 * size; idx < end; idx++) {
-      tails.push(Math.ceil(next_at))
-      next_at -= msec
-    }
-    list.push(...tails.reverse())
-    return list
-  }
+export declare class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
+    private readonly sunny;
+    private readonly earthy;
+    private readonly geo;
+    private readonly dayMsec;
+    private readonly dayZero;
+    private readonly yearMsec;
+    private readonly seasonZero;
+    private readonly hourLength;
+    constructor(sunny: OrbitalModel, earthy: RotationModel, geo: TIMEZONE, dayMsec: number, dayZero: number, yearMsec: number, seasonZero: number, hourLength: number);
+    at(write_at: number, base: SolarDayHourBase): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number, base: SolarDayHourBase): TempoEnvelope;
+    private hour_table;
 }
-
 /**
  * OrbitalPhaseTempoRule: 実軌道(実際の黄経など)を基準に、1公転周期を等しい
  * 「角度」で divisions 等分した位相区間を解決する規則。
@@ -806,47 +467,14 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
  * 接続済み(`hasSolarEvents(sunny)` の暦のみ opt-in、それ以外は従来通り
  * `SubdivideTempoRule` による等角分割のまま)。
  */
-export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
-  constructor(
-    private readonly sunny: OrbitalModel,
-    private readonly divisions: number,
-    private readonly referencePhaseOffset = 0,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const avgSize = this.sunny.periodMsec / this.divisions
-    const boundaryAt = (idx: number) =>
-      solar_phase(this.sunny, idx / this.divisions - this.referencePhaseOffset, write_at)
-
-    let idx = Math.floor(mod(this.sunny.phaseAt(write_at) + this.referencePhaseOffset, 1) * this.divisions)
-    let last_at = boundaryAt(idx)
-    while (write_at < last_at) {
-      idx = mod(idx - 1, this.divisions)
-      last_at = boundaryAt(idx)
-    }
-    let next_at = boundaryAt(mod(idx + 1, this.divisions))
-    while (next_at <= write_at) {
-      idx = mod(idx + 1, this.divisions)
-      last_at = next_at
-      next_at = boundaryAt(mod(idx + 1, this.divisions))
-    }
-
-    // idx はこの探索で確定した「基準位相からの区間番号」であり、既に
-    // 0..divisions-1 に収まっている(mod 済み)ラベル整合な値。以前は
-    // sunny.epochMsec からの連番を now_idx にしていたため、ラベル参照側
-    // (list[val.now_idx] を mod なしで直接引く)と基準がずれ、呼び出し側
-    // (resolve_orbital_season)で都度 idx を再計算し直す必要があった。
-    // ここで直接 idx を返すことで、その再計算が不要になる。
-    const now_idx = idx
-    return { zero: last_at - now_idx * avgSize, now_idx, last_at, next_at }
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const avgSize = this.sunny.periodMsec / this.divisions
-    return this.at(envelope.last_at + amount * avgSize + avgSize / 2)
-  }
+export declare class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
+    private readonly sunny;
+    private readonly divisions;
+    private readonly referencePhaseOffset;
+    constructor(sunny: OrbitalModel, divisions: number, referencePhaseOffset?: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * ObservedLunisolarMonthRule: 観測太陰太陽暦(実朔・実節気)の月を解決する規則。
  *
@@ -894,48 +522,20 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
  * 使われる場面は必ず moony が存在する usesObservedLunisolar 分岐のみ
  * なので、フォールバック分岐自体が不要になった)。
  */
-export class ObservedLunisolarMonthRule implements TempoRule<TempoBase> {
-  constructor(
-    private readonly resolveMonth: (write_at: number) => LunisolarDate,
-    private readonly avgMonthMsec: number,
-  ) {}
-
-  at(write_at: number): TempoEnvelope {
-    const date = this.resolveMonth(write_at)
-    const now_idx = date.month - 1
-    const size = date.next_at - date.last_at
-    return {
-      zero: date.last_at - now_idx * size,
-      now_idx,
-      last_at: date.last_at,
-      next_at: date.next_at,
-      is_leap: date.is_leap,
-    }
-  }
-
-  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const midpoint = envelope.last_at + (amount + 0.5) * this.avgMonthMsec
-    return this.at(midpoint)
-  }
+export declare class ObservedLunisolarMonthRule implements TempoRule<TempoBase> {
+    private readonly resolveMonth;
+    private readonly avgMonthMsec;
+    constructor(resolveMonth: (write_at: number) => LunisolarDate, avgMonthMsec: number);
+    at(write_at: number): TempoEnvelope;
+    slide(envelope: TempoEnvelope, amount: number): TempoEnvelope;
 }
-
 /**
  * envelope_of: 任意の TempoLike(既存 Tempo でも TempoView でも)から
  * TempoEnvelope 形状を取り出す。SubdivideBase.parent / SolarDayHourBase.day
  * など、他の規則へ「区間情報」だけを渡したい文脈で使う
  * (具象型が Tempo か TempoView かを呼び出し側が意識しなくてよくなる)。
  */
-export function envelope_of(t: TempoLike): TempoEnvelope {
-  return {
-    zero: t.zero,
-    now_idx: t.now_idx,
-    last_at: t.last_at,
-    next_at: t.next_at,
-    label: t.label,
-    is_leap: t.is_leap,
-  }
-}
-
+export declare function envelope_of(t: TempoLike): TempoEnvelope;
 /**
  * TempoView<Base>: (envelope, base, rule) を保有する TempoLike 実装。
  *
@@ -954,85 +554,54 @@ export function envelope_of(t: TempoLike): TempoEnvelope {
  * (既存 to_tempos() は Nn.now_idx/Nn.is_leap 等をその場で書き換える
  * 箇所があり、この挙動を壊さず安全に保つ必要がある)。
  */
-export class TempoView<Base extends TempoBase = TempoBase> implements TempoLike {
-  constructor(
-    private envelope: TempoEnvelope,
-    public base: Base,
-    public readonly rule: TempoRule<Base>,
-  ) {}
-
-  get zero() {
-    return this.envelope.zero
-  }
-  get write_at() {
-    return this.base.write_at
-  }
-  get now_idx() {
-    return this.envelope.now_idx
-  }
-  set now_idx(value: number) {
-    this.envelope = { ...this.envelope, now_idx: value }
-  }
-  get last_at() {
-    return this.envelope.last_at
-  }
-  get next_at() {
-    return this.envelope.next_at
-  }
-  get size() {
-    return this.envelope.next_at - this.envelope.last_at
-  }
-  get since() {
-    return this.base.write_at - this.envelope.last_at
-  }
-  get center_at() {
-    return (this.envelope.next_at + this.envelope.last_at) / 2
-  }
-  get moderate_at() {
-    return this.envelope.now_idx & 1 ? this.envelope.last_at : this.envelope.next_at
-  }
-  get label() {
-    return this.envelope.label
-  }
-  set label(value: string | undefined) {
-    this.envelope = { ...this.envelope, label: value }
-  }
-  get is_leap() {
-    return this.envelope.is_leap
-  }
-  set is_leap(value: boolean | undefined) {
-    this.envelope = { ...this.envelope, is_leap: value }
-  }
-
-  is_cover(at: number) {
-    return this.envelope.last_at <= at && at < this.envelope.next_at
-  }
-
-  succ(n = 1): TempoView<Base> {
-    return this.slide(n)
-  }
-  back(n = 1): TempoView<Base> {
-    return this.slide(-n)
-  }
-  slide(amount: number): TempoView<Base> {
-    const since = this.since
-    const envelope = this.rule.slide(this.envelope, amount, this.base)
-    const base = { ...this.base, write_at: envelope.last_at + since }
-    return new TempoView(envelope, base, this.rule)
-  }
-  slide_to(n: number): TempoView<Base> {
-    return this.slide(n - this.envelope.now_idx)
-  }
-  copy(): TempoView<Base> {
-    return new TempoView(this.envelope, this.base, this.rule)
-  }
-  reset(now: number = Date.now()): TempoView<Base> {
-    const base = { ...this.base, write_at: now }
-    return new TempoView(this.rule.at(now, base), base, this.rule)
-  }
-
-  /** rule.at(base.write_at, base) を解決して TempoView を作る。 */
-  static at<B extends TempoBase>(rule: TempoRule<B>, base: B): TempoView<B> {
-    return new TempoView(rule.at(base.write_at, base), base, rule)
-  }
+export declare class Tempo<Base extends TempoBase = TempoBase> implements TempoLike {
+    private envelope;
+    base: Base;
+    readonly rule: TempoRule<Base>;
+    constructor(envelope: TempoEnvelope, base: Base, rule: TempoRule<Base>);
+    get zero(): number;
+    get write_at(): number;
+    get now_idx(): number;
+    set now_idx(value: number);
+    get last_at(): number;
+    get next_at(): number;
+    get size(): number;
+    get since(): number;
+    get center_at(): number;
+    get moderate_at(): number;
+    /** 既存 Tempo.deg と同じ式(区間内の経過を360度換算した角度)。 */
+    get deg(): string;
+    /** 既存 Tempo.timeout と同じ式。sleep() の待ち時間算出にのみ使う。 */
+    get timeout(): number;
+    get label(): string | undefined;
+    set label(value: string | undefined);
+    get is_leap(): boolean | undefined;
+    set is_leap(value: boolean | undefined);
+    /**
+     * 既存 Tempo.table と同じ役割。TableTempoRule/SolarDayHourTempoRule が
+     * 解決した envelope に含まれるテーブルを読み取り専用で公開する
+     * (SolarDayHourTempoRule.slide() が「同じ日のテーブル内かどうか」を
+     * 判定する最適化に使うほか、外部からテーブルの中身を検査したい場合にも使う)。
+     */
+    get table(): readonly number[] | undefined;
+    is_cover(at: number): boolean;
+    /** 既存 Tempo.is_hit と同じ式(2つの区間が重なるかを判定する)。 */
+    is_hit(that: TempoLike): boolean;
+    succ(n?: number): Tempo<Base>;
+    back(n?: number): Tempo<Base>;
+    slide(amount: number): Tempo<Base>;
+    slide_to(n: number): Tempo<Base>;
+    copy(): Tempo<Base>;
+    reset(now?: number): Tempo<Base>;
+    /** 既存 Tempo.tick と同じ式。区間を過ぎていれば reset() した結果を、まだなら null を返す。 */
+    tick(): Tempo<Base> | null;
+    /** 既存 Tempo.sleep(インスタンス)と同じ式。 */
+    sleep(): Promise<unknown>;
+    /** rule.at(base.write_at, base) を解決して TempoView を作る。 */
+    static at<B extends TempoBase>(rule: TempoRule<B>, base: B): Tempo<B>;
+    /**
+     * 既存 Tempo.sleep(静的)と同じ式。渡された TempoView のうち最も近い
+     * next_at(=timeout が最小)まで待つ Promise を返す。
+     */
+    static sleep(tempos: Tempo<any>[]): Promise<unknown>;
 }

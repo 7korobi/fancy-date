@@ -1,7 +1,8 @@
 import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
-import type { TempoLabelLike, TempoLike } from './tempo-model';
+import { Tempo } from './tempo';
+import type { TempoBase, TempoLabelLike, TempoLike } from './tempo';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
 export { MarsSolarOrbital } from './nasa';
@@ -206,24 +207,56 @@ export declare class FancyDate {
     solar_phase(phase: number, near: number): number;
     lunar_phase(phase: number, near: number): number;
     lunisolar(utc: number): LunisolarDate;
-    solar_term(utc: number, phase: number): import("./time").Tempo;
+    solar_term(utc: number, phase: number): Tempo<{
+        write_at: number;
+    }>;
     solar_phase_before(phase: number, utc: number): number;
     solar_terms(utc: number): {
-        立春: import("./time").Tempo;
-        入梅: import("./time").Tempo;
-        春分: import("./time").Tempo;
-        半夏生: import("./time").Tempo;
-        夏土用: import("./time").Tempo;
-        立夏: import("./time").Tempo;
-        夏至: import("./time").Tempo;
-        秋土用: import("./time").Tempo;
-        立秋: import("./time").Tempo;
-        秋分: import("./time").Tempo;
-        冬土用: import("./time").Tempo;
-        立冬: import("./time").Tempo;
-        冬至: import("./time").Tempo;
-        春土用: import("./time").Tempo;
-        次立春: import("./time").Tempo;
+        立春: Tempo<{
+            write_at: number;
+        }>;
+        入梅: Tempo<{
+            write_at: number;
+        }>;
+        春分: Tempo<{
+            write_at: number;
+        }>;
+        半夏生: Tempo<{
+            write_at: number;
+        }>;
+        夏土用: Tempo<{
+            write_at: number;
+        }>;
+        立夏: Tempo<{
+            write_at: number;
+        }>;
+        夏至: Tempo<{
+            write_at: number;
+        }>;
+        秋土用: Tempo<{
+            write_at: number;
+        }>;
+        立秋: Tempo<{
+            write_at: number;
+        }>;
+        秋分: Tempo<{
+            write_at: number;
+        }>;
+        冬土用: Tempo<{
+            write_at: number;
+        }>;
+        立冬: Tempo<{
+            write_at: number;
+        }>;
+        冬至: Tempo<{
+            write_at: number;
+        }>;
+        春土用: Tempo<{
+            write_at: number;
+        }>;
+        次立春: Tempo<{
+            write_at: number;
+        }>;
     };
     succ(utc: DateLike, diff: SpanLike): number;
     back(utc: DateLike, diff: SpanLike): number;
@@ -305,37 +338,67 @@ export declare class FancyDate {
         is_legal_eto: boolean;
         is_legal_ETO: boolean;
     };
-    noon(utc: any, day?: import("./time").Tempo): {
+    noon(utc: any, day?: Tempo<{
+        write_at: number;
+    }>): {
+        last_at: number;
         center_at: number;
-        T0: import("./time").Tempo;
-        T1: import("./time").Tempo;
+        T0: Tempo<{
+            write_at: number;
+        }>;
+        T1: Tempo<{
+            write_at: number;
+        }>;
         季節: number;
         南中差分: number;
         南中時刻: number;
         真夜中: number;
-        label?: string;
-        table?: number[];
         zero: number;
         write_at: number;
         now_idx: number;
-        last_at: number;
         next_at: number;
+        size: number;
+        since: number;
+        moderate_at: number;
+        label?: string;
+        is_leap?: boolean;
+        is_cover(at: number): boolean;
+        succ(n?: number): TempoLike;
+        back(n?: number): TempoLike;
+        slide(n: number): TempoLike;
+        slide_to(n: number): TempoLike;
+        copy(): TempoLike;
+        reset(now?: number): TempoLike;
     };
     solor(utc: any, idx?: number, solarNoon?: {
+        last_at: number;
         center_at: number;
-        T0: import("./time").Tempo;
-        T1: import("./time").Tempo;
+        T0: Tempo<{
+            write_at: number;
+        }>;
+        T1: Tempo<{
+            write_at: number;
+        }>;
         季節: number;
         南中差分: number;
         南中時刻: number;
         真夜中: number;
-        label?: string;
-        table?: number[];
         zero: number;
         write_at: number;
         now_idx: number;
-        last_at: number;
         next_at: number;
+        size: number;
+        since: number;
+        moderate_at: number;
+        label?: string;
+        is_leap?: boolean;
+        is_cover(at: number): boolean;
+        succ(n?: number): TempoLike;
+        back(n?: number): TempoLike;
+        slide(n: number): TempoLike;
+        slide_to(n: number): TempoLike;
+        copy(): TempoLike;
+        reset(now?: number): TempoLike;
     }): import("./orbital-model").SolarObservation | {
         K: number;
         lat: number;
@@ -347,7 +410,9 @@ export declare class FancyDate {
         南中時刻: number;
         日の入: number;
     };
-    lunar(utc: any, day?: import("./time").Tempo): import("./orbital-model").LunarObservation;
+    lunar(utc: any, day?: Tempo<{
+        write_at: number;
+    }>): import("./orbital-model").LunarObservation;
     lunar_apsis(kind: LunarApsisKind, near: number): import("./orbital-model").LunarApsis;
     lunar_node(kind: LunarNodeKind, near: number): import("./orbital-model").LunarNode;
     節句(_utc: number, _tempos?: Tempos): {
@@ -376,70 +441,168 @@ export declare class FancyDate {
         };
     };
     雑節(utc: number, { Zz, d }?: Tempos): {
-        立春: import("./time").Tempo;
-        立夏: import("./time").Tempo;
-        立秋: import("./time").Tempo;
-        立冬: import("./time").Tempo;
-        冬至: import("./time").Tempo;
-        春分: import("./time").Tempo;
-        夏至: import("./time").Tempo;
-        秋分: import("./time").Tempo;
-        入梅: import("./time").Tempo;
-        半夏生: import("./time").Tempo;
-        春: import("./time").Tempo;
-        夏: import("./time").Tempo;
-        秋: import("./time").Tempo;
-        冬: import("./time").Tempo;
-        春社日: import("./time").Tempo;
-        秋社日: import("./time").Tempo;
-        春土用: import("./time").Tempo;
-        夏土用: import("./time").Tempo;
-        秋土用: import("./time").Tempo;
-        冬土用: import("./time").Tempo;
-        春節分: import("./time").Tempo;
-        夏節分: import("./time").Tempo;
-        秋節分: import("./time").Tempo;
-        冬節分: import("./time").Tempo;
-        節分: import("./time").Tempo;
-        春彼岸: import("./time").Tempo;
-        秋彼岸: import("./time").Tempo;
-        八十八夜: import("./time").Tempo;
-        二百十日: import("./time").Tempo;
-        二百二十日: import("./time").Tempo;
+        立春: Tempo<{
+            write_at: number;
+        }>;
+        立夏: Tempo<{
+            write_at: number;
+        }>;
+        立秋: Tempo<{
+            write_at: number;
+        }>;
+        立冬: Tempo<{
+            write_at: number;
+        }>;
+        冬至: Tempo<{
+            write_at: number;
+        }>;
+        春分: Tempo<{
+            write_at: number;
+        }>;
+        夏至: Tempo<{
+            write_at: number;
+        }>;
+        秋分: Tempo<{
+            write_at: number;
+        }>;
+        入梅: Tempo<{
+            write_at: number;
+        }>;
+        半夏生: Tempo<{
+            write_at: number;
+        }>;
+        春: Tempo<TempoBase>;
+        夏: Tempo<TempoBase>;
+        秋: Tempo<TempoBase>;
+        冬: Tempo<TempoBase>;
+        春社日: Tempo<{
+            write_at: number;
+        }>;
+        秋社日: Tempo<{
+            write_at: number;
+        }>;
+        春土用: Tempo<{
+            write_at: number;
+        }>;
+        夏土用: Tempo<{
+            write_at: number;
+        }>;
+        秋土用: Tempo<{
+            write_at: number;
+        }>;
+        冬土用: Tempo<{
+            write_at: number;
+        }>;
+        春節分: Tempo<{
+            write_at: number;
+        }>;
+        夏節分: Tempo<{
+            write_at: number;
+        }>;
+        秋節分: Tempo<{
+            write_at: number;
+        }>;
+        冬節分: Tempo<{
+            write_at: number;
+        }>;
+        節分: Tempo<{
+            write_at: number;
+        }>;
+        春彼岸: Tempo<TempoBase>;
+        秋彼岸: Tempo<TempoBase>;
+        八十八夜: Tempo<{
+            write_at: number;
+        }>;
+        二百十日: Tempo<{
+            write_at: number;
+        }>;
+        二百二十日: Tempo<{
+            write_at: number;
+        }>;
     };
     雑節_by_phase(utc: number): {
-        立春: import("./time").Tempo;
-        立夏: import("./time").Tempo;
-        立秋: import("./time").Tempo;
-        立冬: import("./time").Tempo;
-        冬至: import("./time").Tempo;
-        春分: import("./time").Tempo;
-        夏至: import("./time").Tempo;
-        秋分: import("./time").Tempo;
-        入梅: import("./time").Tempo;
-        半夏生: import("./time").Tempo;
-        春: import("./time").Tempo;
-        夏: import("./time").Tempo;
-        秋: import("./time").Tempo;
-        冬: import("./time").Tempo;
-        春社日: import("./time").Tempo;
-        秋社日: import("./time").Tempo;
-        春土用: import("./time").Tempo;
-        夏土用: import("./time").Tempo;
-        秋土用: import("./time").Tempo;
-        冬土用: import("./time").Tempo;
-        春節分: import("./time").Tempo;
-        夏節分: import("./time").Tempo;
-        秋節分: import("./time").Tempo;
-        冬節分: import("./time").Tempo;
-        節分: import("./time").Tempo;
-        春彼岸: import("./time").Tempo;
-        秋彼岸: import("./time").Tempo;
-        八十八夜: import("./time").Tempo;
-        二百十日: import("./time").Tempo;
-        二百二十日: import("./time").Tempo;
+        立春: Tempo<{
+            write_at: number;
+        }>;
+        立夏: Tempo<{
+            write_at: number;
+        }>;
+        立秋: Tempo<{
+            write_at: number;
+        }>;
+        立冬: Tempo<{
+            write_at: number;
+        }>;
+        冬至: Tempo<{
+            write_at: number;
+        }>;
+        春分: Tempo<{
+            write_at: number;
+        }>;
+        夏至: Tempo<{
+            write_at: number;
+        }>;
+        秋分: Tempo<{
+            write_at: number;
+        }>;
+        入梅: Tempo<{
+            write_at: number;
+        }>;
+        半夏生: Tempo<{
+            write_at: number;
+        }>;
+        春: Tempo<TempoBase>;
+        夏: Tempo<TempoBase>;
+        秋: Tempo<TempoBase>;
+        冬: Tempo<TempoBase>;
+        春社日: Tempo<{
+            write_at: number;
+        }>;
+        秋社日: Tempo<{
+            write_at: number;
+        }>;
+        春土用: Tempo<{
+            write_at: number;
+        }>;
+        夏土用: Tempo<{
+            write_at: number;
+        }>;
+        秋土用: Tempo<{
+            write_at: number;
+        }>;
+        冬土用: Tempo<{
+            write_at: number;
+        }>;
+        春節分: Tempo<{
+            write_at: number;
+        }>;
+        夏節分: Tempo<{
+            write_at: number;
+        }>;
+        秋節分: Tempo<{
+            write_at: number;
+        }>;
+        冬節分: Tempo<{
+            write_at: number;
+        }>;
+        節分: Tempo<{
+            write_at: number;
+        }>;
+        春彼岸: Tempo<TempoBase>;
+        秋彼岸: Tempo<TempoBase>;
+        八十八夜: Tempo<{
+            write_at: number;
+        }>;
+        二百十日: Tempo<{
+            write_at: number;
+        }>;
+        二百二十日: Tempo<{
+            write_at: number;
+        }>;
     };
-    to_tempo_by_solor(utc: number, day: any): import("./time").Tempo;
+    to_tempo_by_solor(utc: number, day: any): Tempo<{
+        write_at: number;
+    }>;
     /**
      * 実軌道(sunny.timeOfPhase)による二十四節気の解決(定気法)。
      * calc.idx.Z = dic.Z.length/8 という既存の zero 設計により、
@@ -475,36 +638,84 @@ export declare class FancyDate {
      */
     private solar_hour_rule;
     note(utc: number, tempos?: Tempos, arg1?: {
-        立春: import("./time").Tempo;
-        立夏: import("./time").Tempo;
-        立秋: import("./time").Tempo;
-        立冬: import("./time").Tempo;
-        冬至: import("./time").Tempo;
-        春分: import("./time").Tempo;
-        夏至: import("./time").Tempo;
-        秋分: import("./time").Tempo;
-        入梅: import("./time").Tempo;
-        半夏生: import("./time").Tempo;
-        春: import("./time").Tempo;
-        夏: import("./time").Tempo;
-        秋: import("./time").Tempo;
-        冬: import("./time").Tempo;
-        春社日: import("./time").Tempo;
-        秋社日: import("./time").Tempo;
-        春土用: import("./time").Tempo;
-        夏土用: import("./time").Tempo;
-        秋土用: import("./time").Tempo;
-        冬土用: import("./time").Tempo;
-        春節分: import("./time").Tempo;
-        夏節分: import("./time").Tempo;
-        秋節分: import("./time").Tempo;
-        冬節分: import("./time").Tempo;
-        節分: import("./time").Tempo;
-        春彼岸: import("./time").Tempo;
-        秋彼岸: import("./time").Tempo;
-        八十八夜: import("./time").Tempo;
-        二百十日: import("./time").Tempo;
-        二百二十日: import("./time").Tempo;
+        立春: Tempo<{
+            write_at: number;
+        }>;
+        立夏: Tempo<{
+            write_at: number;
+        }>;
+        立秋: Tempo<{
+            write_at: number;
+        }>;
+        立冬: Tempo<{
+            write_at: number;
+        }>;
+        冬至: Tempo<{
+            write_at: number;
+        }>;
+        春分: Tempo<{
+            write_at: number;
+        }>;
+        夏至: Tempo<{
+            write_at: number;
+        }>;
+        秋分: Tempo<{
+            write_at: number;
+        }>;
+        入梅: Tempo<{
+            write_at: number;
+        }>;
+        半夏生: Tempo<{
+            write_at: number;
+        }>;
+        春: Tempo<TempoBase>;
+        夏: Tempo<TempoBase>;
+        秋: Tempo<TempoBase>;
+        冬: Tempo<TempoBase>;
+        春社日: Tempo<{
+            write_at: number;
+        }>;
+        秋社日: Tempo<{
+            write_at: number;
+        }>;
+        春土用: Tempo<{
+            write_at: number;
+        }>;
+        夏土用: Tempo<{
+            write_at: number;
+        }>;
+        秋土用: Tempo<{
+            write_at: number;
+        }>;
+        冬土用: Tempo<{
+            write_at: number;
+        }>;
+        春節分: Tempo<{
+            write_at: number;
+        }>;
+        夏節分: Tempo<{
+            write_at: number;
+        }>;
+        秋節分: Tempo<{
+            write_at: number;
+        }>;
+        冬節分: Tempo<{
+            write_at: number;
+        }>;
+        節分: Tempo<{
+            write_at: number;
+        }>;
+        春彼岸: Tempo<TempoBase>;
+        秋彼岸: Tempo<TempoBase>;
+        八十八夜: Tempo<{
+            write_at: number;
+        }>;
+        二百十日: Tempo<{
+            write_at: number;
+        }>;
+        二百二十日: Tempo<{
+            write_at: number;
+        }>;
     }, arg2?: {
         カトリック: {
             万聖節: number[];

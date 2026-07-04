@@ -1,45 +1,30 @@
+import { Tempo } from './tempo';
 export declare const SECOND: number;
 export declare const MINUTE: number;
 export declare const HOUR: number;
 export declare const DAY: number;
 type Distance = readonly [limit: number, interval: number, base: number, label: string];
-export declare class Tempo {
-    label?: string;
-    table?: number[];
-    zero: number;
+/**
+ * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
+ * tempo.ts(旧 tempo-model.ts)の TempoView が Tempo としてリネームされた)は
+ * envelope(zero/now_idx/last_at/next_at)+base(write_at)+rule の
+ * 組み合わせで succ()/back()/slide() を実現する。
+ *
+ * round/ceil/to_list/upto(探索を伴う旧 Tempo のメソッド)は、
+ * 呼び出し元がゼロ(コードベース内で一切使われていなかった)と確認の上、
+ * FloorTempoRule 等の新設計に役割が引き継がれたため移植していない。
+ * deg/is_hit/tick/sleep(呼び出し元は同様にゼロだが、単純な式のため
+ * 後方互換のために温存)は TempoView 側に移植済み。
+ */
+export declare function to_tempo(size_str: string, zero_str?: string, write_at?: number | Date): Tempo<{
     write_at: number;
-    now_idx: number;
-    last_at: number;
-    next_at: number;
-    get size(): number;
-    get since(): number;
-    get remain(): number;
-    get timeout(): number;
-    get center_at(): number;
-    get moderate_at(): number;
-    get deg(): string;
-    is_cover(at: number): boolean;
-    is_hit(that: Tempo): boolean;
-    succ(n?: number): Tempo;
-    back(n?: number): Tempo;
-    slide_to(n: number): Tempo;
-    round(sub1: number, sub2: number, subf?: typeof to_tempo_bare): Tempo;
-    ceil(sub1: number, sub2: number, subf?: typeof to_tempo_bare): Tempo;
-    floor(sub1: number, sub2: number, subf?: typeof to_tempo_bare): Tempo;
-    to_list(step: Tempo): Tempo[];
-    upto(limit: Tempo): Tempo[];
-    slide(n: number): Tempo;
-    copy(): Tempo;
-    reset(now?: number): Tempo;
-    tick(): Tempo | null;
-    sleep(): Promise<unknown>;
-    constructor(zero: number, now_idx: number, write_at: number, last_at: number, next_at: number, table?: number[]);
-    static join(a: Tempo, b: Tempo): Tempo;
-    static sleep(tempos: Tempo[]): Promise<unknown>;
-}
-export declare function to_tempo(size_str: string, zero_str?: string, write_at?: number | Date): Tempo;
-export declare function to_tempo_bare(size: number, zero: number, write_at_src: number | Date): Tempo;
-export declare function to_tempo_by(table: number[], zero: number, write_at: number): Tempo;
+}>;
+export declare function to_tempo_bare(size: number, zero: number, write_at_src: number | Date): Tempo<{
+    write_at: number;
+}>;
+export declare function to_tempo_by(table: number[], zero: number, write_at: number): Tempo<{
+    write_at: number;
+}>;
 export type DurationOptions = {
     strict?: boolean;
 };

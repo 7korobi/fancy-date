@@ -1,8 +1,9 @@
 import type { OrbitalModel, RotationModel, TIMEZONE } from '../orbital-model'
 import { mod } from '../number'
 import { hasSolarEvents } from '../orbital-model'
-import type { TempoLike } from '../tempo-model'
-import { Tempo, to_tempo_by, to_tempo_bare } from '../time'
+import type { TempoLike } from '../tempo'
+import { CyclicDayTempoRule, FixedTempoRule, join, Tempo } from '../tempo'
+import { to_tempo_by, to_tempo_bare } from '../time'
 
 export function solar_phase(sunny: OrbitalModel, phase: number, near: number) {
   return sunny.timeOfPhase(mod(phase, 1), near)
@@ -16,7 +17,7 @@ export function solar_term(
   phase: number,
 ) {
   const at = solar_phase(sunny, phase, utc)
-  return to_tempo_bare(dayMsec, dayZero, at)
+  return Tempo.at(new FixedTempoRule(dayMsec, dayZero), { write_at: at })
 }
 
 export function solar_phase_before(sunny: OrbitalModel, phase: number, utc: number) {
@@ -78,7 +79,7 @@ export function noon(
   yearMsec: number,
   seasonZero: number,
   utc: number,
-  day = to_tempo_bare(dayMsec, dayZero, utc),
+  day: TempoLike = to_tempo_bare(dayMsec, dayZero, utc),
 ) {
   const { last_at, center_at } = day
   const { sin, PI } = Math
@@ -97,7 +98,13 @@ export function noon(
   const T1 = to_tempo_bare(yearMsec, sunny.epochMsec, 南中時刻)
   const 季節 = T1.since * year_to_rad
 
-  return { ...day, center_at, T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
+  // { ...day } は day が TempoLike(getterベース、例: TempoView)の場合、
+  // インスタンス自身のプロパティではなくprototypeのgetterなので
+  // オブジェクトスプレッドで複製されない(生の Tempo は各フィールドを
+  // コンストラクタでインスタンスプロパティとして持つため今まで気づかれ
+  // なかった)。solor() が読む last_at はここで明示的に含めることで、
+  // day がどちらの型でも正しく動くようにする。
+  return { ...day, last_at, center_at, T0, T1, 季節, 南中差分, 南中時刻, 真夜中 }
 }
 
 export function solor(
@@ -182,7 +189,7 @@ export function solar_terms_mean(Zz: TempoLike, d: TempoLike): SolarTerms {
   }
   const term = (phase: number) => {
     const now = Zz.last_at + (phase - phases.立春) * Zz.size
-    return to_tempo_bare(d.size, d0.last_at, now)
+    return Tempo.at(new FixedTempoRule(d.size, d0.last_at), { write_at: now })
   }
   return {
     立春: term(phases.立春),
@@ -236,28 +243,42 @@ export function 雑節_from_terms(
   const [八十八夜, 二百十日, 二百二十日] = [88, 210, 220].map((n) => 立春.succ(n - 1))
 
   const [春彼岸, 秋彼岸] = [春分, 秋分].map((dd) => {
-    return Tempo.join(dd.back(3), dd.succ(3))
+    return join(dd.back(3), dd.succ(3))
   })
   const [春社日, 秋社日] = [春分, 秋分].map((dd) => {
-    const C = to_tempo_bare(dayMsec, day10Zero, dd.write_at)
-    C.now_idx = mod(C.now_idx, stemLength)
-    return C.slide(stemLength / 2 - C.now_idx - 1)
+    // 「十干『戊』(stemLength/2-1 番目)に最も近い日」を求める計算。
+    // 以前は素の Tempo(to_tempo_bare)を構築した後 now_idx を
+    // mod(now_idx, stemLength) で書き換えてから slide() していたが、
+    // 素の Tempo.slide()(非テーブル分岐)は write_at 基準で再導出する
+    // ため書き換えた now_idx を使わず安全だった一方、この書き換え済み
+    // now_idx を伴う envelope をそのまま TempoRule.slide() に渡すのは
+    // 一般には危険(FixedTempoRule.slide() は envelope.now_idx + amount
+    // を絶対値として直接使うため、ラップ済みの小さい値だと壊れる。
+    // __tests__/tempo-spec.js の 'PITFALL' テスト参照)。
+    // CyclicDayTempoRule.slide() は envelope.last_at 基準で at() を
+    // 再導出する設計のため、mod 済みの now_idx を経由しても安全
+    // (同ファイルの 'CyclicDayTempoRule for the 社日-style ...' で
+    // 旧実装との数値一致・全10剰余の網羅を検証済み)。
+    const view = Tempo.at(new CyclicDayTempoRule(dayMsec, day10Zero, stemLength), {
+      write_at: dd.write_at,
+    })
+    return view.slide(stemLength / 2 - view.now_idx - 1)
   })
 
-  const 春 = Tempo.join(立春, 夏土用.back())
+  const 春 = join(立春, 夏土用.back())
   const 夏節分 = 立夏.back()
-  const 夏 = Tempo.join(立夏, 秋土用.back())
+  const 夏 = join(立夏, 秋土用.back())
   const 秋節分 = 立秋.back()
-  const 秋 = Tempo.join(立秋, 冬土用.back())
+  const 秋 = join(立秋, 冬土用.back())
   const 冬節分 = 立冬.back()
-  const 冬 = Tempo.join(立冬, 春土用.back())
+  const 冬 = join(立冬, 春土用.back())
   const 春節分 = 立春2.back()
   const 節分 = 春節分
 
-  夏土用 = Tempo.join(夏土用, 夏節分)
-  秋土用 = Tempo.join(秋土用, 秋節分)
-  冬土用 = Tempo.join(冬土用, 冬節分)
-  春土用 = Tempo.join(春土用, 立春2)
+  夏土用 = join(夏土用, 夏節分)
+  秋土用 = join(秋土用, 秋節分)
+  冬土用 = join(冬土用, 冬節分)
+  春土用 = join(春土用, 立春2)
 
   return {
     立春,
@@ -333,7 +354,7 @@ export function to_tempo_by_solor(
   seasonZero: number,
   hourLength: number,
   utc: number,
-  day: Tempo,
+  day: TempoLike,
 ) {
   let idx, end, start
   const solarNoon = noon(sunny, dayMsec, dayZero, yearMsec, seasonZero, utc, day)

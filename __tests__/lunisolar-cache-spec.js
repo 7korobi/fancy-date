@@ -56,7 +56,7 @@ const { to_msec } = require('../lib/time')
  *    自身にも日単位の内部キャッシュを実装・計測したことがあるが、
  *    noon() の均時差相当の補正が write_at そのものに依存し同日内でも
  *    最大13秒程度ずれると判明したため不採用(詳細は
- *    src/tempo-model.ts の SolarDayHourTempoRule クラスdocコメント参照)。
+ *    src/tempo.ts の SolarDayHourTempoRule クラスdocコメント参照)。
  */
 
 // FancyDate.lunisolar() をラップし、キャッシュミス(本物の37ヶ月窓探索

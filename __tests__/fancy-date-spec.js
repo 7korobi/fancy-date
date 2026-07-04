@@ -616,6 +616,43 @@ describe('Gregorian', () => {
     ).toMatchSnapshot()
   })
 
+  // 社日(春社日/秋社日)は「十干『戊』に最も近い日」という独立した定義を
+  // 持つ(雑節_from_terms() 内部では、春分/秋分の瞬間の十干日から
+  // now_idx = mod(rawNowIdx, 10) で「戊からの経過日数」を求め、
+  // C.slide(stemLength/2 - now_idx - 1) で戊の日へずらすという、
+  // 一度構築した Tempo の now_idx を書き換えてから slide() する
+  // パターンで計算している)。上のスナップショットテストは
+  // 「前回の出力と変わっていないか」しか見ておらず、社日の定義
+  // (十干「戊」であること、春分/秋分から±5日以内であること)自体は
+  // 独立に検証されていなかった。TempoView 移行前の仕様として、
+  // 十干日トークン(C)という別の経路を基準に固定する。
+  test('社日(春社日/秋社日)は十干「戊」の日を、春分/秋分から±5日以内で指す(平気法/実軌道どちらの経路でも)', () => {
+    const dayMsec = g.calc.msec.day
+    for (const [cal, resolve雑節] of [
+      [平気法, (utc) => 平気法.雑節(utc)],
+      [ga, (utc) => ga.雑節_by_phase(utc)],
+    ]) {
+      let checked = 0
+      for (let year = 2000; year < 2040; year++) {
+        const utc = Date.UTC(year, 5, 1)
+        const z = resolve雑節(utc)
+        for (const [key, eqKey] of [
+          ['春社日', '春分'],
+          ['秋社日', '秋分'],
+        ]) {
+          const item = z[key]
+          const mid = item.last_at + dayMsec / 2
+          expect(cal.format(mid, 'C')).toBe('戊')
+          const diffDays = Math.round((item.last_at - z[eqKey].last_at) / dayMsec)
+          expect(diffDays).toBeGreaterThanOrEqual(-5)
+          expect(diffDays).toBeLessThanOrEqual(4)
+          checked++
+        }
+      }
+      expect(checked).toBe(80)
+    }
+  })
+
   test('format', () => {
     const str = 'Gy年MM月dd日(E)HH時 Z'
     expect(

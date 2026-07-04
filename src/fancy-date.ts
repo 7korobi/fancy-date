@@ -38,9 +38,9 @@ import {
   SolarDayHourTempoRule,
   SubdivideTempoRule,
   TableTempoRule,
-  TempoView,
-} from './tempo-model'
-import type { SolarDayHourBase, TempoBase, TempoLabelLike, TempoLike } from './tempo-model'
+  Tempo,
+} from './tempo'
+import type { SolarDayHourBase, TempoBase, TempoLabelLike, TempoLike } from './tempo'
 import { to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
@@ -2261,7 +2261,7 @@ K   = @dic.earthy[2] / 360
    * (以前はここで now_idx を都度再計算し、素の Tempo にしていた)。
    */
   private resolve_orbital_season(utc: number): TempoLike {
-    return TempoView.at(this.orbital_season_rule(), { write_at: utc })
+    return Tempo.at(this.orbital_season_rule(), { write_at: utc })
   }
 
   /**
@@ -2345,12 +2345,12 @@ K   = @dic.earthy[2] / 360
       u: TempoLike
     if (utc == null) throw new Error(`invalid timestamp ${utc}`)
 
-    const J = TempoView.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
+    const J = Tempo.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
       write_at: utc,
     }) // ユリウス日
 
     // season in year_of_planet
-    const Zz = TempoView.at(new FixedTempoRule(this.calc.msec.year, this.calc.zero.season), {
+    const Zz = Tempo.at(new FixedTempoRule(this.calc.msec.year, this.calc.zero.season), {
       write_at: utc,
     }) // 太陽年
     // 実軌道(sunny.timeOfPhase)を持つ場合は定気法(実際の黄経)で二十四節気を解決する。
@@ -2361,7 +2361,7 @@ K   = @dic.earthy[2] / 360
     const resolve_season = (at: number) =>
       usesOrbitalSeasons
         ? this.resolve_orbital_season(at)
-        : TempoView.at(seasonRule, { write_at: at, parent: ZzEnvelope })
+        : Tempo.at(seasonRule, { write_at: at, parent: ZzEnvelope })
     const Z = resolve_season(utc) // 太陽年の二十四節気
 
     let N: TempoLike | undefined
@@ -2383,7 +2383,7 @@ K   = @dic.earthy[2] / 360
       // 式を使うことで、朔望月の実サイズの月ごとの変動により稀に「次の月の
       // 途中」までしか進まず、to_table() の年間/月間表で同じ月が2回出力
       // される不具合があった)。
-      Nn = TempoView.at(
+      Nn = Tempo.at(
         new MeanLunisolarMonthRule(
           moon_msec,
           this.calc.zero.moon,
@@ -2394,14 +2394,14 @@ K   = @dic.earthy[2] / 360
         ),
         { write_at: utc },
       ) as TempoLike & TempoMonth
-      N = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+      N = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
         write_at: utc,
         parent: envelope_of(Nn),
       })
     }
 
     if (this.is_table_leap) {
-      p = TempoView.at(new FixedTempoRule(this.calc.msec.period, this.calc.zero.period), {
+      p = Tempo.at(new FixedTempoRule(this.calc.msec.period, this.calc.zero.period), {
         write_at: utc,
       })
       // table.msec.year は def_year_table() で dic.leaps の最後の要素
@@ -2421,28 +2421,28 @@ K   = @dic.earthy[2] / 360
       // 相当の位置に飛び、find([...],[{y:'2021'}],{step:'y'}) が
       // 該当年を1件も見つけられなかった)。zero を絶対原点
       // (calc.zero.period)に統一することで、この食い違いごと解消する。
-      u = TempoView.at(new TableTempoRule(this.table.msec.year, this.calc.zero.period), {
+      u = Tempo.at(new TableTempoRule(this.table.msec.year, this.calc.zero.period), {
         write_at: utc,
       })
-      M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+      M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
         write_at: utc,
       }) as TempoLike & TempoMonth
-      d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+      d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
         write_at: utc,
         parent: envelope_of(M),
       })
     } else {
       if (this.is_table_month) {
-        u = TempoView.at(
+        u = Tempo.at(
           new FloorTempoRule(this.calc.msec.year, this.calc.zero.spring, [
             { size: this.calc.msec.day, zero: this.calc.zero.day },
           ]),
           { write_at: utc },
         )
-        M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+        M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
           write_at: utc,
         }) as TempoLike & TempoMonth
-        d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+        d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
           write_at: utc,
           parent: envelope_of(M),
         })
@@ -2465,7 +2465,7 @@ K   = @dic.earthy[2] / 360
           // 破綻した元号年になっていた)。ObservedLunisolarMonthRule に
           // 配線することで、TempoView 経由の succ()/back() が正しく
           // 年境界でリセットされる。
-          u = TempoView.at(
+          u = Tempo.at(
             new EraAdjustedTempoRule(
               new ObservedLunisolarYearRule((at) => this.lunisolar(at)),
               this.calc.msec.year,
@@ -2475,7 +2475,7 @@ K   = @dic.earthy[2] / 360
             ),
             { write_at: utc },
           )
-          M = TempoView.at(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec), {
+          M = Tempo.at(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec), {
             write_at: utc,
           }) as TempoLike & TempoMonth
           // d(月内日)は M の実区間(last_at)からの経過日数として求まる値
@@ -2487,7 +2487,7 @@ K   = @dic.earthy[2] / 360
           // 使えない値になっていた。last_at 自体は正しかったため find()/
           // to_table() には実害がなかったが、succ() の戻り値を直接使う
           // 呼び出し元には正しくない値を返していた)。
-          d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+          d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
             write_at: utc,
             parent: envelope_of(M),
           })
@@ -2495,7 +2495,7 @@ K   = @dic.earthy[2] / 360
         } else if (!Nn || !N) {
           throw new Error('Lunar month calculation requires a satellite orbital period.')
         } else {
-          u = TempoView.at(
+          u = Tempo.at(
             new EraAdjustedTempoRule(
               new FloorTempoRule(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, [
                 { size: moon_msec, zero: this.calc.zero.moon },
@@ -2516,26 +2516,26 @@ K   = @dic.earthy[2] / 360
 
     // hour minute second  in day
     if (this.dic.is_solor) {
-      H = TempoView.at(this.solar_hour_rule(), { write_at: utc, day: envelope_of(d) })
-      m = TempoView.at(new SubdivideTempoRule(H.size / this.dic.m.length), {
+      H = Tempo.at(this.solar_hour_rule(), { write_at: utc, day: envelope_of(d) })
+      m = Tempo.at(new SubdivideTempoRule(H.size / this.dic.m.length), {
         write_at: utc,
         parent: envelope_of(H),
       })
     } else {
-      H = TempoView.at(new SubdivideTempoRule(this.calc.msec.hour), {
+      H = Tempo.at(new SubdivideTempoRule(this.calc.msec.hour), {
         write_at: utc,
         parent: envelope_of(d),
       })
-      m = TempoView.at(new SubdivideTempoRule(this.calc.msec.minute), {
+      m = Tempo.at(new SubdivideTempoRule(this.calc.msec.minute), {
         write_at: utc,
         parent: envelope_of(H),
       })
     }
-    const s = TempoView.at(new SubdivideTempoRule(this.calc.msec.second), {
+    const s = Tempo.at(new SubdivideTempoRule(this.calc.msec.second), {
       write_at: utc,
       parent: envelope_of(m),
     })
-    const S = TempoView.at(new SubdivideTempoRule(this.calc.msec.msec), {
+    const S = Tempo.at(new SubdivideTempoRule(this.calc.msec.msec), {
       write_at: utc,
       parent: envelope_of(s),
     })
@@ -2548,7 +2548,7 @@ K   = @dic.earthy[2] / 360
     // `{}` キャストで型を偽ることは避ける)。
     let G: TempoLike | TempoLabelLike = cyclic_label(envelope_of(u), 0)
     if (this.table.msec.era != null) {
-      G = TempoView.at(new TableTempoRule(this.table.msec.era, this.calc.zero.era), {
+      G = Tempo.at(new TableTempoRule(this.table.msec.era, this.calc.zero.era), {
         write_at: utc,
       })
       const era = this.calc.eras[G.now_idx]
@@ -2575,14 +2575,14 @@ K   = @dic.earthy[2] / 360
     const uEnvelope = envelope_of(u)
 
     // 年初来番号
-    const w0 = TempoView.at(new FixedTempoRule(this.calc.msec.week, this.calc.zero.week), {
+    const w0 = Tempo.at(new FixedTempoRule(this.calc.msec.week, this.calc.zero.week), {
       write_at: u.last_at,
     })
-    const w = TempoView.at(new SubdivideTempoRule(this.calc.msec.week), {
+    const w = Tempo.at(new SubdivideTempoRule(this.calc.msec.week), {
       write_at: utc,
       parent: envelope_of(w0),
     })
-    const D = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+    const D = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
       write_at: utc,
       parent: uEnvelope,
     })
@@ -2605,16 +2605,16 @@ K   = @dic.earthy[2] / 360
     const Q = cyclic_label(envelope_of(M), Math.floor((4 * M.now_idx) / this.dic.M.length))
 
     // 日不断(固定 zero からの周期を length で割った余りをラベルにする)
-    const A = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length), {
+    const A = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length), {
       write_at: utc,
     })
-    const B = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length), {
+    const B = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length), {
       write_at: utc,
     })
-    const C = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length), {
+    const C = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length), {
       write_at: utc,
     })
-    const F = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length), {
+    const F = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length), {
       write_at: utc,
     })
 
@@ -2622,10 +2622,10 @@ K   = @dic.earthy[2] / 360
     let V: TempoLike | TempoLabelLike
     if (this.is_table_leap) {
       // 旧暦では、週は月初にリセットする。
-      E = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length), {
+      E = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length), {
         write_at: utc,
       })
-      V = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length), {
+      V = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length), {
         write_at: utc,
       })
     } else {
@@ -2844,19 +2844,20 @@ K   = @dic.earthy[2] / 360
 
       year_size = Math.floor(this.calc.msec.day * this.table.range.year[y])
     } else {
-      let size: number
       if (this.is_table_month) {
         zero = this.calc.zero.spring
       } else {
         zero = this.calc.zero.season
       }
 
-      ;({ size, last_at } = to_tempo_bare(
-        this.calc.msec.year,
-        zero,
-        zero + y * this.calc.msec.year,
-      ).floor(this.calc.msec.day, this.calc.zero.day))
-      year_size = size
+      // 日境界に切り詰める計算自体は to_tempos() 側で既に FloorTempoRule 化済みの
+      // 式と同じ(1段floor)。parse_by()は逆方向(文字列→utc)の変換なので
+      // to_tempos() とは別にここで構築する必要があるが、同じ規則を使い回せる。
+      const yearEnvelope = new FloorTempoRule(this.calc.msec.year, zero, [
+        { size: this.calc.msec.day, zero: this.calc.zero.day },
+      ]).at(zero + y * this.calc.msec.year)
+      last_at = yearEnvelope.last_at
+      year_size = yearEnvelope.next_at - yearEnvelope.last_at
       utc += last_at
     }
 
@@ -2872,10 +2873,9 @@ K   = @dic.earthy[2] / 360
         ? base + this.calc.msec.season * (M * 2 + 2) - moon_msec
         : base + this.calc.msec.season * (M * 2 + 1)
 
-      ;({ last_at } = to_tempo_bare(moon_msec, this.calc.zero.moon, M_utc).floor(
-        this.calc.msec.day,
-        this.calc.zero.day,
-      ))
+      last_at = new FloorTempoRule(moon_msec, this.calc.zero.moon, [
+        { size: this.calc.msec.day, zero: this.calc.zero.day },
+      ]).at(M_utc).last_at
       utc += last_at - base
     }
     return utc

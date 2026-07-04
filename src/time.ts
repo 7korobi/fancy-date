@@ -1,4 +1,4 @@
-import { mod } from './number'
+import { FixedTempoRule, TableTempoRule, Tempo } from './tempo'
 
 export const SECOND = to_msec('1s')
 export const MINUTE = to_msec('1m')
@@ -47,240 +47,18 @@ const DISTANCES: Distance[] = [
   DISTANCE_LONG_AGO,
 ]
 
-export class Tempo {
-  label?: string
-  table?: number[]
-  zero: number
-  write_at: number
-  now_idx: number
-  last_at: number
-  next_at: number
-  get size() {
-    return this.next_at - this.last_at
-  }
-  get since() {
-    return this.write_at - this.last_at
-  }
-  get remain() {
-    return this.next_at - this.write_at
-  }
-  get timeout() {
-    return this.next_at - this.write_at
-  }
-  get center_at() {
-    return (this.next_at + this.last_at) / 2
-  }
-  get moderate_at() {
-    if (this.now_idx & 1) {
-      return this.last_at
-    } else {
-      return this.next_at
-    }
-  }
-  get deg() {
-    return `${Math.floor((360 * this.since) / this.size)}deg`
-  }
-
-  is_cover(at: number) {
-    return this.last_at <= at && at < this.next_at
-  }
-  is_hit(that: Tempo) {
-    return this.last_at <= that.next_at && that.last_at < this.next_at
-  }
-
-  succ(n = 1) {
-    return this.slide(+n)
-  }
-  back(n = 1) {
-    return this.slide(-n)
-  }
-  slide_to(n: number) {
-    return this.slide(n - this.now_idx)
-  }
-
-  round(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, size } = this
-
-    ;(() => {
-      const do2 = subf(sub1, sub2, last_at)
-      if (write_at < do2.center_at) {
-        ;({ last_at, size } = this.slide(-1))
-        const do3 = subf(sub1, sub2, last_at)
-        next_at = do2.center_at
-        last_at = do3.center_at
-        now_idx--
-        return
-      }
-
-      const do1 = subf(sub1, sub2, next_at)
-      if (do1.center_at <= write_at) {
-        ;({ next_at, size } = this.slide(1))
-        const do3 = subf(sub1, sub2, next_at)
-        last_at = do1.center_at
-        next_at = do3.center_at
-        now_idx++
-        return
-      }
-
-      next_at = do1.center_at
-      last_at = do2.center_at
-    })()
-
-    const zero = last_at - now_idx * size
-    return new Tempo(zero, now_idx, write_at, last_at, next_at)
-  }
-
-  ceil(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, size } = this
-    const do2 = subf(sub1, sub2, last_at)
-
-    if (write_at < do2.next_at) {
-      ;({ last_at, size } = this.slide(-1))
-      const do3 = subf(sub1, sub2, last_at)
-      next_at = do2.next_at
-      last_at = do3.next_at
-      now_idx--
-    } else {
-      const do1 = subf(sub1, sub2, next_at)
-      next_at = do1.next_at
-      last_at = do2.next_at
-    }
-    const zero = last_at - now_idx * size
-    return new Tempo(zero, now_idx, write_at, last_at, next_at)
-  }
-
-  floor(sub1: number, sub2: number, subf = to_tempo_bare): Tempo {
-    let { last_at, write_at, next_at, now_idx, size } = this
-    const do2 = subf(sub1, sub2, next_at)
-
-    if (do2.last_at <= write_at) {
-      ;({ next_at, size } = this.slide(1))
-      const do3 = subf(sub1, sub2, next_at)
-      last_at = do2.last_at
-      next_at = do3.last_at
-      now_idx++
-    } else {
-      const do1 = subf(sub1, sub2, last_at)
-      last_at = do1.last_at
-      next_at = do2.last_at
-    }
-    const zero = last_at - now_idx * size
-    return new Tempo(zero, now_idx, write_at, last_at, next_at)
-  }
-
-  to_list(step: Tempo) {
-    const a = step.reset(this.last_at)
-    const b = step.reset(this.next_at - 1)
-    return a.upto(b)
-  }
-
-  upto(limit: Tempo) {
-    let p: Tempo = this
-    const ary: Tempo[] = []
-    while (p.last_at < limit.last_at) {
-      ary.push(p)
-      p = p.succ()
-    }
-    return ary
-  }
-
-  slide(n: number) {
-    if (this.table) {
-      const now_idx = this.now_idx + n
-      const idx = mod(now_idx, this.table.length)
-
-      // table_idx は zero からの絶対量として扱う(this.now_idx との差分では
-      // 計算しない)。this.last_at/this.next_at 自身が this.now_idx の
-      // table_idx を反映しているとは限らない(table_idx !== 0 の状態を
-      // to_tempo_by() や slide() の外から素の Tempo として渡された場合など)
-      // ため、差分方式だと経路依存(呼び出し順序で結果が変わる)になっていた。
-      const table_idx = Math.floor(now_idx / this.table.length)
-      const table_size = this.table[this.table.length - 1]
-      const table_diff = table_idx ? table_size * table_idx : 0
-
-      const last_at = this.zero + table_diff + (this.table[idx - 1] || 0)
-      const next_at = this.zero + table_diff + this.table[idx]
-      const write_at = last_at + this.since
-
-      return new Tempo(this.zero, now_idx, write_at, last_at, next_at, this.table)
-    } else {
-      const size = n * this.size
-      return to_tempo_bare(this.size, this.zero, this.write_at + size)
-    }
-  }
-
-  copy() {
-    return new Tempo(this.zero, this.now_idx, this.write_at, this.last_at, this.next_at, this.table)
-  }
-
-  reset(now: number = Date.now()): Tempo {
-    if (this.table) {
-      return to_tempo_by(this.table, this.zero, now)
-    } else {
-      return to_tempo_bare(this.size, this.zero, now)
-    }
-  }
-
-  tick() {
-    const now = Date.now()
-    if (this.next_at <= now) {
-      return this.reset(now)
-    } else {
-      return null
-    }
-  }
-
-  sleep() {
-    return Tempo.sleep([this])
-  }
-
-  constructor(
-    zero: number,
-    now_idx: number,
-    write_at: number,
-    last_at: number,
-    next_at: number,
-    table: number[] = null as any,
-  ) {
-    if (table) {
-      this.table = table
-    }
-    this.zero = zero
-    this.write_at = write_at
-
-    this.now_idx = now_idx
-    this.last_at = last_at
-    this.next_at = next_at
-  }
-
-  static join(a: Tempo, b: Tempo) {
-    if (a.zero != b.zero) {
-      throw new Error("can't join.")
-    }
-    const last_at = Math.min(a.last_at, b.last_at)
-    const next_at = Math.max(a.next_at, b.next_at)
-    const write_at = (a.write_at + b.write_at) / 2
-    const size = next_at - last_at
-    return to_tempo_bare(size, last_at, write_at)
-  }
-
-  static async sleep(tempos: Tempo[]) {
-    if (tempos && tempos.length) {
-      const o = tempos.reduce((min, o) => (min.timeout < o.timeout ? min : o), {
-        timeout: Infinity,
-      })
-      if (o.timeout < Infinity) {
-        return new Promise((ok) => {
-          setTimeout(() => {
-            ok(o)
-          }, o.timeout)
-        })
-      }
-    }
-    return new Promise((ok) => ok(null))
-  }
-}
-
+/**
+ * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
+ * tempo.ts(旧 tempo-model.ts)の TempoView が Tempo としてリネームされた)は
+ * envelope(zero/now_idx/last_at/next_at)+base(write_at)+rule の
+ * 組み合わせで succ()/back()/slide() を実現する。
+ *
+ * round/ceil/to_list/upto(探索を伴う旧 Tempo のメソッド)は、
+ * 呼び出し元がゼロ(コードベース内で一切使われていなかった)と確認の上、
+ * FloorTempoRule 等の新設計に役割が引き継がれたため移植していない。
+ * deg/is_hit/tick/sleep(呼び出し元は同様にゼロだが、単純な式のため
+ * 後方互換のために温存)は TempoView 側に移植済み。
+ */
 export function to_tempo(
   size_str: string,
   zero_str: string = '0s',
@@ -293,47 +71,11 @@ export function to_tempo(
 
 export function to_tempo_bare(size: number, zero: number, write_at_src: number | Date) {
   const write_at = Number(write_at_src)
-  const now_idx = Math.floor((write_at - zero) / size)
-  const last_at = (now_idx + 0) * size + zero
-  const next_at = (now_idx + 1) * size + zero
-  return new Tempo(zero, now_idx, write_at, last_at, next_at)
+  return Tempo.at(new FixedTempoRule(size, zero), { write_at })
 }
 
-// バイナリサーチ 高速化はするが、微差なので複雑さのせいで逆に遅いかも？
 export function to_tempo_by(table: number[], zero: number, write_at: number) {
-  let scan_at = write_at - zero
-  const table_size = table[table.length - 1]
-  const table_idx = Math.floor(scan_at / table_size)
-  if (table_idx) {
-    scan_at -= table_idx * table_size
-  }
-
-  let now_idx = table.length
-  let top_idx = 0
-  let next_at = zero
-
-  while (top_idx < now_idx) {
-    const mid_idx = (top_idx + now_idx) >>> 1
-    next_at = table[mid_idx]
-
-    if (next_at <= scan_at) {
-      top_idx = mid_idx + 1
-    } else {
-      now_idx = mid_idx
-    }
-  }
-
-  // table_idx (zero から何周期分ずれているか)を last_at/next_at にも
-  // 反映する。now_idx だけに反映して last_at/next_at には反映しないと、
-  // 1周期を越えた write_at で今の周期と無関係な日時を返してしまう
-  // (zero から1周期以内に write_at が収まる呼び出し方しかしていない
-  // 既存コードでは table_idx が常に0のため気づかれなかった)。
-  const table_diff = table_idx ? table_size * table_idx : 0
-  const last_at = zero + table_diff + (table[now_idx - 1] || 0)
-  next_at = zero + table_diff + table[now_idx]
-  now_idx += table_idx * table.length
-
-  return new Tempo(zero, now_idx, write_at, last_at, next_at, table)
+  return Tempo.at(new TableTempoRule(table, zero), { write_at })
 }
 
 export type DurationOptions = {
