@@ -85,6 +85,21 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
     monthStartAt = local_day_start(options, newMoonAt)
   }
 
+  // 前後18/19ヶ月(中心含め計37ヶ月)は「1年 ≈ 12〜13朔望月」という
+  // 地球の月・太陽比率(朔望月≈29.53日 / 太陽年12等分≈30.44日)を
+  // 前提にしたハードコード値であり、options.moony.periodMsec と
+  // options.sunny(太陽側の周期)の比率からは動的に導出していない。
+  // 前後の正月(年境界)を確実に窓へ収めるための安全マージンなので、
+  // 月/年比率がこれと大きく異なる衛星(地球の月以外)を LunarEventModel
+  // として実装した場合、この固定マージンでは年境界を見失う
+  // (比率が地球よりずっと高い場合)か、無駄に広い範囲を探索する
+  // (比率がずっと低い場合)おそれがある。同種の前提は
+  // lunisolar_principal_term() の `index < 12`(太陽の中気間隔が
+  // 概ね1朔望月と同程度という前提)にも独立に存在する。現状
+  // LunarEventModel を実装するのは naoj/earth-moon.ts の
+  // EarthMoonOrbital のみなので、この制約が実害になることはない
+  // (ドーマント)。地球以外の衛星向け実装を追加する際は、この2箇所を
+  // 比率から動的に導出する形へ見直すこと。
   const newMoons = [newMoonAt]
   for (let i = 0; i < 18; i++) {
     newMoons.unshift(lunarPhase(0, newMoons[0] - periodMsec))
@@ -166,6 +181,13 @@ function lunisolar_principal_term(
   const near = (monthStartAt + nextMonthStartAt) / 2
   const startAt = local_day_start(options, monthStartAt)
   const nextAt = local_day_start(options, nextMonthStartAt)
+  // index < 12 は「太陽の1公転(黄経360°)を12等分した中気の間隔が、
+  // 概ね1朔望月と同程度の長さである」という地球の月・太陽比率を前提に
+  // している(該当する中気を1朔望月の範囲内から探すだけで、複数の中気が
+  // 同じ月に入らない・逆に何ヶ月も中気が入らない月が連続しない、という
+  // 前提)。lunisolar_months_around() の前後18/19ヶ月マージンと同じく
+  // 地球以外の月/年比率では成り立たない可能性がある(詳細はそちら側の
+  // コメント参照)。
   for (let index = 0; index < 12; index++) {
     const at = options.solarPhase(index / 12, near)
     if (startAt <= at && at < nextAt) {

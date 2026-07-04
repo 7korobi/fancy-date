@@ -277,9 +277,90 @@ describe('Gregorio calculate', () => {
     const found = g.find(between, [{ H: '12' }], { step: 'H' })
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 HH時'))).toEqual(['2020年03月01日 12時'])
   })
+
+  // is_table_leap(SolarTable)の u は table.msec.year.length === dic.p.length
+  // という不変条件により、絶対原点(calc.zero.period)を直接 zero にすれば
+  // TableTempoRule 自身の周期またぎ処理だけで絶対年が求まる。以前は
+  // p.last_at(周期ローカルな再基準化点)を zero にした上で
+  // `u.now_idx += p.now_idx * dic.p.length` により外部で絶対年へ変換して
+  // いたため、TableTempoRule.slide() が「zero は周期ローカルなのに
+  // now_idx は絶対年」という食い違いを起こし、西暦400年以降の任意の年で
+  // succ()/back() が全く違う年へ飛んでいた(実測: 2020年→succ()が
+  // 4021年相当の位置に飛ぶ)。年をまたいだ find の step:'y'/'u' が
+  // 該当年を1件も見つけられない、という形で実害があった。
+  test('find with step y/u works across a leap-table period boundary (year 400+) — regression for a real date-jumping bug', () => {
+    const found = g.find([g.parse('2020年1月1日'), g.parse('2025年1月1日')], [{ y: '2021' }], { step: 'y' })
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2021年01月01日'])
+
+    const tempos = g.to_tempos(g.parse('2020年1月1日'))
+    const next = tempos.u.succ()
+    expect(next.now_idx).toBe(2021)
+    expect(g.to_tempos(next.last_at).u.now_idx).toBe(2021)
+  })
+
+  // Y/a/b/c/f/Q は親トークン(u/M)から導かれる周期ラベルで、succ()/back() を
+  // 持たない(TempoLabelLike)。TS 経由なら SteppableTempoKey により
+  // コンパイル時に弾かれるが、JS 利用時は型で守られないため、実行時にも
+  // 明確なエラーになることを確認する。
+  test('find rejects a step that only supports label lookup (no succ/back)', () => {
+    const between = [g.parse('2020年3月1日'), g.parse('2020年10月1日')]
+    expect(() => g.find(between, [{ note: /春分|秋分/ }], { step: 'a' })).toThrow(/invalid unit a/)
+  })
+
+  // cyclic_label() が親の実区間(last_at/next_at)をそのまま流用していることを確認する
+  // (now_idx だけを差し替えたラベルであり、独自の区間を持つわけではない)。
+  test('cyclic label tokens (Y/a/b/c/f/Q) honestly expose the parent envelope span', () => {
+    const utc = g.parse('2020年6月15日')
+    const tempos = g.to_tempos(utc)
+    for (const token of ['Y', 'a', 'b', 'c', 'f']) {
+      expect(tempos[token].last_at).toBe(tempos.u.last_at)
+      expect(tempos[token].next_at).toBe(tempos.u.next_at)
+      expect(tempos[token].is_cover(utc)).toBe(true)
+      expect(tempos[token].is_cover(tempos.u.last_at - 1)).toBe(false)
+    }
+    expect(tempos.Q.last_at).toBe(tempos.M.last_at)
+    expect(tempos.Q.next_at).toBe(tempos.M.next_at)
+    expect(tempos.Q.is_cover(utc)).toBe(true)
+  })
+
+  // x(タイムゾーン表示)は now_idx にタイムゾーンのオフセット(ms)をそのまま
+  // 載せるだけの、暦座標としては意味を持たない静的な値。以前は素の Tempo に
+  // now_idx を上書きしていたため succ()/back() が呼べてしまい、
+  // Tempo.slide() の式に沿った無意味な値を黙って返していた。
+  // cyclic_label() 化により succ/back 自体が存在しなくなったため、
+  // JS 経由でも呼び出しが即座に例外になる(禁止措置として機能する)ことを
+  // 確認する。
+  test('x (timezone) exposes the fixed offset and forbids succ()/back() (no dangerous stepping)', () => {
+    const utc = g.parse('2020年6月15日')
+    const tempos = g.to_tempos(utc)
+    const expectedTimezone = (g.calc.msec.day * (g.dic.geo[2] != null ? g.dic.geo[2] : g.dic.geo[1])) / 360
+    expect(tempos.x.now_idx).toBe(expectedTimezone)
+    expect(typeof tempos.x.succ).not.toBe('function')
+    expect(typeof tempos.x.back).not.toBe('function')
+    // x の last_at/next_at はタイムゾーン値自体を to_tempo_bare で
+    // 丸めた際の内部的な区間であり、utc(問い合わせた暦日時)側の
+    // 時間軸とは無関係(is_cover(utc) で覆えるものではない)。
+    // is_cover() 自体が例外を投げず機能することだけ確認する。
+    expect(tempos.x.is_cover(expectedTimezone)).toBe(true)
+  })
 })
 
 describe('平気法 calculate', () => {
+  // E/V(else 分岐, is_table_leap でない暦)は今日(d)の実区間をそのまま
+  // 使うラベルであり、d 自体とは別の(月/日から都度導く)now_idx を持つ。
+  // last_at/next_at が d と一致し、is_cover() が正しく機能することを確認する。
+  test('E/V (else branch) honestly expose the current day envelope', () => {
+    const utc = 平気法.parse('明治9年文月1日 暁九ツ')
+    const tempos = 平気法.to_tempos(utc)
+    expect(tempos.E.last_at).toBe(tempos.d.last_at)
+    expect(tempos.E.next_at).toBe(tempos.d.next_at)
+    expect(tempos.E.is_cover(utc)).toBe(true)
+    expect(tempos.E.is_cover(tempos.d.last_at - 1)).toBe(false)
+    expect(tempos.V.last_at).toBe(tempos.d.last_at)
+    expect(tempos.V.next_at).toBe(tempos.d.next_at)
+    expect(tempos.V.is_cover(utc)).toBe(true)
+  })
+
   test('閏月をまたぐback', () => {
     const tgt = '明治9年文月1日 暁九ツ'
     const ret = 平気法.parse(tgt)
@@ -727,6 +808,75 @@ describe('Gregorian', () => {
     // 以前の等角ロジックでは mean=true だったが、実軌道では通常月(2006-11-19付近)。
     const nonLeapMonth = testCal.to_tempos(Date.UTC(2006, 10, 25)).M
     expect(nonLeapMonth.is_leap).toBeFalsy()
+  })
+
+  // d(月内日、observed lunisolar 経路)は以前 to_tempo_bare(calc.zero.day,...)+
+  // now_idx上書きの素の Tempo だったため、succ() が Tempo.slide() の
+  // 非テーブル分岐で「calc.zero.day からの絶対日数」(巨大な値)を
+  // 返してしまい、月内日として使えない値になっていた(last_at 自体は
+  // 正しかったため find()/to_table() には実害がなかった)。
+  // SubdivideTempoRule化により、succ() が「月初からの経過日数」を
+  // 一貫して(月をまたいでも)+1し続けることを確認する。
+  test('d (observed lunisolar day) succ() correctly continues the day-in-month count (regression for the old zero.day mixup)', () => {
+    const tg = Calendar.定気法
+    const monthEnd = tg.to_tempos(Date.UTC(2020, 5, 1)).M.next_at
+    const utc = monthEnd - 12 * 3600000 // 月の最終日
+    const tempos = tg.to_tempos(utc)
+    const lunisolar = tg.lunisolar(utc)
+    expect(tempos.d.now_idx).toBe(lunisolar.day - 1)
+
+    const next = tempos.d.succ()
+    expect(next.now_idx).toBe(tempos.d.now_idx + 1)
+    expect(next.last_at).toBe(tempos.d.next_at)
+    // 修正前の値(calc.zero.day からの絶対日数)は登場時点で数万〜十万超の
+    // 桁になるため、月内日らしい小さい値であることも明示的に確認する。
+    expect(next.now_idx).toBeLessThan(32)
+  })
+
+  // M(月、observed lunisolar 経路)は以前 M = new Tempo(...) という素の
+  // Tempo だったため、succ() が Tempo.slide() の非テーブル分岐(今の月の
+  // 実サイズを固定長とみなして write_at + n*size で進める式)を使って
+  // いた。now_idx は「月番号-1」(年境界でリセットされるべき値)なのに、
+  // この式は単純に+1し続けるだけで年境界のリセットを一切反映しない実バグが
+  // あった(実測: 300回 succ() 連鎖のうち298回が fresh 再導出と不一致、
+  // now_idx が年をまたいでも12,13,14...と増え続け、last_at も蓄積的に
+  // ずれていった)。ObservedLunisolarMonthRule に配線して修正した。
+  test('M (observed lunisolar month) succ() correctly resets now_idx across year boundaries (regression for a real bug)', () => {
+    const tg = Calendar.定気法
+    let current = tg.to_tempos(Date.UTC(1980, 0, 1)).M
+    let mismatches = 0
+    for (let i = 0; i < 300; i++) {
+      const fresh = tg.to_tempos(current.write_at).M
+      if (fresh.now_idx !== current.now_idx || fresh.last_at !== current.last_at) {
+        mismatches++
+      }
+      current = current.succ()
+    }
+    expect(mismatches).toBe(0)
+  })
+
+  // 上記バグの実害が実際に公開APIで顕在化していたことの回帰テスト。
+  // find(step:'M') は tempo.succ() を連鎖させる実装(to_table() と違い
+  // 毎回 to_tempos() で再解決しない)ため、修正前は succ() の壊れた
+  // now_idx/last_at をそのまま引きずり、63件見つかるはずの月初一覧が
+  // 2件しか見つからず、見つかった日付も元号年が「0054年」のように
+  // 破綻していた。
+  test('find with step M enumerates observed-lunisolar month starts correctly (regression for a real find() bug)', () => {
+    const tg = Calendar.定気法
+    const from = tg.to_tempos(Date.UTC(1980, 0, 1)).M.next_at // ちょうど月初から開始する
+    const to = Date.UTC(1985, 0, 1)
+
+    const found = tg.find([from, to], [{ d: '1' }], { step: 'M' })
+
+    const expected = []
+    let cursor = from
+    while (cursor < to) {
+      expected.push(cursor)
+      cursor = tg.to_tempos(cursor).M.next_at
+    }
+
+    expect(found).toEqual(expected)
+    expect(found.length).toBeGreaterThan(50)
   })
 })
 

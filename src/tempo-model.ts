@@ -1,7 +1,6 @@
 import { mod } from './number'
 import type { OrbitalModel, RotationModel, TIMEZONE } from './orbital-model'
-import type { LunisolarOptions } from './phenomena/lunisolar'
-import { lunisolar } from './phenomena/lunisolar'
+import type { LunisolarDate } from './phenomena/lunisolar'
 import { noon, solar_phase, solor } from './phenomena/solar'
 import { Tempo } from './time'
 
@@ -129,6 +128,47 @@ export function to_tempo_like(tempo: Tempo): TempoLike {
   return tempo
 }
 
+/**
+ * TempoLabelLike: 親トークンの位置(now_idx)から派生する「周期ラベル」の
+ * 最小限の構造。TempoLike と異なり succ()/back()/slide()/slide_to()/
+ * copy()/reset() を持たない。
+ *
+ * 干支年(a)/十二年(b)/十年(c)/年不断(f)/週番号整合用の年ラベル(Y)/
+ * 四半期(Q)は、いずれも親トークン(u や M)の位置から導かれるラベルで
+ * あり、親を独立に再解決する手段を規則(TempoRule)が持たないため、
+ * 正確な succ()/back() を実装できない(実際に呼ばれている箇所も存在
+ * しない)。これを TempoLike として扱うと、型上は succ 等が存在する
+ * ことになってしまい、実際には存在しない機能を偽ることになる
+ * (旧実装の `{ now_idx } as Tempo` がまさにこれで、zero/last_at/next_at
+ * すら持っていなかった)。ここでは「持っている情報だけ」を正直に表現する。
+ */
+export interface TempoLabelLike {
+  readonly now_idx: number
+  readonly last_at: number
+  readonly next_at: number
+  label?: string
+  is_leap?: boolean
+  is_cover(at: number): boolean
+}
+
+/**
+ * cyclic_label(): 親トークンと同じ実区間(last_at/next_at)を持ち、
+ * now_idx だけを差し替えたラベルを作る。TempoRule/TempoView を経由しない
+ * (これらは succ()/back()/slide() による遷移を前提にした仕組みであり、
+ * この用途には使えないため。TempoLabelLike 参照)。
+ *
+ * now_idx の計算(mod によるラップや、別トークンの now_idx からの
+ * 四半期計算など)は呼び出し側の関心事とし、ここでは受け取らない。
+ */
+export function cyclic_label(parent: TempoEnvelope, now_idx: number): TempoLabelLike {
+  return {
+    now_idx,
+    last_at: parent.last_at,
+    next_at: parent.next_at,
+    is_cover: (at: number) => parent.last_at <= at && at < parent.next_at,
+  }
+}
+
 function fixed_envelope(size: number, zero: number, write_at: number): TempoEnvelope {
   let now_idx = Math.floor((write_at - zero) / size)
   // 既存 to_tempo_bare と同じ式・同じ演算順序にする。
@@ -249,7 +289,11 @@ function floor_envelope(
 ): TempoEnvelope {
   const nextCoarse = fixed_envelope(coarseSize, coarseZero, envelope.next_at)
   if (nextCoarse.last_at <= write_at) {
-    const nextPeriod = fixed_envelope(size, envelope.zero, envelope.next_at)
+    // 元の Tempo.slide(1) と同じ基準点(write_at + size)を使う。
+    // envelope.next_at を基準にすると、size が期ごとに変動する
+    // (floor 済みの区間を再度 floor するなど)場合に誤った周期先へ
+    // ずれてしまう。
+    const nextPeriod = fixed_envelope(size, envelope.zero, write_at + size)
     const nextNextCoarse = fixed_envelope(coarseSize, coarseZero, nextPeriod.next_at)
     const now_idx = envelope.now_idx + 1
     const last_at = nextCoarse.last_at
@@ -264,6 +308,104 @@ function floor_envelope(
 }
 
 /**
+ * FloorStep: FloorTempoRule が順番に適用する「外向きに切り詰める先」の
+ * 単位(例: 月境界、日境界)。
+ */
+export type FloorStep = { size: number; zero: number }
+
+/**
+ * FloorTempoRule: 固定幅の envelope を起点に、1つ以上の粗い境界へ
+ * 順番に外向き切り詰めをする規則。既存 to_tempos() の
+ * `to_tempo_bare(size, zero, utc).floor(sub1, sub2).floor(sub3, sub4)...`
+ * という単発の組み合わせ(季節テーブル暦の年、平均太陰太陽暦(非観測)の年)を
+ * 一般化したもの。floors が1件なら1回だけ、2件なら2回連続で切り詰める。
+ *
+ * 各切り詰めは、直前の切り詰め結果(1件目は起点の固定幅 envelope)の
+ * 実際のサイズ(next_at-last_at)を基準に floor_envelope() を適用する
+ * (既存 Tempo.floor() が this.size を使って計算するのと同じ)。
+ *
+ * 既存コードでは、この envelope に対応する Tempos.u の succ()/back() は
+ * どこからも呼ばれていない(月/年の遷移は毎回 to_tempos() の再解決で行う)。
+ * ただし find({step:'u'}) のように外部から呼ばれる可能性はゼロではないため、
+ * MeanLunarPhaseTempoRule と同様、目標周期の中央付近の write_at で at() を
+ * 再実行する slide() を用意しておく。
+ *
+ * slide() の中央付近の write_at は envelope.last_at(直前に解決済みの実際の
+ * 境界)を基準に組み立てる。floors が2段以上あると、各段の「切り詰めで
+ * 1つ先へずれる」補正が積み重なり、now_idx が this.zero からの単純な
+ * 周期数(now_idx*size)から最大で floors.length 分ずれうる。this.zero
+ * 基準で中央値を組み立てる(MeanLunarPhaseTempoRule と同じやり方)と、
+ * このずれの分だけ目標周期を外してしまうため、必ず envelope.last_at
+ * (今の実際の境界)を起点にする。
+ */
+export class FloorTempoRule implements TempoRule {
+  constructor(
+    private readonly size: number,
+    private readonly zero: number,
+    private readonly floors: readonly FloorStep[],
+  ) {}
+
+  at(write_at: number): TempoEnvelope {
+    let envelope = fixed_envelope(this.size, this.zero, write_at)
+    for (const floor of this.floors) {
+      const coarseSize = envelope.next_at - envelope.last_at
+      envelope = floor_envelope(envelope, coarseSize, floor.size, floor.zero, write_at)
+    }
+    return envelope
+  }
+
+  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
+    const midpoint = envelope.last_at + (amount + 0.5) * this.size
+    return this.at(midpoint)
+  }
+}
+
+/**
+ * CyclicDayTempoRule: 固定長(日など)を length 個で 1 周するラベルとして
+ * 解決する規則。既存 to_tempos() が
+ * `const A = to_tempo_bare(dayMsec, zero, utc); A.now_idx = mod(A.now_idx, length)`
+ * のように、いったん周期をまたぐと際限なく増減する生の now_idx を作ってから
+ * mod で包み直していた「日不断」トークン(干支日 A/十二直 B/十干日 C/
+ * 曜日 E/九星日相当 F/宿 V など)を、包み直し無しで最初からラベル整合な
+ * now_idx を返せるようにしたもの。
+ *
+ * TableTempoRule は年(閏年テーブルなど)のように now_idx 自体が周期を
+ * またいで増え続ける値であることを前提にしており(table_envelope_by_idx が
+ * now_idx をそのまま返し、mod 済みの内部 idx は last_at/next_at の計算にしか
+ * 使わない)、この用途にはそのまま使えない。ここでは mod 済みの値を
+ * envelope 自体の now_idx として直接返す。
+ *
+ * 実コードでは、この envelope に対応する Tempos の succ()/back() は
+ * どこからも呼ばれていない(暦座標のパスではなく単発の周期位相トークンと
+ * して扱われている)。ただし find({step:'A'}) のように外部から呼ばれる
+ * 可能性はゼロではないため、FloorTempoRule/MeanLunarPhaseTempoRule と同様、
+ * 目標日の中央付近の write_at で at() を再実行する slide() を用意しておく。
+ */
+export class CyclicDayTempoRule implements TempoRule {
+  constructor(
+    private readonly daySize: number,
+    private readonly zero: number,
+    private readonly length: number,
+  ) {}
+
+  at(write_at: number): TempoEnvelope {
+    const raw = fixed_envelope(this.daySize, this.zero, write_at)
+    const now_idx = mod(raw.now_idx, this.length)
+    return {
+      zero: raw.last_at - now_idx * this.daySize,
+      now_idx,
+      last_at: raw.last_at,
+      next_at: raw.next_at,
+    }
+  }
+
+  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
+    const midpoint = envelope.last_at + (amount + 0.5) * this.daySize
+    return this.at(midpoint)
+  }
+}
+
+/**
  * MeanLunarPhaseTempoRule: 平均朔望月(固定周期)の月境界を、日境界へ
  * 切り詰めて解決する規則。
  *
@@ -271,10 +413,12 @@ function floor_envelope(
  * と同じ計算(月番号の割り当てや閏月判定はこの規則の外側で行われる別の関心事なので含めない)。
  * 実際の運用で観測太陰太陽暦を使わない暦(平気法など)の月境界がこれにあたる。
  *
- * 実コードでは月境界の遷移は succ()/back() ではなく、毎回 to_tempos() の
- * 再解決で行われている(Nn.succ() 等の呼び出しは存在しない)。そのため
  * slide() は等間隔ではなく、目標月の中央付近の write_at で at() を
- * 再実行して日境界へ切り詰め直す(実運用に合わせた設計)。
+ * 再実行して日境界へ切り詰め直す設計(now_idx が周期をまたいでも常に
+ * moonZero からの一定周期として扱えるため、この方式で安全)。
+ * この規則自体は succ()/back() 経由での利用を想定していないが、この
+ * 規則を包む上位のトークン(Nn/M、下記 MeanLunisolarMonthRule 参照)は
+ * to_table() の yeary_table() 経由で実際に succ() が呼ばれる。
  */
 export class MeanLunarPhaseTempoRule implements TempoRule<TempoBase> {
   constructor(
@@ -292,6 +436,184 @@ export class MeanLunarPhaseTempoRule implements TempoRule<TempoBase> {
   slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
     const targetIdx = envelope.now_idx + amount
     const midpoint = this.moonZero + (targetIdx + 0.5) * this.moonMsec
+    return this.at(midpoint)
+  }
+}
+
+/**
+ * MeanLunisolarMonthRule: MeanLunarPhaseTempoRule が解決する生の朔望月
+ * (moonZero からの連続カウント)から、年内の月番号(0-11、閏月は前月と
+ * 同じ番号)と閏月判定までを解決する規則。
+ *
+ * 既存 to_tempos() は、生の月 envelope を作った後
+ *   1. その月の中気(節気)が実際にこの月の範囲内にあるか(is_cover)を
+ *      resolveSeason(this.last_at) で確認
+ *   2. 範囲外なら resolveSeason(this.next_at) で再確認し、それでも
+ *      範囲外なら閏月と判定する
+ *   3. 中気の節気番号(0-23)を2で割って月番号(0-11)を得る
+ * という手順を、素の Tempo に対して直接 now_idx を書き換える形で行って
+ * いた。この規則はその手順をまるごと内在化し、月番号・閏月判定込みの
+ * envelope を直接返す。resolveSeason は実軌道(定気法)か平気法かの
+ * 分岐を含む既存の `resolve_season` をそのまま注入できるシグネチャ
+ * (呼び出し側の関心事をこの規則に持ち込まない)。
+ *
+ * slide() は月番号(意味が年でリセットされる非連続な値)を一切使わず、
+ * last_at(実際の暦上の位置)を起点に平均朔望月の定数長(moonMsec)で
+ * 目標付近まで進めてから at() で解決し直す。これは
+ * MeanLunarPhaseTempoRule.slide() と似ているが、対象が「連続する朔望月
+ * カウント」ではなく「年内月番号」であるため、now_idx を使わず
+ * last_at だけを基準にする点が異なる。
+ *
+ * この設計変更の直接の動機: 以前は Nn が素の Tempo のままだったため、
+ * succ()/back() が Tempo.slide() の「今の月の実サイズを固定長とみなして
+ * write_at + n*size で進める」という式を使っていた。朔望月の実サイズは
+ * 月ごとに29〜30日で変動するため、この式は稀に「次の月の途中」までしか
+ * 進まないことがあり、to_table() の yeary_table()/monthry_table() が
+ * 同じ月を2回出力する不具合があった(平気法・アマンタ暦・プールニマンタ暦の
+ * 年間表で実際に確認)。この規則の slide() は moonMsec という定数長を
+ * 使うため、この不具合を起こさない。
+ */
+export class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
+  constructor(
+    private readonly moonMsec: number,
+    private readonly moonZero: number,
+    private readonly daySize: number,
+    private readonly dayZero: number,
+    private readonly termCount: number,
+    private readonly resolveSeason: (write_at: number) => TempoLike,
+  ) {}
+
+  at(write_at: number): TempoEnvelope {
+    const raw = fixed_envelope(this.moonMsec, this.moonZero, write_at)
+    const month = floor_envelope(raw, this.moonMsec, this.daySize, this.dayZero, write_at)
+    const is_cover = (at: number) => month.last_at <= at && at < month.next_at
+
+    let season = this.resolveSeason(month.last_at)
+    let is_leap = false
+    if (!is_cover(season.moderate_at)) {
+      season = this.resolveSeason(month.next_at)
+      if (!is_cover(season.moderate_at)) {
+        is_leap = true
+      }
+    }
+    const now_idx = mod(season.now_idx, this.termCount) >> 1
+
+    return {
+      zero: month.last_at - now_idx * this.moonMsec,
+      now_idx,
+      last_at: month.last_at,
+      next_at: month.next_at,
+      is_leap,
+    }
+  }
+
+  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
+    const midpoint = envelope.last_at + (amount + 0.5) * this.moonMsec
+    return this.at(midpoint)
+  }
+}
+
+/**
+ * EraAdjustedTempoRule: 内側の規則が返す「通し年」を、元号(のような
+ * 紀年法)の開始年を1年とする相対年に変換する規則。
+ *
+ * 既存 to_tempos() は、内側の規則(FloorTempoRule 等、あるいは
+ * lunisolar() 由来の素の Tempo)で年の envelope を作った後、
+ * `u.now_idx += 1 - era[2]` のように外部から now_idx だけを書き換えて
+ * いた。last_at/next_at/zero には反映されないため、succ()/back()
+ * (内側の規則自身の slide())が再計算する now_idx は元号調整前の値に
+ * 戻ってしまう(last_at 自体は正しいため find()/to_table() には実害が
+ * ないが、succ() の戻り値の now_idx を直接読む呼び出し元には正しくない
+ * 値を返していた)。
+ *
+ * 元号は年の境界とは無関係に(年の途中でも)切り替わりうる
+ * (実測: 定気法の239元号のうち239件が年の途中での改元だった、つまり
+ * 「年初に改元」はほぼ皆無)。そのため元号の解決は、必ず「実際に
+ * 問い合わせている時刻」を基準にする必要がある。既存 G(元号ラベル)の
+ * 解決も write_at(利用者が問い合わせた時刻そのもの)を基準にしており、
+ * この規則の年番号も同じ基準で揃える。
+ *
+ * at() は write_at をそのまま元号解決に使えばよいが、slide() は
+ * 「year.last_at からの経過(since)」を保ったまま次の年の対応する
+ * 時刻(next.last_at + since)で元号を解決する必要がある。単純に
+ * 「year.last_at + (amount+0.5)*avgYearMsec」のような年内の適当な
+ * 目安点で元号を引くと、その点がたまたま改元後の期間に入ってしまい
+ * (元の問い合わせ時点ではまだ改元前だったのに)誤った元号を拾うことが
+ * ある(next の envelope 自体は正しく求まるにも関わらず、である)。
+ * amount による目標年の特定(inner rule への再問い合わせ)には目安点で
+ * 構わないが、元号自体の解決は「対応する時刻(same-since)」で行う。
+ */
+export class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
+  constructor(
+    private readonly innerRule: TempoRule<Base>,
+    private readonly avgYearMsec: number,
+    private readonly eraTable: readonly number[],
+    private readonly eraZero: number,
+    private readonly eras: readonly (readonly [string, number, number])[],
+  ) {}
+
+  private with_era(raw: TempoEnvelope, era_at: number): TempoEnvelope {
+    // def_eras() 自身が this.table.msec.era を構築する最中(まだ未設定)に
+    // this.to_tempos() を呼ぶ(各元号の開始年の raw な now_idx を得るため)
+    // ため、この規則もその構築の最中に呼ばれうる。その場合は元号調整
+    // 前の raw な値を返す(既存 to_tempos() が `if (this.table.msec.era
+    // != null)` で同じ状況をガードしていたのと同じ理由)。
+    if (!this.eraTable) return raw
+    const eraEnv = table_envelope(this.eraTable, this.eraZero, era_at)
+    const era = this.eras[eraEnv.now_idx]
+    if (!era?.[0]) return raw
+    const now_idx = raw.now_idx + 1 - era[2]
+    return { ...raw, now_idx }
+  }
+
+  at(write_at: number, base: Base): TempoEnvelope {
+    const raw = this.innerRule.at(write_at, base)
+    return this.with_era(raw, write_at)
+  }
+
+  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
+    const since = base.write_at - envelope.last_at
+    const midpoint = envelope.last_at + (amount + 0.5) * this.avgYearMsec
+    const raw = this.innerRule.at(midpoint, base)
+    const era_at = Math.min(Math.max(raw.last_at + since, raw.last_at), raw.next_at - 1)
+    return this.with_era(raw, era_at)
+  }
+}
+
+/**
+ * ObservedLunisolarYearRule: 観測太陰太陽暦(実朔・実節気)の年を解決する
+ * 規則。既存 lunisolar()(37ヶ月窓の朔・節気探索という重い天文計算)を
+ * そのまま再利用し、再実装しない。この規則が新たに担うのは「lunisolar()
+ * の結果を年の envelope として切り出す」部分のみ(ObservedLunisolarMonthRule
+ * が月について行っているのと同じ切り分け方)。
+ *
+ * 実コードでも年の遷移は succ()/back() ではなく毎回 to_tempos() の
+ * 再解決で行われているため、slide() も他の規則と同様に目標年の中央付近の
+ * write_at で at() を再実行する設計にする。
+ */
+export class ObservedLunisolarYearRule implements TempoRule<TempoBase> {
+  constructor(
+    private readonly resolveYear: (write_at: number) => {
+      year_start_at: number
+      next_year_start_at: number
+      year: number
+    },
+  ) {}
+
+  at(write_at: number): TempoEnvelope {
+    const { year_start_at, next_year_start_at, year } = this.resolveYear(write_at)
+    const yearSize = next_year_start_at - year_start_at
+    return {
+      zero: year_start_at - year * yearSize,
+      now_idx: year,
+      last_at: year_start_at,
+      next_at: next_year_start_at,
+    }
+  }
+
+  slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
+    const avgSize = envelope.next_at - envelope.last_at
+    const midpoint = envelope.last_at + (amount + 0.5) * avgSize
     return this.at(midpoint)
   }
 }
@@ -476,12 +798,13 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
  * phaseAt() から推定した idx を初期値にし、実際の境界(solar_phase の
  * 探索結果)が write_at をまたぐことがある(実軌道の不等速性による平均との
  * ズレ)ので、境界をまたいでしまった場合は idx を進める/戻す方向に補正する。
+ * この idx は探索の過程で 0..divisions-1 に mod 済みなので、そのまま
+ * ラベル参照(list[val.now_idx] を mod なしで直接引く)に使えるラベル整合な
+ * 値になっている。
  *
- * 現状 Tempos.Z は等角分割(SubdivideTempoRule)であり、この規則はまだ
- * to_tempos() には接続していない。接続する場合は、平気法のように
- * 「等角=定義そのもの」である暦を壊さないための暦ごとのオプトイン設計と、
- * 天体計算の実行コストをいつ抟うかの判断が必要
- * (詳細はリポジトリメモリ参照)。
+ * `Tempos.Z` は `FancyDate.resolve_orbital_season()` 経由でこの規則に
+ * 接続済み(`hasSolarEvents(sunny)` の暦のみ opt-in、それ以外は従来通り
+ * `SubdivideTempoRule` による等角分割のまま)。
  */
 export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
   constructor(
@@ -508,7 +831,13 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
       next_at = boundaryAt(mod(idx + 1, this.divisions))
     }
 
-    const now_idx = Math.round((last_at - this.sunny.epochMsec) / avgSize)
+    // idx はこの探索で確定した「基準位相からの区間番号」であり、既に
+    // 0..divisions-1 に収まっている(mod 済み)ラベル整合な値。以前は
+    // sunny.epochMsec からの連番を now_idx にしていたため、ラベル参照側
+    // (list[val.now_idx] を mod なしで直接引く)と基準がずれ、呼び出し側
+    // (resolve_orbital_season)で都度 idx を再計算し直す必要があった。
+    // ここで直接 idx を返すことで、その再計算が不要になる。
+    const now_idx = idx
     return { zero: last_at - now_idx * avgSize, now_idx, last_at, next_at }
   }
 
@@ -521,10 +850,17 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
 /**
  * ObservedLunisolarMonthRule: 観測太陰太陽暦(実朔・実節気)の月を解決する規則。
  *
- * 既存 lunisolar()/lunisolar_months_around()(37ヶ月窓の朔・節気探索という重い
- * 天文計算)をそのまま再利用し、再実装しない。この規則が新たに担うのは
- * 「lunisolar() の結果を月の envelope(now_idx=月番号-1, is_leap,
- * last_at, next_at)として切り出す」部分のみ。
+ * 既存 lunisolar()(37ヶ月窓の朔・節気探索という重い天文計算)の結果を
+ * resolveMonth コールバック経由で受け取り、再実装しない
+ * (ObservedLunisolarYearRule と同じ「コールバック注入」パターン)。
+ * FancyDate.lunisolar() は37ヶ月窓探索の結果をMRUキャッシュするため、
+ * 同じ write_at について u(年)側で既に this.lunisolar(at) を呼んで
+ * いれば、この規則からの呼び出しはキャッシュヒットで軽量に済む。
+ * 生の LunisolarOptions を直接受け取って毎回 lunisolar(options, write_at)
+ * を呼ぶ設計(以前の実装)だと、FancyDate 側のキャッシュを経由できず、
+ * u/M それぞれで別々に重い探索が走ってしまう(このためこの規則は
+ * 長らく配線されず、fancy-date.ts 側は生の Tempo を直接構築していた。
+ * 詳細下記)。
  *
  * 年(year_start_at 等)・日(day)は同じ lunisolar() の結果から別途取れる、
  * この規則の外側の関心事として扱う
@@ -533,17 +869,39 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
  * 年ごとにリセットし閘月では重複する(連続増加する朔望月カウンタではない)。
  * MeanLunarPhaseTempoRule の Nn.now_idx と同じ数値規約。
  *
+ * **発見した実バグ(このクラス自体ではなく、未配線だった fancy-date.ts 側)**:
+ * ObservedLunisolarMonthRule が長らく未配線だったため、fancy-date.ts の
+ * usesObservedLunisolar 分岐の M は `new Tempo(...)` という生の Tempo
+ * だった。この M の succ() は Tempo.slide() の非テーブル分岐(「今の月の
+ * 実サイズを固定長とみなして write_at + n*size で進める」式)を使うが、
+ * now_idx は「月番号-1」(年境界でリセットされる)という意味であり、
+ * この式は now_idx を単純に+1し続けるだけで年境界のリセットを一切
+ * 反映しない。実測で300回succ()の連鎖のうち298回が fresh 再導出と
+ * 不一致(now_idx が年をまたいでも12,13,14...と増え続け、last_at も
+ * 蓄積的にずれていく)。find([...], [{d:'1'}], {step:'M'}) が63件中
+ * 2件しか見つけられず、しかも見つかった日付が「0054年」等の破綻した
+ * 元号年になる実害を確認した(to_table()/find() の他の step では
+ * .succ() の戻り値を直接使わず fresh 再導出するため無傷だったが、
+ * find({step:'M'}) は succ() を連鎖させ続けるため直撃した)。
+ * この規則を配線することで修正する。
+ *
  * 既存コードでも月の遷移は succ()/back() ではなく毎回 to_tempos() の
  * 再解決で行われているため、slide() も MeanLunarPhaseTempoRule と同様に
  * 目標の月の中央付近の write_at で at() を再実行する設計にする。
+ * avgMonthMsec(平均朔望月、通常 calc.msec.moon)は呼び出し側が渡す
+ * (以前の実装は options.moony?.periodMsec を優先し、無ければ直前の
+ * envelope の実サイズにフォールバックしていたが、この規則が実際に
+ * 使われる場面は必ず moony が存在する usesObservedLunisolar 分岐のみ
+ * なので、フォールバック分岐自体が不要になった)。
  */
-export type ObservedLunisolarBase = TempoBase
-
-export class ObservedLunisolarMonthRule implements TempoRule<ObservedLunisolarBase> {
-  constructor(private readonly options: LunisolarOptions) {}
+export class ObservedLunisolarMonthRule implements TempoRule<TempoBase> {
+  constructor(
+    private readonly resolveMonth: (write_at: number) => LunisolarDate,
+    private readonly avgMonthMsec: number,
+  ) {}
 
   at(write_at: number): TempoEnvelope {
-    const date = lunisolar(this.options, write_at)
+    const date = this.resolveMonth(write_at)
     const now_idx = date.month - 1
     const size = date.next_at - date.last_at
     return {
@@ -556,8 +914,7 @@ export class ObservedLunisolarMonthRule implements TempoRule<ObservedLunisolarBa
   }
 
   slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
-    const avgSize = this.options.moony?.periodMsec ?? envelope.next_at - envelope.last_at
-    const midpoint = envelope.last_at + (amount + 0.5) * avgSize
+    const midpoint = envelope.last_at + (amount + 0.5) * this.avgMonthMsec
     return this.at(midpoint)
   }
 }

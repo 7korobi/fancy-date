@@ -25,16 +25,23 @@ import {
 import { prepareSpot } from './prepare'
 import {
   CachedTempoRule,
+  cyclic_label,
+  CyclicDayTempoRule,
   envelope_of,
-  MeanLunarPhaseTempoRule,
+  EraAdjustedTempoRule,
+  FixedTempoRule,
+  FloorTempoRule,
+  MeanLunisolarMonthRule,
+  ObservedLunisolarMonthRule,
+  ObservedLunisolarYearRule,
   OrbitalPhaseTempoRule,
   SolarDayHourTempoRule,
   SubdivideTempoRule,
   TableTempoRule,
   TempoView,
 } from './tempo-model'
-import type { SolarDayHourBase, TempoBase, TempoLike } from './tempo-model'
-import { Tempo, to_tempo_by, to_tempo_bare } from './time'
+import type { SolarDayHourBase, TempoBase, TempoLabelLike, TempoLike } from './tempo-model'
+import { to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
@@ -141,7 +148,16 @@ export type Precision = CorePrecision | Token
 export type SpanLabels = Partial<Record<Token, string>>
 export type SpanDirection = '前' | '後'
 export type FindOrder = 1 | -1
-export type FindOptions = { step?: keyof Tempos; order?: FindOrder; limit?: number }
+/**
+ * SteppableTempoKey: Tempos の中で succ()/back() 等の遷移操作を実際に
+ * 持つフィールドのキーだけを絞り込んだ型。Y/a/b/c/f/Q は TempoLabelLike
+ * (遷移操作を持たない)なのでここに含まれない
+ * (find() の options.step を誤って周期ラベル側へ向けるのを型で防ぐ)。
+ */
+export type SteppableTempoKey = {
+  [K in keyof Tempos]: Tempos[K] extends TempoLike | undefined ? K : never
+}[keyof Tempos]
+export type FindOptions = { step?: SteppableTempoKey; order?: FindOrder; limit?: number }
 export type SpanPart = {
   token: Token
   unit: Unit
@@ -195,29 +211,29 @@ export type Tempos = {
   B: TempoLike
   C: TempoLike
   D: TempoLike
-  E: TempoLike
+  E: TempoLike | TempoLabelLike
   F: TempoLike
-  G: TempoLike
+  G: TempoLike | TempoLabelLike
   H: TempoLike
   J: TempoLike
   M: TempoLike & TempoMonth
   N: TempoLike | undefined
-  Q: TempoLike
+  Q: TempoLabelLike
   S: TempoLike
-  V: TempoLike
-  Y: TempoLike
+  V: TempoLike | TempoLabelLike
+  Y: TempoLabelLike
   Z: TempoLike
-  a: TempoLike
-  b: TempoLike
-  c: TempoLike
+  a: TempoLabelLike
+  b: TempoLabelLike
+  c: TempoLabelLike
   d: TempoLike
-  f: TempoLike
+  f: TempoLabelLike
   m: TempoLike
   p: TempoLike | undefined
   s: TempoLike
   u: TempoLike
   w: TempoLike
-  x: TempoLike | undefined
+  x: TempoLabelLike | undefined
   y: TempoLike
 }
 type DateLike = number | Tempos | string
@@ -411,7 +427,7 @@ type IndexerProps =
   | readonly [readonly string[], readonly string[] | null]
   | readonly [readonly string[], readonly string[] | null, string | readonly string[]]
 class Indexer {
-  tempo?: Tempo
+  tempo?: TempoLabelLike
   list: readonly string[] = []
   rubys: readonly string[] = []
   relatives?: string | readonly string[]
@@ -459,6 +475,21 @@ class Indexer {
   }
 }
 
+// _lunisolar_cache(MRU)の上限。span_obj()/add() 自身の内部呼び出し
+// (from/to の交互問い合わせ)だけなら2〜3件で足りるが、これは
+// FancyDate 自身の内部実装が必要とする最小限に過ぎない。呼び出し側の
+// アプリケーションはより広いパターンで同じインスタンス(=同じキャッシュ)を
+// 使い回しうる: 前月・当月・次月のグリッド表示だけで3件、そこに
+// 「今日」「次の祝日」「1年前の同日」等が加わると容易に超過する。また
+// 観測太陰太陽暦は1年が12〜13ヶ月(閏月を含む場合13)なので、
+// yeary_table() で1年分を表示した直後にユーザーが個別の月を
+// 行き来する(カレンダーUIでの月送りなど)場合、13件保持できれば
+// その年の中では再探索が一切発生しない。線形走査のコストは37ヶ月窓
+// 探索(ミリ秒オーダー)に比べて無視できる(数十件の比較はナノ秒
+// オーダー)ため、大きめに確保しても実害はない。「1年分(最大13)+
+// 年境界をまたぐ余裕」を根拠に16件とする。
+const LUNISOLAR_CACHE_CAPACITY = 16
+
 export class FancyDate {
   dic: IDIC
   calc: ICALC
@@ -484,12 +515,22 @@ export class FancyDate {
 
   // TempoRule インスタンスの使い回し(D: TempoEnvelope キャッシュ)。
   // to_tempos() のたびに new すると、規則インスタンス内部に持たせた
-  // 直近解決キャッシュ(CachedTempoRule / SolarDayHourTempoRule 自身の
-  // 日次テーブルキャッシュ)が効かないため、初回アクセス時に1度だけ
-  // 構築して保持する。init() 実行時にリセットする(暦の再設定に追従する)。
+  // 直近解決キャッシュ(CachedTempoRule 自身の1件キャッシュ)が効かない
+  // ため、初回アクセス時に1度だけ構築して保持する。init() 実行時に
+  // リセットする(暦の再設定に追従する)。
   private _orbital_season_rule?: CachedTempoRule<TempoBase>
   private _solar_hour_rule?: CachedTempoRule<SolarDayHourBase>
-  private _lunisolar_cache?: LunisolarDate
+  // span/add/sub は「離れた2つの日時」を交互に問い合わせる(例:
+  // span_obj() は from/to に加えて next_precise_span_at() で to を
+  // 再度問い合わせる)。1スロットのキャッシュだと A→B→A の順で
+  // 問い合わせた際に B の解決で A のキャッシュが上書きされ、3回目の
+  // A の問い合わせが再びキャッシュミスになる(実測: 定気法の
+  // span_obj({precise:'S'}) で本来2回で済む37ヶ月窓探索が3回発生して
+  // いた)。直近解決した複数ヶ月をMRU(最近使った順)で保持することで
+  // このスラッシングを避ける。上限は LUNISOLAR_CACHE_CAPACITY 参照
+  // (span_obj/add 自身が必要とする最小限ではなく、呼び出し側アプリの
+  // より広い利用パターンを見込んだ値)。
+  private readonly _lunisolar_cache: LunisolarDate[] = []
 
   constructor(o?: FancyDate) {
     if (o) {
@@ -619,7 +660,7 @@ export class FancyDate {
     // (古い設定に基づく envelope/lunisolar 結果を持ち越さないため)。
     this._orbital_season_rule = undefined
     this._solar_hour_rule = undefined
-    this._lunisolar_cache = undefined
+    this._lunisolar_cache.length = 0
 
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
     const year = daily_measure(sunny.periodMsec, earthy.periodMsec)
@@ -669,21 +710,34 @@ export class FancyDate {
   }
 
   lunisolar(utc: number): LunisolarDate {
-    // D: TempoEnvelope キャッシュ。直近解決した月がまだ utc を覆っている
+    // D: TempoEnvelope キャッシュ(MRU、最大 LUNISOLAR_CACHE_CAPACITY 件)。
+    // 直近解決した月のいずれかがまだ utc を覆っている
     // (last_at <= utc < next_at)場合、37ヶ月窓の朔・節気探索
     // (lunisolar_months_around)をやり直さず、日番号だけ軽量に再計算する
     // (phenomena/lunisolar.ts の lunisolar() 自身が day/day_start_at を
     // 求める式と同じ式を、キャッシュ済みの月境界に対して適用するだけ)。
-    const cached = this._lunisolar_cache
-    if (cached && cached.last_at <= utc && utc < cached.next_at) {
-      const day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
-      return {
-        ...cached,
-        day: Math.floor((day.last_at - cached.last_at) / this.calc.msec.day) + 1,
-        day_start_at: day.last_at,
+    const cache = this._lunisolar_cache
+    for (let i = 0; i < cache.length; i++) {
+      const cached = cache[i]
+      if (cached.last_at <= utc && utc < cached.next_at) {
+        // 最近使ったものを先頭に(MRU)。span_obj()/add() のように
+        // 「離れた2つの日時」を交互に問い合わせるアクセスパターンで、
+        // 1スロットのキャッシュだと A→B→A の3回目が再びキャッシュミス
+        // になっていた(実測: 定気法の span_obj({precise:'S'}) で
+        // 本来2回で済む探索が3回発生していた)。
+        if (i > 0) {
+          cache.splice(i, 1)
+          cache.unshift(cached)
+        }
+        const day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
+        return {
+          ...cached,
+          day: Math.floor((day.last_at - cached.last_at) / this.calc.msec.day) + 1,
+          day_start_at: day.last_at,
+        }
       }
     }
-    return (this._lunisolar_cache = resolveLunisolar(
+    const resolved = resolveLunisolar(
       {
         moony: this.dic.moony,
         geo: this.dic.geo,
@@ -693,7 +747,10 @@ export class FancyDate {
         solarPhase: (phase, near) => this.solar_phase(phase, near),
       },
       utc,
-    ))
+    )
+    cache.unshift(resolved)
+    cache.length = Math.min(cache.length, LUNISOLAR_CACHE_CAPACITY)
+    return resolved
   }
 
   solar_term(utc: number, phase: number) {
@@ -1172,8 +1229,8 @@ export class FancyDate {
     return list
   }
 
-  private infer_find_step(conditions: readonly FindCondition[]): keyof Tempos {
-    let step: keyof Tempos = 'y'
+  private infer_find_step(conditions: readonly FindCondition[]): SteppableTempoKey {
+    let step: SteppableTempoKey = 'y'
     for (const condition of conditions) {
       for (const format of Object.keys(condition)) {
         const inferred = format === 'note' ? 'd' : this.infer_find_step_from_format(format)
@@ -1185,8 +1242,8 @@ export class FancyDate {
     return step
   }
 
-  private infer_find_step_from_format(format: string): keyof Tempos {
-    let step: keyof Tempos = 'y'
+  private infer_find_step_from_format(format: string): SteppableTempoKey {
+    let step: SteppableTempoKey = 'y'
     const tokens = format.match(reg_token) ?? []
     for (const token of tokens) {
       const candidate = this.find_step_for_token(token[0] as Token)
@@ -1197,7 +1254,7 @@ export class FancyDate {
     return step
   }
 
-  private find_step_for_token(token: Token): keyof Tempos {
+  private find_step_for_token(token: Token): SteppableTempoKey {
     switch (token) {
       case 'S':
         return 'S'
@@ -1231,7 +1288,7 @@ export class FancyDate {
     }
   }
 
-  private find_step_rank(unit: keyof Tempos) {
+  private find_step_rank(unit: SteppableTempoKey) {
     switch (unit) {
       case 'S':
         return 8
@@ -1920,15 +1977,19 @@ export class FancyDate {
 
     const timezone =
       (this.calc.msec.day * (this.dic.geo[2] != null ? this.dic.geo[2] : this.dic.geo[1])) / 360
-    const x = (this.dic.x.tempo = to_tempo_bare(
-      this.calc.msec.hour,
-      -0.5 * this.calc.msec.hour,
-      timezone,
-    ))
-    x.now_idx = timezone
+    // x(タイムゾーン表示)は now_idx にタイムゾーンのオフセット(ms)を
+    // そのまま載せるだけの、暦座標としては意味を持たない静的な値。
+    // succ()/back() する意味がないため、素の Tempo(this.dic.x.tempo は
+    // 以前 Tempo 型だった)ではなく TempoLabelLike にしておく
+    // (以前は素の Tempo だったため succ() が Tempo.slide() の式で
+    // 意味のない値を返せてしまっていた)。center_at はこの直後でのみ
+    // 必要なので、TempoLabelLike には含めずここで直接計算する。
+    const rawX = to_tempo_bare(this.calc.msec.hour, -0.5 * this.calc.msec.hour, timezone)
+    this.dic.x.tempo = cyclic_label(envelope_of(rawX), timezone)
+    const x_center_at = rawX.center_at
 
     const start_at = this.dic.start[2]
-    const zero = start_at - x.center_at
+    const zero = start_at - x_center_at
 
     const second = zero + zero_size('s', 'second')
     const minute = second + zero_size('m', 'minute')
@@ -1982,7 +2043,7 @@ export class FancyDate {
     }
 
     // JD
-    const day_utc = day + x.center_at
+    const day_utc = day + x_center_at
     const cjd = to_tempo_bare(this.calc.msec.day, day, -210866803200000).center_at
     const jd = to_tempo_bare(this.calc.msec.day, day_utc, -210866803200000).center_at // -2440587.5 * 86400000
     const ld = to_tempo_bare(this.calc.msec.day, day_utc, -12219379200000).last_at //  -141428   * 86400000
@@ -2194,33 +2255,13 @@ K   = @dic.earthy[2] / 360
    * 実軌道版でも等角版と同じ now_idx 番号(=同じラベル)を維持できる
    * (実測で検証済み: 立春/立夏/夏至/立秋/秋分/立冬/冬至/次立春が一致)。
    *
-   * ラベル参照(def_to_label の at())は now_idx をそのまま配列添字に使う
-   * (mod を取らない)ため、0..length-1 に収まっている必要がある。
-   * OrbitalPhaseTempoRule.at() が返す now_idx は sunny.epochMsec からの
-   * 連番でありこの並びとは基準が異なる(epochMsec の位相が0とは限らない)ため、
-   * ここでは last_at の時点の位相(sunny.phaseAt)から直接 idx を再計算する。
-   *
-   * TempoView へ載せない理由: 補正後の now_idx/zero は
-   * OrbitalPhaseTempoRule.slide() 自身の基準(sunny.epochMsec 起点の連番)とは
-   * 一致しないため、この補正済み envelope を rule.slide() にそのまま渡すと
-   * 誤った遷移になる。succ()/back() が呼ばれる想定もないため、素の Tempo の
-   * ままにしておく。
+   * OrbitalPhaseTempoRule.at() は境界探索で確定した idx(0..length-1 に
+   * 収まるラベル整合な値)をそのまま now_idx として返すため、ここでの
+   * 再計算は不要で、TempoView.at() でそのまま包める
+   * (以前はここで now_idx を都度再計算し、素の Tempo にしていた)。
    */
-  private resolve_orbital_season(utc: number): Tempo & { path: string } {
-    const divisions = this.dic.Z.length
-    const referencePhaseOffset = 1 / 8
-    const env = this.orbital_season_rule().at(utc, { write_at: utc })
-    const avgSize = this.dic.sunny.periodMsec / divisions
-    const now_idx = mod(
-      Math.round(mod(this.dic.sunny.phaseAt(env.last_at) + referencePhaseOffset, 1) * divisions),
-      divisions,
-    )
-    const zero = env.last_at - now_idx * avgSize
-    const tempo = new Tempo(zero, now_idx, utc, env.last_at, env.next_at) as Tempo & {
-      path: string
-    }
-    tempo.path = 'season'
-    return tempo
+  private resolve_orbital_season(utc: number): TempoLike {
+    return TempoView.at(this.orbital_season_rule(), { write_at: utc })
   }
 
   /**
@@ -2238,10 +2279,14 @@ K   = @dic.earthy[2] / 360
 
   /**
    * H(不定時法)で使う SolarDayHourTempoRule を使い回す(D: TempoEnvelope
-   * キャッシュ)。この規則自身が直近1日分の時刻テーブルを内部キャッシュ
-   * するため(SolarDayHourTempoRule.hour_table_cached 参照)、インスタンスを
-   * 使い回すことで初めてそのキャッシュが効く。CachedTempoRule でも包み、
-   * 同じ時刻(1時間内)への再問い合わせもテーブル参照だけで済ませる。
+   * キャッシュ)。この規則自身は日単位の時刻テーブルを内部キャッシュしない
+   * (noon() の均時差相当の補正が write_at そのものに依存し、同日内でも
+   * 時刻によって最大13秒程度ずれるため、日単位キャッシュは不採用。
+   * SolarDayHourTempoRule 自身のdocコメント参照)。ただし同じ日の中で
+   * slide()(succ()/back())するだけなら、envelope.table(直前に解決した
+   * その日のテーブル)をそのまま使い回して再計算を避ける。CachedTempoRule
+   * でも包むことで、同じ時刻(1時間内)への再問い合わせを at() レベルで
+   * テーブル再構築ごと省略できる。
    */
   private solar_hour_rule(): CachedTempoRule<SolarDayHourBase> {
     return (this._solar_hour_rule ??= new CachedTempoRule(
@@ -2300,14 +2345,14 @@ K   = @dic.earthy[2] / 360
       u: TempoLike
     if (utc == null) throw new Error(`invalid timestamp ${utc}`)
 
-    const to_tempo = (path, write_at = utc) => {
-      return to_tempo_bare(this.calc.msec[path], this.calc.zero[path], write_at)
-    }
-
-    const J = to_tempo_bare(this.calc.msec.day, this.calc.zero.jd, utc) // ユリウス日
+    const J = TempoView.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
+      write_at: utc,
+    }) // ユリウス日
 
     // season in year_of_planet
-    const Zz = to_tempo_bare(this.calc.msec.year, this.calc.zero.season, utc) // 太陽年
+    const Zz = TempoView.at(new FixedTempoRule(this.calc.msec.year, this.calc.zero.season), {
+      write_at: utc,
+    }) // 太陽年
     // 実軌道(sunny.timeOfPhase)を持つ場合は定気法(実際の黄経)で二十四節気を解決する。
     // そうでなければ従来通り平気法(等角分割、SubdivideTempoRule)のまま。
     const usesOrbitalSeasons = hasSolarEvents(this.dic.sunny)
@@ -2325,50 +2370,60 @@ K   = @dic.earthy[2] / 360
     const usesObservedLunisolar =
       !this.is_table_month && hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)
     if (this.dic.moony && moon_msec != null && !usesObservedLunisolar) {
-      // 今月と中気(平均朔望月+日境界切り詰め = MeanLunarPhaseTempoRule)。
-      // Nn.now_idx はこの後「連番の朔望月カウント」から「年内の月番号
-      // (0-11、閏月判定に応じて後で書き換える)」へ意味を変えて上書きする。
-      // TempoView(rule 委譲の slide())のままだと、この上書き後に
-      // succ()/back() が呼ばれた場合 MeanLunarPhaseTempoRule.slide() が
-      // 誤って「年内月番号」を「朔望月カウント」として扱ってしまう
-      // (resolve_orbital_season の Z と同じ理由で、素の Tempo にしておく)。
-      const NnEnvelope = new MeanLunarPhaseTempoRule(
-        moon_msec,
-        this.calc.zero.moon,
-        this.calc.msec.day,
-        this.calc.zero.day,
-      ).at(utc)
-      Nn = new Tempo(
-        NnEnvelope.zero,
-        NnEnvelope.now_idx,
-        utc,
-        NnEnvelope.last_at,
-        NnEnvelope.next_at,
-      ) as Tempo & TempoMonth
+      // 今月と中気(平均朔望月+日境界切り詰め+閏月判定 = MeanLunisolarMonthRule)。
+      // 閏月判定・月番号は、Z 本体と同じ基準(実軌道 or 平気法)の
+      // resolve_season を規則へ注入して内部で解決する。ここだけ等角の
+      // ままだと、hasSolarEvents(sunny) な暦で Tempos.Z は実軌道なのに
+      // 閏月判定は平気法のまま、という内部矛盾が起きる(実測: 40年間で
+      // 閏月判定23ヶ月/496ヶ月、月番号29ヶ月が食い違うため「差が小さく
+      // 無視できる」とは言えないと判明した)。
+      // now_idx(年内月番号、閏月では前月と同じ)込みで規則が直接返すため
+      // TempoView に載せられる(以前は素の Tempo に now_idx を上書きして
+      // おり、succ() が Tempo.slide() の「今の月の実サイズを固定長とみなす」
+      // 式を使うことで、朔望月の実サイズの月ごとの変動により稀に「次の月の
+      // 途中」までしか進まず、to_table() の年間/月間表で同じ月が2回出力
+      // される不具合があった)。
+      Nn = TempoView.at(
+        new MeanLunisolarMonthRule(
+          moon_msec,
+          this.calc.zero.moon,
+          this.calc.msec.day,
+          this.calc.zero.day,
+          this.dic.Z.length,
+          resolve_season,
+        ),
+        { write_at: utc },
+      ) as TempoLike & TempoMonth
       N = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
         write_at: utc,
         parent: envelope_of(Nn),
       })
-
-      // 閏月判定・月番号も、Z 本体と同じ基準(実軌道 or 平気法)で解決する。
-      // ここだけ等角のままだと、hasSolarEvents(sunny) な暦で Tempos.Z は
-      // 実軌道なのに閏月判定は平気法のまま、という内部矛盾が起きる
-      // (実測: 40年間で閏月判定23ヶ月/496ヶ月、月番号29ヶ月が食い違うため
-      // 「差が小さく無視できる」とは言えないと判明した)。
-      let Zs = resolve_season(Nn.last_at)
-      if (!Nn.is_cover(Zs.moderate_at)) {
-        Zs = resolve_season(Nn.next_at)
-        if (!Nn.is_cover(Zs.moderate_at)) {
-          Nn.is_leap = true
-        }
-      }
-      Nn.now_idx = mod(Zs.now_idx, this.dic.Z.length) >> 1
     }
 
     if (this.is_table_leap) {
-      p = to_tempo('period')
-      u = TempoView.at(new TableTempoRule(this.table.msec.year, p.last_at), { write_at: utc })
-      u.now_idx += p.now_idx * this.dic.p.length
+      p = TempoView.at(new FixedTempoRule(this.calc.msec.period, this.calc.zero.period), {
+        write_at: utc,
+      })
+      // table.msec.year は def_year_table() で dic.leaps の最後の要素
+      // (period)個ぴったりに作られ、dic.p.length も同じ period から
+      // 設定される(常に table.msec.year.length === dic.p.length)。
+      // そのため TableTempoRule 自身の table_idx による周期またぎ処理
+      // (1周期を越えた分は table[length-1]*table_idx で加算する、既存
+      // TableTempoRule のドキュメント参照)だけで絶対年が正しく求まり、
+      // p.last_at(1周期分だけ再基準化した zero)を使う必要がない。
+      // 以前は p.last_at を zero にした上で
+      // `u.now_idx += p.now_idx * this.dic.p.length` により絶対年へ
+      // 事後変換していたが、TableTempoRule の zero(p.last_at、周期ローカル)
+      // と外部で書き換えた now_idx(絶対年)が食い違い、succ()/back()
+      // (Tempo.slide() ではなく TableTempoRule.slide() 経由)が
+      // 周期をまたぐ年(実質「西暦400年以降の全て」)で全く違う年へ
+      // 飛ぶ実バグがあった(実測: Gregorian 2020年→succ()が「4021年」
+      // 相当の位置に飛び、find([...],[{y:'2021'}],{step:'y'}) が
+      // 該当年を1件も見つけられなかった)。zero を絶対原点
+      // (calc.zero.period)に統一することで、この食い違いごと解消する。
+      u = TempoView.at(new TableTempoRule(this.table.msec.year, this.calc.zero.period), {
+        write_at: utc,
+      })
       M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
         write_at: utc,
       }) as TempoLike & TempoMonth
@@ -2378,11 +2433,11 @@ K   = @dic.earthy[2] / 360
       })
     } else {
       if (this.is_table_month) {
-        // 「季節等分割+日境界切り詰め」という単発の組み合わせなので、
-        // 単一利用のためだけに新しい規則クラスを作らずそのままにする。
-        u = to_tempo_bare(this.calc.msec.year, this.calc.zero.spring, utc).floor(
-          this.calc.msec.day,
-          this.calc.zero.day,
+        u = TempoView.at(
+          new FloorTempoRule(this.calc.msec.year, this.calc.zero.spring, [
+            { size: this.calc.msec.day, zero: this.calc.zero.day },
+          ]),
+          { write_at: utc },
         )
         M = TempoView.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
           write_at: utc,
@@ -2393,38 +2448,66 @@ K   = @dic.earthy[2] / 360
         })
       } else {
         if (usesObservedLunisolar) {
-          // lunisolar() は月・年・日をまとめて1回の探索で解決する。ここで
-          // ObservedLunisolarMonthRule に置き換えると同じ探索を二重に行う
-          // ことになり性能退行するため、既存の直接呼び出しのままにする。
-          const lunisolar = this.lunisolar(utc)
-          const yearSize = lunisolar.next_year_start_at - lunisolar.year_start_at
-          const monthSize = lunisolar.next_at - lunisolar.last_at
-          u = new Tempo(
-            lunisolar.year_start_at - lunisolar.year * yearSize,
-            lunisolar.year,
-            utc,
-            lunisolar.year_start_at,
-            lunisolar.next_year_start_at,
+          // u(年)は元号調整も含めて EraAdjustedTempoRule で構築する
+          // (詳細はクラス自体のdocコメント参照)。M は ObservedLunisolarMonthRule
+          // で構築する(内部で this.lunisolar(at) を呼ぶため、u 側の
+          // this.lunisolar(utc) 呼び出しとキャッシュを共有し、同じ write_at
+          // に対する二重の37ヶ月窓探索にはならない)。
+          //
+          // 以前は M を素の Tempo(now_idx=月番号-1 を直接コンストラクタへ)
+          // として構築していたが、その succ() は Tempo.slide() の非テーブル
+          // 分岐(今の月の実サイズを固定長とみなして write_at + n*size で
+          // 進める式)を使うため、now_idx が「年境界でリセットされるべき
+          // 月番号」であるにも関わらず単純に+1され続ける実バグがあった
+          // (実測: 300回 succ() 連鎖のうち298回が fresh 再導出と不一致、
+          // last_at も蓄積的にずれていく。find([...],[{d:'1'}],{step:'M'})
+          // が63件中2件しか見つけられず、見つかった日付も「0054年」等の
+          // 破綻した元号年になっていた)。ObservedLunisolarMonthRule に
+          // 配線することで、TempoView 経由の succ()/back() が正しく
+          // 年境界でリセットされる。
+          u = TempoView.at(
+            new EraAdjustedTempoRule(
+              new ObservedLunisolarYearRule((at) => this.lunisolar(at)),
+              this.calc.msec.year,
+              this.table.msec.era,
+              this.calc.zero.era,
+              this.calc.eras,
+            ),
+            { write_at: utc },
           )
-          M = new Tempo(
-            lunisolar.last_at - (lunisolar.month - 1) * monthSize,
-            lunisolar.month - 1,
-            utc,
-            lunisolar.last_at,
-            lunisolar.next_at,
-          ) as Tempo & TempoMonth
-          M.is_leap = lunisolar.is_leap
-          d = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
-          d.now_idx = lunisolar.day - 1
+          M = TempoView.at(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec), {
+            write_at: utc,
+          }) as TempoLike & TempoMonth
+          // d(月内日)は M の実区間(last_at)からの経過日数として求まる値
+          // (lunisolar.day - 1 と数値的に同じ)。SubdivideTempoRule で
+          // 構築すれば、通常の(TempoView)succ()/back() がそのまま安全に
+          // 使える(以前は to_tempo_bare()+now_idx上書きの素の Tempo だった
+          // ため、succ() が Tempo.slide() の非テーブル分岐で
+          // 「calc.zero.day からの絶対日数」を計算してしまい、月内日として
+          // 使えない値になっていた。last_at 自体は正しかったため find()/
+          // to_table() には実害がなかったが、succ() の戻り値を直接使う
+          // 呼び出し元には正しくない値を返していた)。
+          d = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
+            write_at: utc,
+            parent: envelope_of(M),
+          })
           N = d
         } else if (!Nn || !N) {
           throw new Error('Lunar month calculation requires a satellite orbital period.')
         } else {
-          // Fixed→floor(moon)→floor(day) という単発の組み合わせなので、
-          // 単一利用のためだけに新しい規則クラスを作らずそのままにする。
-          u = to_tempo_bare(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, utc)
-            .floor(moon_msec, this.calc.zero.moon)
-            .floor(this.calc.msec.day, this.calc.zero.day)
+          u = TempoView.at(
+            new EraAdjustedTempoRule(
+              new FloorTempoRule(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, [
+                { size: moon_msec, zero: this.calc.zero.moon },
+                { size: this.calc.msec.day, zero: this.calc.zero.day },
+              ]),
+              this.calc.msec.year,
+              this.table.msec.era,
+              this.calc.zero.era,
+              this.calc.eras,
+            ),
+            { write_at: utc },
+          )
           M = Nn
           d = N
         }
@@ -2457,12 +2540,25 @@ K   = @dic.earthy[2] / 360
       parent: envelope_of(s),
     })
 
-    let G = {} as Tempo
+    // def_eras() は常に table.msec.era を([Infinity] だけでも)設定するため
+    // 下の分岐は実際にはほぼ必ず通るが、万一 table.msec.era が未設定のまま
+    // 呼ばれた場合の保険として、u の実区間をそのまま流用した
+    // TempoLabelLike を初期値にしておく(succ()/back() 等は不要な
+    // 紀元前ラベル用のプレースホルダーなので、フィールドを持たない
+    // `{}` キャストで型を偽ることは避ける)。
+    let G: TempoLike | TempoLabelLike = cyclic_label(envelope_of(u), 0)
     if (this.table.msec.era != null) {
-      G = to_tempo_by(this.table.msec.era, this.calc.zero.era, utc)
+      G = TempoView.at(new TableTempoRule(this.table.msec.era, this.calc.zero.era), {
+        write_at: utc,
+      })
       const era = this.calc.eras[G.now_idx]
       if (era?.[0]) {
-        u.now_idx += 1 - era[2]
+        // u(年)の元号調整自体は、u を構築した EraAdjustedTempoRule が
+        // 内部で行っている(observed-lunisolar/mean-lunisolar 分岐)。
+        // is_table_leap/is_table_month 分岐には元号を持つサンプル暦が
+        // 存在しないため、u 側の調整は未実装のまま(現状は常に
+        // this.calc.eras が空でこの if 自体に入らない)。ここでは
+        // G のラベルだけを解決する。
         G.label = era[0]
       }
     }
@@ -2474,54 +2570,76 @@ K   = @dic.earthy[2] / 360
     }
     const x = this.dic.x.tempo
 
+    // u はここまでで確定している(era 調整含む)ので、以降 u の実区間を
+    // 参照する箇所(D/Y/a/b/c/f)はすべてこの envelope を使い回す。
+    const uEnvelope = envelope_of(u)
+
     // 年初来番号
-    const w0 = to_tempo('week', u.last_at)
+    const w0 = TempoView.at(new FixedTempoRule(this.calc.msec.week, this.calc.zero.week), {
+      write_at: u.last_at,
+    })
     const w = TempoView.at(new SubdivideTempoRule(this.calc.msec.week), {
       write_at: utc,
       parent: envelope_of(w0),
     })
     const D = TempoView.at(new SubdivideTempoRule(this.calc.msec.day), {
       write_at: utc,
-      parent: envelope_of(u),
+      parent: uEnvelope,
     })
 
-    const Y = { now_idx: u.now_idx } as Tempo
-    if (u.next_at < w.next_at) {
-      // 年末最終週は、翌年初週
-      Y.now_idx += 1
+    // 年末最終週は、翌年初週の扱いにする。Y はその調整を反映した年ラベル。
+    const yearEndsInNextYearsFirstWeek = u.next_at < w.next_at
+    const Y = cyclic_label(uEnvelope, u.now_idx + (yearEndsInNextYearsFirstWeek ? 1 : 0))
+    if (yearEndsInNextYearsFirstWeek) {
       w.now_idx = 0
     }
 
-    // 年不断
-    const a = { now_idx: mod(u.now_idx - this.calc.zero.year60, this.dic.a.length) } as Tempo
-    const b = { now_idx: mod(u.now_idx - this.calc.zero.year12, this.dic.b.length) } as Tempo
-    const c = { now_idx: mod(u.now_idx - this.calc.zero.year10, this.dic.c.length) } as Tempo
-    const f = { now_idx: mod(u.now_idx - this.calc.zero.year_s, this.dic.f.length) } as Tempo
+    // 年不断(u の実区間はそのままに、干支等の周期ラベルだけ差し替える)
+    const a = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year60, this.dic.a.length))
+    const b = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year12, this.dic.b.length))
+    const c = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year10, this.dic.c.length))
+    const f = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year_s, this.dic.f.length))
 
-    // 月不断
-    const Q = { now_idx: Math.floor((4 * M.now_idx) / this.dic.M.length) } as Tempo
+    // 月不断(四半期は月をまたぐため、区間は M(現在の月)のものをそのまま使う。
+    // 四半期全体の境界ではない点に注意)
+    const Q = cyclic_label(envelope_of(M), Math.floor((4 * M.now_idx) / this.dic.M.length))
 
-    // 日不断
-    const A = to_tempo_bare(this.calc.msec.day, this.calc.zero.day60, utc)
-    const B = to_tempo_bare(this.calc.msec.day, this.calc.zero.day12, utc)
-    const C = to_tempo_bare(this.calc.msec.day, this.calc.zero.day10, utc)
-    const E = to_tempo_bare(this.calc.msec.day, this.calc.zero.week, utc)
-    const F = to_tempo_bare(this.calc.msec.day, this.calc.zero.day_9, utc)
-    const V = to_tempo_bare(this.calc.msec.day, this.calc.zero.day28, utc)
+    // 日不断(固定 zero からの周期を length で割った余りをラベルにする)
+    const A = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length), {
+      write_at: utc,
+    })
+    const B = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length), {
+      write_at: utc,
+    })
+    const C = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length), {
+      write_at: utc,
+    })
+    const F = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length), {
+      write_at: utc,
+    })
 
-    A.now_idx = mod(A.now_idx, this.dic.A.length)
-    B.now_idx = mod(B.now_idx, this.dic.B.length)
-    C.now_idx = mod(C.now_idx, this.dic.C.length)
-    F.now_idx = mod(F.now_idx, this.dic.F.length)
+    let E: TempoLike | TempoLabelLike
+    let V: TempoLike | TempoLabelLike
     if (this.is_table_leap) {
       // 旧暦では、週は月初にリセットする。
-      E.now_idx = mod(E.now_idx, this.dic.E.length)
-      V.now_idx = mod(V.now_idx, this.dic.V.length)
+      E = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length), {
+        write_at: utc,
+      })
+      V = TempoView.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length), {
+        write_at: utc,
+      })
     } else {
-      E.now_idx = mod(M.now_idx + d.now_idx, this.dic.E.length)
-      V.now_idx = mod(
-        [11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx,
-        this.dic.V.length,
+      // 月/日の位置から直接導く番号であり、固定 zero からの日周期(A/B/C/F や
+      // is_table_leap の E/V)とは別の意味付けなので、CyclicDayTempoRule
+      // (TempoView) には載せない。この now_idx は日周期の連番ではなく
+      // 月/日から都度導く値であり、succ()/back() を正確に実装できない
+      // (resolve_orbital_season の Z / mean-lunisolar の Nn と同じ理由)。
+      // 実区間は今日(d)そのものなので、d の envelope をそのまま使う。
+      const dEnvelope = envelope_of(d)
+      E = cyclic_label(dEnvelope, mod(M.now_idx + d.now_idx, this.dic.E.length))
+      V = cyclic_label(
+        dEnvelope,
+        mod([11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx, this.dic.V.length),
       )
     }
 

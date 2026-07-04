@@ -999,12 +999,11 @@ exports[`Gregorian dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": 30600000,
       "next_at": 34200000,
       "now_idx": 32400000,
-      "write_at": 32400000,
-      "zero": -1800000,
     },
     "to_idx": [Function],
     "to_label": [Function],
@@ -4594,12 +4593,11 @@ exports[`フランス革命歴 dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": -4320000,
       "next_at": 4320000,
       "now_idx": 0,
-      "write_at": 0,
-      "zero": -4320000,
     },
     "to_idx": [Function],
     "to_label": [Function],
@@ -7934,12 +7932,11 @@ exports[`ロムルス歴 dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": 1800000,
       "next_at": 5400000,
       "now_idx": 3600000,
-      "write_at": 3600000,
-      "zero": -1800000,
     },
     "to_idx": [Function],
     "to_label": [Function],
@@ -12972,12 +12969,11 @@ exports[`平気法 dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": 32400000,
       "next_at": 39600000,
       "now_idx": 32400000,
-      "write_at": 32400000,
-      "zero": -3600000,
     },
     "to_idx": [Function],
     "to_label": [Function],
@@ -15063,12 +15059,11 @@ exports[`木星 dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": -1788480,
       "next_at": 1788480,
       "now_idx": 0,
-      "write_at": 0,
-      "zero": -1788480,
     },
     "to_idx": [Function],
     "to_label": [Function],
@@ -18544,12 +18539,11 @@ exports[`火星 dic 1`] = `
     "regex": "([\\d.]+)",
     "regex_o": "",
     "rubys": [],
-    "tempo": Tempo {
+    "tempo": {
+      "is_cover": [Function],
       "last_at": -1848750.7291666667,
       "next_at": 1848750.7291666667,
       "now_idx": 0,
-      "write_at": 0,
-      "zero": -1848750.7291666667,
     },
     "to_idx": [Function],
     "to_label": [Function],

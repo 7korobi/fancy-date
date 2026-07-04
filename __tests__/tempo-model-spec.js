@@ -2,14 +2,23 @@ require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { to_tempo_bare, to_tempo_by } = require('../lib/time')
 const { to_tempo_by_solor, solar_terms } = require('../lib/phenomena/solar')
+const { lunisolar } = require('../lib/phenomena/lunisolar')
+const { mod } = require('../lib/number')
 const {
   FixedTempoRule,
   TableTempoRule,
   SubdivideTempoRule,
+  FloorTempoRule,
+  CyclicDayTempoRule,
   MeanLunarPhaseTempoRule,
+  MeanLunisolarMonthRule,
   SolarDayHourTempoRule,
   OrbitalPhaseTempoRule,
   ObservedLunisolarMonthRule,
+  ObservedLunisolarYearRule,
+  EraAdjustedTempoRule,
+  TempoView,
+  envelope_of,
   to_tempo_like,
 } = require('../lib/tempo-model')
 
@@ -206,11 +215,11 @@ describe('tempo-model', () => {
       }
     })
 
-    // 実コードでは月の遷移は succ()/back() ではなく毎回 to_tempos() の
-    // 再解決で行われている(Nn.succ() 等の呼び出しは存在しない)。
-    // そのため slide() には比較対象の既存式がなく、ここでは
-    // 自己整合性(now_idx がちょうど amount 分進むこと、応じて
-    // 時間軸上も進むこと)を確認する。
+    // この規則自体(生の朔望月境界)は succ()/back() 経由で直接使われない。
+    // ただしこれを包む MeanLunisolarMonthRule(下記)は、to_table() の
+    // yeary_table() 経由で実際に succ() が呼ばれる(旧実装ではこれが
+    // 原因で月の重複が発生していた)。ここでは自己整合性(now_idx が
+    // ちょうど amount 分進むこと、応じて時間軸上も進むこと)を確認する。
     test('slide() advances now_idx by amount and stays chronologically consistent', () => {
       const base = rule.at(moonZero + 12345)
       for (const amount of [1, 1, 1, -1, -1, 6, -9, 2]) {
@@ -224,6 +233,219 @@ describe('tempo-model', () => {
         }
         // at() で同じ now_idx を素直に再解決した場合と一致する(経路非依存)。
         const direct = rule.at(next.last_at + 1)
+        expect(direct).toEqual(next)
+      }
+    })
+  })
+
+  describe('MeanLunisolarMonthRule', () => {
+    // 平気法(観測太陰太陽暦を使わない平均月暦、hasSolarEvents(sunny)=false)。
+    // 既存 to_tempos() の resolve_season(等角/SubdivideTempoRule)と
+    // 同じものを組み立てて注入する。
+    const g = Calendar.平気法
+    const seasonRule = new SubdivideTempoRule(g.calc.msec.season)
+    const seedZz = TempoView.at(new FixedTempoRule(g.calc.msec.year, g.calc.zero.season), {
+      write_at: Date.UTC(1980, 0, 1),
+    })
+    const ZzEnvelope = envelope_of(seedZz)
+    const resolveSeason = (at) => TempoView.at(seasonRule, { write_at: at, parent: ZzEnvelope })
+    const rule = new MeanLunisolarMonthRule(
+      g.calc.msec.moon,
+      g.calc.zero.moon,
+      g.calc.msec.day,
+      g.calc.zero.day,
+      g.dic.Z.length,
+      resolveSeason,
+    )
+
+    function monthEnvelopeOf(m) {
+      return { now_idx: m.now_idx, last_at: m.last_at, next_at: m.next_at, is_leap: !!m.is_leap }
+    }
+
+    // 既存 to_tempos().M(この規則を配線した後の実際の値)と、閏月を含む
+    // 多年にわたって完全一致することを確認する(規則単体で組み立てた
+    // resolveSeason が、実際の配線と同じ結果になることの確認でもある)。
+    test('at() matches to_tempos().M across many months (including leap months)', () => {
+      let cursor = Date.UTC(1980, 0, 1)
+      const end = Date.UTC(2020, 0, 1)
+      let compared = 0
+      let leapSeen = 0
+      while (cursor < end) {
+        const M = g.to_tempos(cursor).M
+        expect(monthEnvelopeOf(rule.at(cursor))).toEqual(monthEnvelopeOf(M))
+        if (M.is_leap) leapSeen++
+        compared++
+        cursor = M.next_at
+      }
+      expect(compared).toBeGreaterThan(400)
+      expect(leapSeen).toBeGreaterThan(10)
+    })
+
+    // 旧実装(素の Tempo に now_idx を上書き)では、succ() が
+    // Tempo.slide() の「今の月の実サイズを固定長とみなして write_at + n*size
+    // で進める」式を使っており、朔望月の実サイズが月ごとに変動するせいで
+    // 稀に「次の月の途中」までしか進まず、同じ月が2回連続することがあった
+    // (to_table() の yeary_table()/monthry_table() で実際に確認された不具合)。
+    // この規則は now_idx を使わず last_at 基準+moonMsec 定数ステップで
+    // slide() するため、この不具合を起こさないことを確認する。
+    test('slide() via succ() never repeats the same month (regression for the yeary_table duplicate bug)', () => {
+      let current = TempoView.at(rule, { write_at: Date.UTC(1980, 0, 1) })
+      let prevKey = null
+      for (let i = 0; i < 300; i++) {
+        const key = `${current.last_at}_${current.now_idx}_${current.is_leap}`
+        expect(key).not.toBe(prevKey)
+        prevKey = key
+        current = current.succ()
+      }
+    })
+
+    // succ() で進めた分だけ back() すれば経路非依存でちょうど元に戻ること、
+    // また succ() の連鎖が隙間なく(last_at が直前の next_at と一致)
+    // 繋がっていることを確認する。
+    test('slide() chains gaplessly and succ()/back() are inverses', () => {
+      const base = TempoView.at(rule, { write_at: Date.UTC(1980, 0, 1) })
+      let cursor = base
+      for (let i = 0; i < 40; i++) {
+        const next = cursor.succ()
+        expect(next.last_at).toBe(cursor.next_at)
+        cursor = next
+      }
+      let back = cursor
+      for (let i = 0; i < 40; i++) back = back.back()
+      expect(back.now_idx).toBe(base.now_idx)
+      expect(back.last_at).toBe(base.last_at)
+    })
+  })
+
+  describe('FloorTempoRule', () => {
+    // Romulus は SeasonTable(is_table_month のみ)。既存 to_tempos() の
+    // u = to_tempo_bare(msec.year, zero.spring, utc).floor(msec.day, zero.day)
+    // と同じ、切り詰め1段のケース。
+    const rg = Calendar.Romulus
+    const yearMsec = rg.calc.msec.year
+    const springZero = rg.calc.zero.spring
+    const rgDaySize = rg.calc.msec.day
+    const rgDayZero = rg.calc.zero.day
+    const singleRule = new FloorTempoRule(yearMsec, springZero, [{ size: rgDaySize, zero: rgDayZero }])
+
+    test('at() matches to_tempo_bare(year).floor(day) (single floor step)', () => {
+      const start = springZero - 5 * yearMsec
+      for (let i = 0; i < 60; i++) {
+        const write_at = start + i * yearMsec * 0.37
+        const expected = envelopeOf(
+          to_tempo_bare(yearMsec, springZero, write_at).floor(rgDaySize, rgDayZero),
+        )
+        expect(singleRule.at(write_at)).toEqual(expected)
+      }
+    })
+
+    // 平気法(観測太陰太陽暦を使わない平均月暦)は SolarLunar かつ非観測。既存
+    // to_tempos() の
+    // u = to_tempo_bare(msec.year, zero.season+msec.season, utc)
+    //       .floor(moon_msec, zero.moon)
+    //       .floor(msec.day, zero.day)
+    // と同じ、切り詰め2段のケース。
+    const heiki = Calendar.平気法
+    const seasonZero = heiki.calc.zero.season + heiki.calc.msec.season
+    const moonMsec = heiki.calc.msec.moon
+    const moonZero = heiki.calc.zero.moon
+    const heikiDaySize = heiki.calc.msec.day
+    const heikiDayZero = heiki.calc.zero.day
+    const doubleRule = new FloorTempoRule(yearMsec, seasonZero, [
+      { size: moonMsec, zero: moonZero },
+      { size: heikiDaySize, zero: heikiDayZero },
+    ])
+
+    test('at() matches to_tempo_bare(year).floor(moon).floor(day) (two chained floor steps)', () => {
+      const start = seasonZero - 5 * yearMsec
+      for (let i = 0; i < 60; i++) {
+        const write_at = start + i * yearMsec * 0.41
+        const expected = envelopeOf(
+          to_tempo_bare(yearMsec, seasonZero, write_at)
+            .floor(moonMsec, moonZero)
+            .floor(heikiDaySize, heikiDayZero),
+        )
+        expect(doubleRule.at(write_at)).toEqual(expected)
+      }
+    })
+
+    // 実コードでは year(u)の遷移も succ()/back() ではなく毎回 to_tempos() の
+    // 再解決で行われている。find({step:'u'}) 経由で外部から呼ばれる可能性は
+    // ゼロではないため、MeanLunarPhaseTempoRule と同様に自己整合性を確認する。
+    //
+    // 検証点は next の「境界ちょうど」ではなく中央付近を使う。floor() の
+    // 入れ子境界(この場合は月境界)ちょうど・その近辺で問い合わせると、
+    // 「どちらの月に属するか」の判定が既存の Tempo.floor() 自身でも
+    // 際どくなる(境界1ms後だけを問い合わせても、月境界との位置関係次第で
+    // 既存 to_tempo_bare().floor().floor() 自身の結果も変わりうることを
+    // 実測で確認した)。これは FloorTempoRule 固有の不整合ではなく、
+    // 入れ子の floor が持つ既存の性質なので、中央付近という
+    // 曖昧さの少ない点で比較する。
+    test('slide() advances now_idx by amount and stays chronologically consistent', () => {
+      const base = doubleRule.at(seasonZero + 54321)
+      for (const amount of [1, 1, 1, -1, -1, 4, -7, 2]) {
+        const next = doubleRule.slide(base, amount)
+        expect(next.now_idx).toBe(base.now_idx + amount)
+        expect(next.last_at < next.next_at).toBe(true)
+        const middle = next.last_at + (next.next_at - next.last_at) / 2
+        const direct = doubleRule.at(middle)
+        expect(direct).toEqual(next)
+      }
+    })
+  })
+
+  describe('CyclicDayTempoRule', () => {
+    // 既存 to_tempos() の「日不断」トークン(干支日 A/十二直 B/十干日 C/
+    // 曜日 E/宿 V 等)が
+    // `const A = to_tempo_bare(dayMsec, zero, utc); A.now_idx = mod(A.now_idx, length)`
+    // のように、いったん生の now_idx を作ってから mod で包み直しているのと
+    // 同じ計算になることを確認する。
+    const g = Calendar.Gregorian
+    const dayMsec = g.calc.msec.day
+
+    test('at() matches to_tempo_bare(day).now_idx = mod(now_idx, length) across period boundaries', () => {
+      const zero = g.calc.zero.day60
+      const length = g.dic.A.length
+      const rule = new CyclicDayTempoRule(dayMsec, zero, length)
+      const start = zero - dayMsec * 500
+      for (let i = 0; i < 200; i++) {
+        const write_at = start + i * dayMsec * 3.7
+        const expected = to_tempo_bare(dayMsec, zero, write_at)
+        const actual = rule.at(write_at)
+        expect(actual.now_idx).toBe(mod(expected.now_idx, length))
+        expect(actual.last_at).toBe(expected.last_at)
+        expect(actual.next_at).toBe(expected.next_at)
+      }
+    })
+
+    // TableTempoRule は now_idx 自体が周期をまたいで増え続ける値であることを
+    // 前提にしている(年の閏年テーブルなど)ため、この用途にそのまま使うと
+    // 周期をまたいだ瞬間に now_idx が table_idx*length 分だけずれてしまう
+    // ことを確認しておく(CyclicDayTempoRule が別に必要な理由)。
+    test('TableTempoRule (uniform table) does NOT give a wrapped now_idx across period boundaries', () => {
+      const zero = g.calc.zero.day60
+      const length = g.dic.A.length
+      const table = []
+      for (let i = 1; i <= length; i++) table.push(i * dayMsec)
+      const tableRule = new TableTempoRule(table, zero)
+      const write_at = zero + dayMsec * (length * 9 + 3) // 9周期先(table_idx=9)
+      const expected = to_tempo_bare(dayMsec, zero, write_at)
+      const viaTable = tableRule.at(write_at)
+      expect(viaTable.now_idx).not.toBe(mod(expected.now_idx, length))
+      expect(viaTable.now_idx).toBe(expected.now_idx) // table_idx を畳まず生のnow_idxを返す
+    })
+
+    test('slide() wraps now_idx modulo length and stays path independent', () => {
+      const zero = g.calc.zero.day60
+      const length = g.dic.A.length
+      const rule = new CyclicDayTempoRule(dayMsec, zero, length)
+      const base = rule.at(zero + dayMsec * 54.5)
+      for (const amount of [1, 1, 1, -1, 12, -13, 24, -25]) {
+        const next = rule.slide(base, amount)
+        expect(next.now_idx).toBe(mod(base.now_idx + amount, length))
+        expect(next.last_at < next.next_at).toBe(true)
+        const middle = next.last_at + (next.next_at - next.last_at) / 2
+        const direct = rule.at(middle)
         expect(direct).toEqual(next)
       }
     })
@@ -307,13 +529,15 @@ describe('tempo-model', () => {
       }
     })
 
-    // now_idx は周期ステップを連続で数えるカウンタ。既存に直接の対応先がないため、
-    // 自己整合性(now_idx が amount 分進むこと、経路非依存)を確認する。
-    test('slide() advances now_idx by amount and is path independent', () => {
+    // now_idx は境界探索で確定した「基準位相からの区間番号」で、0..divisions-1 に
+    // mod 済み(ラベル参照が mod なしで list[now_idx] を引くための整合)。
+    // 自己整合性(now_idx が amount 分進んだ上で mod divisions されること、経路非依存)を確認する。
+    test('slide() advances now_idx by amount modulo divisions and is path independent', () => {
+      const divisions = g.dic.Z.length
       const base = rule.at(Date.UTC(2024, 5, 1))
       for (const amount of [1, 1, 1, -1, 12, -13, 24, -25]) {
         const next = rule.slide(base, amount)
-        expect(next.now_idx).toBe(base.now_idx + amount)
+        expect(next.now_idx).toBe(mod(base.now_idx + amount, divisions))
         expect(next.last_at < next.next_at).toBe(true)
         const direct = rule.at(next.last_at + 1)
         expect(direct).toEqual(next)
@@ -324,7 +548,9 @@ describe('tempo-model', () => {
 
 describe('ObservedLunisolarMonthRule', () => {
   // 定気法は usesObservedLunisolar=true(hasSolarEvents(sunny) && hasLunarEvents(moony))なので
-  // 実際の lunisolar() 経路を通る。
+  // 実際の lunisolar() 経路を通る。resolveMonth はコールバック注入(fancy-date.ts
+  // 側では FancyDate.lunisolar() というキャッシュ付き版を注入するが、ここでは
+  // 生の lunisolar(options, at) を直接注入して規則単体の正しさを検証する。
   const g = Calendar.定気法
   const options = {
     moony: g.dic.moony,
@@ -334,7 +560,7 @@ describe('ObservedLunisolarMonthRule', () => {
     lunarPhase: (phase, near) => g.lunar_phase(phase, near),
     solarPhase: (phase, near) => g.solar_phase(phase, near),
   }
-  const rule = new ObservedLunisolarMonthRule(options)
+  const rule = new ObservedLunisolarMonthRule((at) => lunisolar(options, at), g.calc.msec.moon)
 
   function monthEnvelopeOf(m) {
     return { now_idx: m.now_idx, last_at: m.last_at, next_at: m.next_at, is_leap: !!m.is_leap }
@@ -354,9 +580,13 @@ describe('ObservedLunisolarMonthRule', () => {
     expect(compared).toBeGreaterThan(400)
   })
 
-  // 実コードでも月の遷移は succ()/back() ではなく毎回 to_tempos() の再解決で行われているため、
-  // slide() には比較対象の既存式がない。閏月をまたぐ可能性のある13ヶ月連続で、
-  // 前後の月が隣接している(last_at/next_at が隣接し、隙間ができない)ことを確認する。
+  // 実コードでもこの規則を TempoView 配線したことで、月の遷移は succ()/back()
+  // (rule.slide() 経由)でも正しく動作するようになった(以前は素の Tempo に
+  // now_idx=月番号-1 を上書きしていたため、succ() が Tempo.slide() の非テーブル
+  // 分岐(今の月の実サイズを固定長とみなす式)を使い、年境界でリセットされる
+  // べき now_idx が単純に+1され続ける実バグがあった。詳細はクラス自身のdoc
+  // コメント参照)。閏月をまたぐ可能性のある13ヶ月連続で、前後の月が隣接している
+  // (last_at/next_at が隣接し、隙間ができない)ことを確認する。
   test('slide() advances/retreats to adjacent months with no gap, across a leap month', () => {
     const base = rule.at(Date.UTC(2020, 0, 1))
 
@@ -373,5 +603,128 @@ describe('ObservedLunisolarMonthRule', () => {
       expect(next.next_at).toBe(cursor.last_at)
       cursor = next
     }
+  })
+})
+
+describe('ObservedLunisolarYearRule', () => {
+  // 定気法は usesObservedLunisolar=true なので実際の lunisolar() 経路を通る。
+  const g = Calendar.定気法
+  const rule = new ObservedLunisolarYearRule((at) => g.lunisolar(at))
+
+  // lunisolar() 自身が返す year/year_start_at/next_year_start_at と
+  // 直接一致することを確認する(この規則は lunisolar() の結果を年の
+  // envelope として切り出すだけで、探索自体は再実装しない)。
+  test('at() matches lunisolar() year boundaries and year number across many years', () => {
+    let cursor = Date.UTC(2000, 0, 1)
+    const end = Date.UTC(2025, 0, 1)
+    let compared = 0
+    while (cursor < end) {
+      const lunisolar = g.lunisolar(cursor)
+      const env = rule.at(cursor)
+      expect(env.now_idx).toBe(lunisolar.year)
+      expect(env.last_at).toBe(lunisolar.year_start_at)
+      expect(env.next_at).toBe(lunisolar.next_year_start_at)
+      compared++
+      cursor = lunisolar.next_year_start_at
+    }
+    expect(compared).toBeGreaterThan(20)
+  })
+
+  // 実コードでも年の遷移は succ()/back() ではなく毎回 to_tempos() の再解決で
+  // 行われているため、slide() には比較対象の既存式がない。隣接する年が
+  // 隙間なく(last_at/next_at が隣接)繋がることを確認する。
+  test('slide() advances/retreats to adjacent years with no gap', () => {
+    const base = rule.at(Date.UTC(2020, 0, 1))
+
+    let cursor = base
+    for (let i = 0; i < 10; i++) {
+      const next = rule.slide(cursor, 1)
+      expect(next.last_at).toBe(cursor.next_at)
+      cursor = next
+    }
+
+    cursor = base
+    for (let i = 0; i < 10; i++) {
+      const next = rule.slide(cursor, -1)
+      expect(next.next_at).toBe(cursor.last_at)
+      cursor = next
+    }
+  })
+})
+
+describe('EraAdjustedTempoRule', () => {
+  // 平気法(平均太陰太陽暦、FloorTempoRule内包)。既存 to_tempos() の
+  // u(else分岐)と同じ内側規則を組み立てて注入する。定気法(観測太陰太陽暦)の
+  // lunisolar() は実天文計算で重いため、規則単体の反復テストは平気法を
+  // 主に使う(実際の元号テーブル(北朝元号)自体は両暦共通で、延文/康安/
+  // 明治/平成/令和などの実在する改元を全て含む)。
+  function heikiInnerRule(g) {
+    return new FloorTempoRule(g.calc.msec.year, g.calc.zero.season + g.calc.msec.season, [
+      { size: g.calc.msec.moon, zero: g.calc.zero.moon },
+      { size: g.calc.msec.day, zero: g.calc.zero.day },
+    ])
+  }
+  function buildRule(g, innerRule) {
+    return new EraAdjustedTempoRule(innerRule, g.calc.msec.year, g.table.msec.era, g.calc.zero.era, g.calc.eras)
+  }
+
+  const g = Calendar.平気法
+  const rule = buildRule(g, heikiInnerRule(g))
+
+  // 既存 to_tempos().u(この規則を配線した後の実際の値)と、昭和→平成→令和の
+  // 実在する改元を含む範囲で完全一致することを確認する。
+  test('at() matches to_tempos().u across modern era transitions (昭和→平成→令和)', () => {
+    let cursor = Date.UTC(1980, 0, 1)
+    const end = Date.UTC(2025, 0, 1)
+    let compared = 0
+    while (cursor < end) {
+      const u = g.to_tempos(cursor).u
+      const env = rule.at(cursor)
+      expect(env.now_idx).toBe(u.now_idx)
+      expect(env.last_at).toBe(u.last_at)
+      expect(env.next_at).toBe(u.next_at)
+      compared++
+      cursor = u.next_at
+    }
+    expect(compared).toBeGreaterThan(40)
+  })
+
+  // 延文→康安(1361-05-12、年の途中での改元)を succ() の連鎖で実際にまたぐ。
+  // 元号は年の境界とは無関係に切り替わるのが実際にはほぼ全て(定気法の
+  // 元号239件中239件が年途中)なので、境界ちょうどではなく実在する
+  // 改元をまたぐ連鎖で検証する。fresh な再導出は write_at 基準で行う
+  // (last_at 基準だと since を無視した誤った比較になる、というこの
+  // セッションで得た教訓)。
+  test('succ() chain matches fresh re-derivation across a real mid-year era transition (延文→康安, 1361-05-12)', () => {
+    let cursor = TempoView.at(rule, { write_at: Date.UTC(1355, 0, 1) })
+    for (let i = 0; i < 10; i++) {
+      const next = cursor.succ()
+      const fresh = rule.at(next.write_at)
+      expect(next.now_idx).toBe(fresh.now_idx)
+      expect(g.to_tempos(next.write_at).u.now_idx).toBe(next.now_idx)
+      cursor = next
+    }
+  })
+
+  // succ() で進めた分だけ back() すれば、改元をまたぐ場合も含めて経路非依存で
+  // ちょうど元に戻ることを確認する。
+  test('succ()/back() are inverses across a real era transition', () => {
+    const base = TempoView.at(rule, { write_at: Date.UTC(1355, 0, 1) })
+    let cursor = base
+    for (let i = 0; i < 10; i++) cursor = cursor.succ()
+    for (let i = 0; i < 10; i++) cursor = cursor.back()
+    expect(cursor.now_idx).toBe(base.now_idx)
+    expect(cursor.last_at).toBe(base.last_at)
+  })
+
+  // def_eras() 自身が table.msec.era を構築する最中(まだ undefined)に
+  // this.to_tempos() を呼ぶため、この規則もその状態で呼ばれうる
+  // (with_era() 側の対応する防御コメント参照)。eraTable 未設定時は
+  // 元号調整前の raw な値をそのまま返すことを確認する。
+  test('with_era() bootstrapping guard returns the raw (era-unadjusted) envelope when eraTable is not yet available', () => {
+    const inner = heikiInnerRule(g)
+    const bootstrapping = new EraAdjustedTempoRule(inner, g.calc.msec.year, undefined, g.calc.zero.era, g.calc.eras)
+    const utc = Date.UTC(2020, 0, 1)
+    expect(bootstrapping.at(utc, { write_at: utc })).toEqual(inner.at(utc))
   })
 })

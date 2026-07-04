@@ -1,8 +1,7 @@
 import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
-import type { TempoLike } from './tempo-model';
-import { Tempo } from './time';
+import type { TempoLabelLike, TempoLike } from './tempo-model';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
 export { MarsSolarOrbital } from './nasa';
@@ -34,8 +33,17 @@ export type Precision = CorePrecision | Token;
 export type SpanLabels = Partial<Record<Token, string>>;
 export type SpanDirection = '前' | '後';
 export type FindOrder = 1 | -1;
+/**
+ * SteppableTempoKey: Tempos の中で succ()/back() 等の遷移操作を実際に
+ * 持つフィールドのキーだけを絞り込んだ型。Y/a/b/c/f/Q は TempoLabelLike
+ * (遷移操作を持たない)なのでここに含まれない
+ * (find() の options.step を誤って周期ラベル側へ向けるのを型で防ぐ)。
+ */
+export type SteppableTempoKey = {
+    [K in keyof Tempos]: Tempos[K] extends TempoLike | undefined ? K : never;
+}[keyof Tempos];
 export type FindOptions = {
-    step?: keyof Tempos;
+    step?: SteppableTempoKey;
     order?: FindOrder;
     limit?: number;
 };
@@ -64,29 +72,29 @@ export type Tempos = {
     B: TempoLike;
     C: TempoLike;
     D: TempoLike;
-    E: TempoLike;
+    E: TempoLike | TempoLabelLike;
     F: TempoLike;
-    G: TempoLike;
+    G: TempoLike | TempoLabelLike;
     H: TempoLike;
     J: TempoLike;
     M: TempoLike & TempoMonth;
     N: TempoLike | undefined;
-    Q: TempoLike;
+    Q: TempoLabelLike;
     S: TempoLike;
-    V: TempoLike;
-    Y: TempoLike;
+    V: TempoLike | TempoLabelLike;
+    Y: TempoLabelLike;
     Z: TempoLike;
-    a: TempoLike;
-    b: TempoLike;
-    c: TempoLike;
+    a: TempoLabelLike;
+    b: TempoLabelLike;
+    c: TempoLabelLike;
     d: TempoLike;
-    f: TempoLike;
+    f: TempoLabelLike;
     m: TempoLike;
     p: TempoLike | undefined;
     s: TempoLike;
     u: TempoLike;
     w: TempoLike;
-    x: TempoLike | undefined;
+    x: TempoLabelLike | undefined;
     y: TempoLike;
 };
 type DateLike = number | Tempos | string;
@@ -139,7 +147,7 @@ type LabelFactory = (list: readonly string[] | null, val: TempoLike & {
 }, size: number) => string;
 type IndexerProps = [] | [number] | readonly [readonly string[], readonly string[] | null] | readonly [readonly string[], readonly string[] | null, string | readonly string[]];
 declare class Indexer {
-    tempo?: Tempo;
+    tempo?: TempoLabelLike;
     list: readonly string[];
     rubys: readonly string[];
     relatives?: string | readonly string[];
@@ -177,7 +185,7 @@ export declare class FancyDate {
     };
     private _orbital_season_rule?;
     private _solar_hour_rule?;
-    private _lunisolar_cache?;
+    private readonly _lunisolar_cache;
     constructor(o?: FancyDate);
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;
@@ -198,24 +206,24 @@ export declare class FancyDate {
     solar_phase(phase: number, near: number): number;
     lunar_phase(phase: number, near: number): number;
     lunisolar(utc: number): LunisolarDate;
-    solar_term(utc: number, phase: number): Tempo;
+    solar_term(utc: number, phase: number): import("./time").Tempo;
     solar_phase_before(phase: number, utc: number): number;
     solar_terms(utc: number): {
-        立春: Tempo;
-        入梅: Tempo;
-        春分: Tempo;
-        半夏生: Tempo;
-        夏土用: Tempo;
-        立夏: Tempo;
-        夏至: Tempo;
-        秋土用: Tempo;
-        立秋: Tempo;
-        秋分: Tempo;
-        冬土用: Tempo;
-        立冬: Tempo;
-        冬至: Tempo;
-        春土用: Tempo;
-        次立春: Tempo;
+        立春: import("./time").Tempo;
+        入梅: import("./time").Tempo;
+        春分: import("./time").Tempo;
+        半夏生: import("./time").Tempo;
+        夏土用: import("./time").Tempo;
+        立夏: import("./time").Tempo;
+        夏至: import("./time").Tempo;
+        秋土用: import("./time").Tempo;
+        立秋: import("./time").Tempo;
+        秋分: import("./time").Tempo;
+        冬土用: import("./time").Tempo;
+        立冬: import("./time").Tempo;
+        冬至: import("./time").Tempo;
+        春土用: import("./time").Tempo;
+        次立春: import("./time").Tempo;
     };
     succ(utc: DateLike, diff: SpanLike): number;
     back(utc: DateLike, diff: SpanLike): number;
@@ -297,10 +305,10 @@ export declare class FancyDate {
         is_legal_eto: boolean;
         is_legal_ETO: boolean;
     };
-    noon(utc: any, day?: Tempo): {
+    noon(utc: any, day?: import("./time").Tempo): {
         center_at: number;
-        T0: Tempo;
-        T1: Tempo;
+        T0: import("./time").Tempo;
+        T1: import("./time").Tempo;
         季節: number;
         南中差分: number;
         南中時刻: number;
@@ -315,8 +323,8 @@ export declare class FancyDate {
     };
     solor(utc: any, idx?: number, solarNoon?: {
         center_at: number;
-        T0: Tempo;
-        T1: Tempo;
+        T0: import("./time").Tempo;
+        T1: import("./time").Tempo;
         季節: number;
         南中差分: number;
         南中時刻: number;
@@ -339,7 +347,7 @@ export declare class FancyDate {
         南中時刻: number;
         日の入: number;
     };
-    lunar(utc: any, day?: Tempo): import("./orbital-model").LunarObservation;
+    lunar(utc: any, day?: import("./time").Tempo): import("./orbital-model").LunarObservation;
     lunar_apsis(kind: LunarApsisKind, near: number): import("./orbital-model").LunarApsis;
     lunar_node(kind: LunarNodeKind, near: number): import("./orbital-model").LunarNode;
     節句(_utc: number, _tempos?: Tempos): {
@@ -368,70 +376,70 @@ export declare class FancyDate {
         };
     };
     雑節(utc: number, { Zz, d }?: Tempos): {
-        立春: Tempo;
-        立夏: Tempo;
-        立秋: Tempo;
-        立冬: Tempo;
-        冬至: Tempo;
-        春分: Tempo;
-        夏至: Tempo;
-        秋分: Tempo;
-        入梅: Tempo;
-        半夏生: Tempo;
-        春: Tempo;
-        夏: Tempo;
-        秋: Tempo;
-        冬: Tempo;
-        春社日: Tempo;
-        秋社日: Tempo;
-        春土用: Tempo;
-        夏土用: Tempo;
-        秋土用: Tempo;
-        冬土用: Tempo;
-        春節分: Tempo;
-        夏節分: Tempo;
-        秋節分: Tempo;
-        冬節分: Tempo;
-        節分: Tempo;
-        春彼岸: Tempo;
-        秋彼岸: Tempo;
-        八十八夜: Tempo;
-        二百十日: Tempo;
-        二百二十日: Tempo;
+        立春: import("./time").Tempo;
+        立夏: import("./time").Tempo;
+        立秋: import("./time").Tempo;
+        立冬: import("./time").Tempo;
+        冬至: import("./time").Tempo;
+        春分: import("./time").Tempo;
+        夏至: import("./time").Tempo;
+        秋分: import("./time").Tempo;
+        入梅: import("./time").Tempo;
+        半夏生: import("./time").Tempo;
+        春: import("./time").Tempo;
+        夏: import("./time").Tempo;
+        秋: import("./time").Tempo;
+        冬: import("./time").Tempo;
+        春社日: import("./time").Tempo;
+        秋社日: import("./time").Tempo;
+        春土用: import("./time").Tempo;
+        夏土用: import("./time").Tempo;
+        秋土用: import("./time").Tempo;
+        冬土用: import("./time").Tempo;
+        春節分: import("./time").Tempo;
+        夏節分: import("./time").Tempo;
+        秋節分: import("./time").Tempo;
+        冬節分: import("./time").Tempo;
+        節分: import("./time").Tempo;
+        春彼岸: import("./time").Tempo;
+        秋彼岸: import("./time").Tempo;
+        八十八夜: import("./time").Tempo;
+        二百十日: import("./time").Tempo;
+        二百二十日: import("./time").Tempo;
     };
     雑節_by_phase(utc: number): {
-        立春: Tempo;
-        立夏: Tempo;
-        立秋: Tempo;
-        立冬: Tempo;
-        冬至: Tempo;
-        春分: Tempo;
-        夏至: Tempo;
-        秋分: Tempo;
-        入梅: Tempo;
-        半夏生: Tempo;
-        春: Tempo;
-        夏: Tempo;
-        秋: Tempo;
-        冬: Tempo;
-        春社日: Tempo;
-        秋社日: Tempo;
-        春土用: Tempo;
-        夏土用: Tempo;
-        秋土用: Tempo;
-        冬土用: Tempo;
-        春節分: Tempo;
-        夏節分: Tempo;
-        秋節分: Tempo;
-        冬節分: Tempo;
-        節分: Tempo;
-        春彼岸: Tempo;
-        秋彼岸: Tempo;
-        八十八夜: Tempo;
-        二百十日: Tempo;
-        二百二十日: Tempo;
+        立春: import("./time").Tempo;
+        立夏: import("./time").Tempo;
+        立秋: import("./time").Tempo;
+        立冬: import("./time").Tempo;
+        冬至: import("./time").Tempo;
+        春分: import("./time").Tempo;
+        夏至: import("./time").Tempo;
+        秋分: import("./time").Tempo;
+        入梅: import("./time").Tempo;
+        半夏生: import("./time").Tempo;
+        春: import("./time").Tempo;
+        夏: import("./time").Tempo;
+        秋: import("./time").Tempo;
+        冬: import("./time").Tempo;
+        春社日: import("./time").Tempo;
+        秋社日: import("./time").Tempo;
+        春土用: import("./time").Tempo;
+        夏土用: import("./time").Tempo;
+        秋土用: import("./time").Tempo;
+        冬土用: import("./time").Tempo;
+        春節分: import("./time").Tempo;
+        夏節分: import("./time").Tempo;
+        秋節分: import("./time").Tempo;
+        冬節分: import("./time").Tempo;
+        節分: import("./time").Tempo;
+        春彼岸: import("./time").Tempo;
+        秋彼岸: import("./time").Tempo;
+        八十八夜: import("./time").Tempo;
+        二百十日: import("./time").Tempo;
+        二百二十日: import("./time").Tempo;
     };
-    to_tempo_by_solor(utc: number, day: any): Tempo;
+    to_tempo_by_solor(utc: number, day: any): import("./time").Tempo;
     /**
      * 実軌道(sunny.timeOfPhase)による二十四節気の解決(定気法)。
      * calc.idx.Z = dic.Z.length/8 という既存の zero 設計により、
@@ -440,17 +448,10 @@ export declare class FancyDate {
      * 実軌道版でも等角版と同じ now_idx 番号(=同じラベル)を維持できる
      * (実測で検証済み: 立春/立夏/夏至/立秋/秋分/立冬/冬至/次立春が一致)。
      *
-     * ラベル参照(def_to_label の at())は now_idx をそのまま配列添字に使う
-     * (mod を取らない)ため、0..length-1 に収まっている必要がある。
-     * OrbitalPhaseTempoRule.at() が返す now_idx は sunny.epochMsec からの
-     * 連番でありこの並びとは基準が異なる(epochMsec の位相が0とは限らない)ため、
-     * ここでは last_at の時点の位相(sunny.phaseAt)から直接 idx を再計算する。
-     *
-     * TempoView へ載せない理由: 補正後の now_idx/zero は
-     * OrbitalPhaseTempoRule.slide() 自身の基準(sunny.epochMsec 起点の連番)とは
-     * 一致しないため、この補正済み envelope を rule.slide() にそのまま渡すと
-     * 誤った遷移になる。succ()/back() が呼ばれる想定もないため、素の Tempo の
-     * ままにしておく。
+     * OrbitalPhaseTempoRule.at() は境界探索で確定した idx(0..length-1 に
+     * 収まるラベル整合な値)をそのまま now_idx として返すため、ここでの
+     * 再計算は不要で、TempoView.at() でそのまま包める
+     * (以前はここで now_idx を都度再計算し、素の Tempo にしていた)。
      */
     private resolve_orbital_season;
     /**
@@ -463,43 +464,47 @@ export declare class FancyDate {
     private orbital_season_rule;
     /**
      * H(不定時法)で使う SolarDayHourTempoRule を使い回す(D: TempoEnvelope
-     * キャッシュ)。この規則自身が直近1日分の時刻テーブルを内部キャッシュ
-     * するため(SolarDayHourTempoRule.hour_table_cached 参照)、インスタンスを
-     * 使い回すことで初めてそのキャッシュが効く。CachedTempoRule でも包み、
-     * 同じ時刻(1時間内)への再問い合わせもテーブル参照だけで済ませる。
+     * キャッシュ)。この規則自身は日単位の時刻テーブルを内部キャッシュしない
+     * (noon() の均時差相当の補正が write_at そのものに依存し、同日内でも
+     * 時刻によって最大13秒程度ずれるため、日単位キャッシュは不採用。
+     * SolarDayHourTempoRule 自身のdocコメント参照)。ただし同じ日の中で
+     * slide()(succ()/back())するだけなら、envelope.table(直前に解決した
+     * その日のテーブル)をそのまま使い回して再計算を避ける。CachedTempoRule
+     * でも包むことで、同じ時刻(1時間内)への再問い合わせを at() レベルで
+     * テーブル再構築ごと省略できる。
      */
     private solar_hour_rule;
     note(utc: number, tempos?: Tempos, arg1?: {
-        立春: Tempo;
-        立夏: Tempo;
-        立秋: Tempo;
-        立冬: Tempo;
-        冬至: Tempo;
-        春分: Tempo;
-        夏至: Tempo;
-        秋分: Tempo;
-        入梅: Tempo;
-        半夏生: Tempo;
-        春: Tempo;
-        夏: Tempo;
-        秋: Tempo;
-        冬: Tempo;
-        春社日: Tempo;
-        秋社日: Tempo;
-        春土用: Tempo;
-        夏土用: Tempo;
-        秋土用: Tempo;
-        冬土用: Tempo;
-        春節分: Tempo;
-        夏節分: Tempo;
-        秋節分: Tempo;
-        冬節分: Tempo;
-        節分: Tempo;
-        春彼岸: Tempo;
-        秋彼岸: Tempo;
-        八十八夜: Tempo;
-        二百十日: Tempo;
-        二百二十日: Tempo;
+        立春: import("./time").Tempo;
+        立夏: import("./time").Tempo;
+        立秋: import("./time").Tempo;
+        立冬: import("./time").Tempo;
+        冬至: import("./time").Tempo;
+        春分: import("./time").Tempo;
+        夏至: import("./time").Tempo;
+        秋分: import("./time").Tempo;
+        入梅: import("./time").Tempo;
+        半夏生: import("./time").Tempo;
+        春: import("./time").Tempo;
+        夏: import("./time").Tempo;
+        秋: import("./time").Tempo;
+        冬: import("./time").Tempo;
+        春社日: import("./time").Tempo;
+        秋社日: import("./time").Tempo;
+        春土用: import("./time").Tempo;
+        夏土用: import("./time").Tempo;
+        秋土用: import("./time").Tempo;
+        冬土用: import("./time").Tempo;
+        春節分: import("./time").Tempo;
+        夏節分: import("./time").Tempo;
+        秋節分: import("./time").Tempo;
+        冬節分: import("./time").Tempo;
+        節分: import("./time").Tempo;
+        春彼岸: import("./time").Tempo;
+        秋彼岸: import("./time").Tempo;
+        八十八夜: import("./time").Tempo;
+        二百十日: import("./time").Tempo;
+        二百二十日: import("./time").Tempo;
     }, arg2?: {
         カトリック: {
             万聖節: number[];
