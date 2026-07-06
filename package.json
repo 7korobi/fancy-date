@@ -1,6 +1,6 @@
 {
   "name": "fancy-date",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "架空の暦を扱う",
   "type": "commonjs",
   "main": "lib/index.js",
