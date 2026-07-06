@@ -352,9 +352,7 @@ export declare class FancyDate {
         is_legal_eto: boolean;
         is_legal_ETO: boolean;
     };
-    noon(utc: any, day?: Tempo<{
-        write_at: number;
-    }>): {
+    noon(utc: number, day?: TempoLike): {
         last_at: number;
         center_at: number;
         T0: Tempo<{
@@ -384,7 +382,7 @@ export declare class FancyDate {
         copy(): TempoLike;
         reset(now?: number): TempoLike;
     };
-    solor(utc: any, idx?: number, solarNoon?: {
+    solor(utc: number, idx?: number, solarNoon?: {
         last_at: number;
         center_at: number;
         T0: Tempo<{
@@ -423,10 +421,11 @@ export declare class FancyDate {
         日の出: number;
         南中時刻: number;
         日の入: number;
+        南中高度: number;
+        has_sunrise: boolean;
+        is_up_all_day: boolean;
     };
-    lunar(utc: any, day?: Tempo<{
-        write_at: number;
-    }>): import("./orbital-model").LunarObservation;
+    lunar(utc: number, day?: TempoLike): import("./orbital-model").LunarObservation;
     lunar_apsis(kind: LunarApsisKind, near: number): import("./orbital-model").LunarApsis;
     lunar_node(kind: LunarNodeKind, near: number): import("./orbital-model").LunarNode;
     節句(_utc: number, _tempos?: Tempos): {

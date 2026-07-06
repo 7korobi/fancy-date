@@ -341,6 +341,10 @@ export class EarthMoonOrbital implements LunarEventModel {
       月の出方位: (rise?.azimuthDeg ?? NaN) * DEG_TO_RAD,
       月の入方位: (set?.azimuthDeg ?? NaN) * DEG_TO_RAD,
       南中高度: (transitHorizontal?.altitudeDeg ?? NaN) * DEG_TO_RAD,
+      has_moonrise: !Number.isNaN(moonrise),
+      has_transit: !Number.isNaN(transit),
+      has_moonset: !Number.isNaN(moonset),
+      is_up_all_day: 0 <= (transitHorizontal?.altitudeDeg ?? -1),
     }
   }
 

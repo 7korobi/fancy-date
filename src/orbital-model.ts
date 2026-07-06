@@ -175,12 +175,23 @@ export type SolarObservation = {
   方向: number
   高度: number
   真夜中: number
+  /** 白夜・極夜(太陽がその暦日内で地平線を越えない)の場合は NaN。`has_sunrise` で判定できる。 */
   日の出: number
   南中時刻: number
+  /** 白夜・極夜の場合は NaN。`has_sunrise` で判定できる。 */
   日の入: number
+  /** 白夜・極夜の場合は NaN。`has_sunrise` で判定できる。 */
   日の出方位: number
+  /** 白夜・極夜の場合は NaN。`has_sunrise` で判定できる。 */
   日の入方位: number
   南中高度: number
+  /** 日の出/日の入/日の出方位/日の入方位 が有効な値かどうか(この4項目は同時にNaNになる)。 */
+  has_sunrise: boolean
+  /** `has_sunrise` が false のとき、白夜(終日太陽が沈まない)なら true、
+   * 極夜(終日太陽が昇らない)なら false。南中高度(その暦日で太陽が最も
+   * 高く昇る瞬間の高度)の符号から判定しており、`has_sunrise` が true の
+   * 通常の日でも(南中時は地平線より上にあるはずなので)true になる。 */
+  is_up_all_day: boolean
 }
 
 export type SolarEquatorialCoordinates = {
@@ -220,12 +231,31 @@ export type LunarObservationOptions = {
 }
 
 export type LunarObservation = {
+  /** 月の出の周期(約24時間50分)と暦日(24時間)のずれにより、この暦日に月の出が
+   * 一度も起きない日がある。その場合は NaN。`has_moonrise` で判定できる。 */
   月の出: number
+  /** 同様の理由で南中が一度も起きない日がある。その場合は NaN。`has_transit` で判定できる。 */
   南中時刻: number
+  /** 同様の理由で月の入が一度も起きない日がある。その場合は NaN。`has_moonset` で判定できる。 */
   月の入: number
+  /** 月の出がない日は NaN。`has_moonrise` で判定できる。 */
   月の出方位: number
+  /** 月の入がない日は NaN。`has_moonset` で判定できる。 */
   月の入方位: number
+  /** 南中がない日は NaN。`has_transit` で判定できる。 */
   南中高度: number
+  /** 月の出/月の出方位 が有効な値かどうか。月の出・南中・月の入は(太陽と異なり)
+   * それぞれ独立に暦日から外れうるため、個別のフラグを持つ。 */
+  has_moonrise: boolean
+  /** 南中時刻/南中高度 が有効な値かどうか。 */
+  has_transit: boolean
+  /** 月の入/月の入方位 が有効な値かどうか。 */
+  has_moonset: boolean
+  /** `has_moonrise` と `has_moonset` が両方 false のとき、月がその暦日ずっと
+   * 地平線の上にある(終日沈まない)なら true、ずっと下にある(終日昇らない)
+   * なら false。南中高度の符号から判定する。`has_transit` も false な
+   * (南中自体が暦日から外れる)極めて稀なケースでは判定できず false になる。 */
+  is_up_all_day: boolean
 }
 
 export type LunarEquatorialCoordinates = {

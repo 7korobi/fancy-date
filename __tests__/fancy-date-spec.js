@@ -167,6 +167,43 @@ describe('time duration', () => {
   })
 })
 
+describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
+  test('flags NaN fields instead of leaving callers to guess', () => {
+    // 定気法で実際に「月の出のない日」が観測された utc(元バグの再現条件)。
+    const utc = 1750152477303
+    const moon = Calendar.定気法.lunar(utc)
+    expect(moon.has_moonrise).toBe(false)
+    expect(Number.isNaN(moon.月の出)).toBe(true)
+    expect(Number.isNaN(moon.月の出方位)).toBe(true)
+    // 月の出がない日でも南中・月の入は独立に成立しうる。
+    expect(moon.has_transit).toBe(true)
+    expect(moon.has_moonset).toBe(true)
+    expect(Number.isNaN(moon.南中時刻)).toBe(false)
+    expect(Number.isNaN(moon.月の入)).toBe(false)
+
+    const solor = Calendar.定気法.solor(utc)
+    expect(solor.has_sunrise).toBe(true)
+    expect(Number.isNaN(solor.日の出)).toBe(false)
+  })
+
+  test('is_up_all_day distinguishes polar day from polar night when has_sunrise is false', () => {
+    // 北緯78度(スヴァールバル諸島相当)は夏至に白夜、冬至に極夜になる。
+    const arctic = g.dup().spot(月, 78, 15.6, 15).init()
+    const summer = arctic.solor(arctic.parse('2024年6月21日'))
+    const winter = arctic.solor(arctic.parse('2024年12月21日'))
+    expect(summer.has_sunrise).toBe(false)
+    expect(summer.is_up_all_day).toBe(true) // 白夜: 終日太陽が沈まない
+    expect(winter.has_sunrise).toBe(false)
+    expect(winter.is_up_all_day).toBe(false) // 極夜: 終日太陽が昇らない
+
+    // hasSolarEvents を持つ精密モデル(GregorianAstronomical)側でも同様に判定できる。
+    const arcticGa = ga.dup().spot(月, 78, 15.6, 15).init()
+    const summerGa = arcticGa.solor(arcticGa.parse('2024年6月21日'))
+    expect(summerGa.has_sunrise).toBe(false)
+    expect(summerGa.is_up_all_day).toBe(true)
+  })
+})
+
 describe('moon phase', () => {
   test('2019/12/26', () => {
     expect(g.format(1577310360000, 'N No Nr')).toEqual('0 朔 さく')
@@ -181,6 +218,28 @@ describe('Gregorio calculate', () => {
   test('data', () => {
     expect(g.calc.msec.period).toEqual(12622780800000)
     expect(g.table.msec.year.slice(-1)).toEqual([12622780800000])
+  })
+
+  test('rejects non-finite timestamps early', () => {
+    expect(() => g.to_tempos(NaN)).toThrow('invalid timestamp NaN')
+    expect(() => g.format(NaN, 'yyyy年MM月dd日')).toThrow('invalid timestamp NaN')
+    expect(() => g.to_tempos(Infinity)).toThrow('invalid timestamp Infinity')
+  })
+
+  test('solor/lunar/noon reject non-finite timestamps instead of returning NaN fields', () => {
+    expect(() => g.noon(NaN)).toThrow('invalid timestamp NaN')
+    expect(() => g.solor(NaN)).toThrow('invalid timestamp NaN')
+    expect(() => ga.lunar(NaN)).toThrow('invalid timestamp NaN')
+  })
+
+  test('find rejects NaN on either end of the range, even with a limit', () => {
+    const valid = g.parse('2020年1月1日')
+    expect(() => g.find([valid, NaN], [{ Ao: '甲子' }], { limit: 3 })).toThrow(/invalid range/)
+    expect(() => g.find([NaN, valid], [{ Ao: '甲子' }], { order: -1, limit: 3 })).toThrow(
+      /invalid range/,
+    )
+    // Infinity は無制限範囲の正規の用法なので引き続き許容する
+    expect(g.find([valid, Infinity], [{ Ao: '甲子' }], { limit: 1 })).toEqual([1579618800000])
   })
 
   test('add 10/10/10', () => {
@@ -479,6 +538,64 @@ describe('平気法 calculate', () => {
       '明治10年霜月10日(友引)暁九ツ',
       '明治11年神無月10日(先勝)暁九ツ',
     ])
+  })
+
+  test('年干支(a)は元号を跨いでも初期値定義と自己無矛盾(now_idxではなくraw_now_idxで計算する)', () => {
+    // 平気法/定気法の calendar() epoch(いずれも 0 = 1970年1月1日)における
+    // 年干支は、初期値文字列自体に手動で書かれている(己酉/己酉)。以前は
+    // a/b/c/f の計算に u.now_idx(元号調整後、元号ごとに1へリセットされる
+    // 相対年)を使っていたため、元号テーブルを持つ暦(平気法/定気法)でだけ
+    // epoch 自身の年干支すら再現できていなかった(実測: 平気法が「甲辰」、
+    // 定気法が「癸卯」という定義と無関係な値を返していた)。
+    //
+    // 定気法の初期値は当初「戊申」だったが、これは平気法と同じ起点年
+    // (皇紀2629年=西暦1969年)に対する年干支としては1年古い(戊申は
+    // 1968年)誤りだった。年干支は暦の計算方式(定気法/平気法)に依存
+    // しない実年の事実なので、平気法と同じ己酉に修正済み(実測:
+    // 2024年3月10日時点でグレゴリオ暦・平気法が甲辰なのに定気法だけ
+    // 癸卯を返していた)。
+    //
+    // 日干支(A)はここでは検証しない。calendar() の epoch(第3引数)を
+    // format() した結果が、多くの暦(Julian/Romulus/平気法/定気法/アマンタ等)
+    // で初期値文字列の日付そのものと一致しない別の不整合が見つかっており
+    // (タイムゾーン(geo[2]非ゼロ)を持つ暦でのみ発生、原因未特定、
+    // 「今後の検討メモ」に追記予定)、utc=0 という特定の瞬間での自己無矛盾
+    // 検証は別課題として切り分ける。実日付(2020年1月22日等)での日干支の
+    // 暦間一致は次のテストで個別に検証している。
+    expect(平気法.format(0, 'a')).toEqual('己酉')
+    expect(Calendar.定気法.format(0, 'a')).toEqual('己酉')
+  })
+
+  test('日干支(A)はグレゴリオ暦・平気法・定気法の間で実日付について一致する', () => {
+    // 日干支は暦の計算方式に依存しない実日の事実(60日周期の連続カウント)
+    // なので、同じ実日を指していれば暦システムが違っても一致するはず。
+    // 平気法は起点値が辛巳(誤)になっており常に+6日(60日周期)、定気法も
+    // 辛巳(誤)で常に+23日ずれていた(実測: 2020-01-22/2022-07-04/
+    // 2023-11-30/2024-03-10/2025-05-05 の5日で offset が完全に一定)。
+    // 起点値をグレゴリオ暦(2020年1月22日=甲子という既知の事実と一致
+    // 済み)に合わせて乙亥/戊午に修正済み。
+    const 定気法 = Calendar.定気法
+    const dates = ['2020年1月22日', '2022年7月4日', '2023年11月30日', '2024年3月10日', '2025年5月5日']
+    for (const d of dates) {
+      // 日境界の揺れを避けるため現地正午で比較する。
+      const utc = g.parse(d) + 12 * 3600 * 1000 - 9 * 3600 * 1000
+      const gA = g.format(utc, 'A')
+      expect(定気法.format(utc, 'A')).toEqual(gA)
+      expect(平気法.format(utc, 'A')).toEqual(gA)
+    }
+  })
+
+  test('年干支(a/b/c)は昭和/平成の元号境界を跨いでも60年周期で正しく連続する', () => {
+    let msec = g.parse('1985年1月1日')
+    const labels = []
+    for (let i = 0; i < 60; i++) {
+      labels.push(平気法.format(msec, 'a'))
+      msec = 平気法.succ(msec, '1年後')
+    }
+    // 60種類の年干支が重複なく出現する(順序が乱れていれば重複や欠落が出る)
+    expect(new Set(labels).size).toEqual(60)
+    // 60年進めると同じ干支に戻る(60年周期であることの直接確認)
+    expect(平気法.format(msec, 'a')).toEqual(labels[0])
   })
 
 })

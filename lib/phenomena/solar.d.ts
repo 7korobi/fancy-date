@@ -122,6 +122,9 @@ export declare function solor(sunny: OrbitalModel, earthy: RotationModel, geo: T
     日の出: number;
     南中時刻: number;
     日の入: number;
+    南中高度: number;
+    has_sunrise: boolean;
+    is_up_all_day: boolean;
 };
 type SolarTerms = ReturnType<typeof solar_terms>;
 /**

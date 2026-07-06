@@ -315,6 +315,8 @@ export class EarthSolarOrbital implements SolarEventModel {
       日の出方位: directionDeg * DEG_TO_RAD,
       日の入方位: (set?.azimuthDeg ?? NaN) * DEG_TO_RAD,
       南中高度: transit.altitudeDeg * DEG_TO_RAD,
+      has_sunrise: !Number.isNaN(hourAngleDeg),
+      is_up_all_day: 0 <= transit.altitudeDeg,
     }
   }
 

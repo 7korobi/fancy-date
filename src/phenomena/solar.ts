@@ -153,8 +153,31 @@ export function solor(
 
   const 日の出 = Math.floor(南中時刻 - 時角 * rad_to_day)
   const 日の入 = Math.floor(南中時刻 + 時角 * rad_to_day)
+  // 南中高度(南中=太陽が真南に来る瞬間の高度)は「90°-|緯度-赤緯|」という
+  // 標準公式で求まる。EarthSolarOrbital.solarEvents() 側にはあった
+  // 南中高度/日の出方位/日の入方位/has_sunrise/is_up_all_day が、この
+  // (hasSolarEvents を持たない簡易モデル向けの)フォールバック経路には
+  // 実装されておらず SolarObservation 型と食い違っていた
+  // (呼び出し側で型チェックされていなかったため気づかれていなかった)。
+  // 南中高度・has_sunrise・is_up_all_day はこの公式と既存の 時角 だけで
+  // 安全に補えるためここで追加する。日の出方位/日の入方位 は方位角の
+  // 導出精度を別途検証していないため、今回は追加を見送る。
+  const 南中高度 = PI / 2 - Math.abs(lat - 赤緯)
 
-  return { K, lat, 時角, 方向, 高度, 真夜中, 日の出, 南中時刻, 日の入 }
+  return {
+    K,
+    lat,
+    時角,
+    方向,
+    高度,
+    真夜中,
+    日の出,
+    南中時刻,
+    日の入,
+    南中高度,
+    has_sunrise: !Number.isNaN(時角),
+    is_up_all_day: 0 <= 南中高度,
+  }
 }
 
 type SolarTerms = ReturnType<typeof solar_terms>

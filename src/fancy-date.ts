@@ -1228,7 +1228,12 @@ export class FancyDate {
     const [fromLike, toLike] = between
     const from = this.to_utc(fromLike)
     const to = this.to_utc(toLike)
-    if (from == null || to == null || from >= to) {
+    // Infinity/-Infinity は無制限範囲の指定として正規の用法(下記 find() の
+    // ドキュメント例を参照)なので許容し、NaN だけを個別に弾く。from >= to
+    // だけでは NaN 側の取りこぼしがあった(実測: order 既定値の 1 が向く
+    // anchor(from)側だけが後段の isFinite チェックで守られており、逆側の
+    // to に NaN を渡すと limit 指定時は無言で空配列を返していた)。
+    if (from == null || to == null || Number.isNaN(from) || Number.isNaN(to) || from >= to) {
       throw new Error(`invalid range ${from}..${to}`)
     }
     if (!conditions.length) {
@@ -2210,7 +2215,16 @@ K   = @dic.earthy[2] / 360
   南中時刻 + 時角
 */
 
-  noon(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
+  // day/solarNoon をデフォルト引数の式(呼び出し時、関数本体より先に評価される)
+  // で計算していたため、本体先頭に Number.isFinite ガードを書いても utc が
+  // NaN の場合はガードより先に to_tempo_bare(...)/noon(utc) が NaN のまま
+  // 実行されてしまい、無意味だった(実測: solor(NaN)/lunar(NaN) は例外にも
+  // ならず、日の出・月の出が null(NaN)、K/lat/高度 等は一見有効そうな数値
+  // のまま返ってきた)。デフォルト引数を省略可能な仮引数に変え、本体先頭で
+  // utc を検証してから day を算出する形に直した。
+  noon(utc: number, day?: TempoLike) {
+    if (!Number.isFinite(utc)) throw new Error(`invalid timestamp ${utc}`)
+    day ??= to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
     return resolveNoon(
       this.dic.sunny,
       this.calc.msec.day,
@@ -2222,7 +2236,7 @@ K   = @dic.earthy[2] / 360
     )
   }
 
-  solor(utc, idx = 2, solarNoon = this.noon(utc)) {
+  solor(utc: number, idx = 2, solarNoon = this.noon(utc)) {
     return resolveSolor(
       this.dic.sunny,
       this.dic.earthy,
@@ -2237,10 +2251,12 @@ K   = @dic.earthy[2] / 360
     )
   }
 
-  lunar(utc, day = to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)) {
+  lunar(utc: number, day?: TempoLike) {
+    if (!Number.isFinite(utc)) throw new Error(`invalid timestamp ${utc}`)
     if (!hasLunarEvents(this.dic.moony)) {
       throw new Error('lunar requires a satellite orbital model with lunarEvents')
     }
+    day ??= to_tempo_bare(this.calc.msec.day, this.calc.zero.day, utc)
     return this.dic.moony.lunarEvents(utc, {
       latitudeDeg: this.dic.geo[0],
       longitudeDeg: this.dic.geo[1],
@@ -2418,7 +2434,14 @@ K   = @dic.earthy[2] / 360
       M: Tempo<TempoBase> & TempoMonth,
       p: Tempo<TempoBase> | undefined,
       u: Tempo<TempoBase>
-    if (utc == null) throw new Error(`invalid timestamp ${utc}`)
+    // utc == null だけでは NaN(typeof は number なので通り抜ける)を弾けず、
+    // 不正な入力が lunisolar() 等の内部探索まで届いてから「failed to
+    // resolve lunisolar month」のような無関係な例外で発覚し、原因追跡が
+    // 難しくなっていた(実測: 月の出のない日に moon.月の出 が NaN になり、
+    // それをそのまま format() へ渡した呼び出し側でこの経路を踏んだ)。
+    // 呼び出し側の入力ミスをここで即座に切り分けられるよう、有限数以外は
+    // すべて弾く。
+    if (!Number.isFinite(utc)) throw new Error(`invalid timestamp ${utc}`)
 
     const J = Tempo.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
       write_at: utc,
@@ -2670,10 +2693,20 @@ K   = @dic.earthy[2] / 360
     }
 
     // 年不断(u の実区間はそのままに、干支等の周期ラベルだけ差し替える)
-    const a = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year60, this.dic.a.length))
-    const b = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year12, this.dic.b.length))
-    const c = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year10, this.dic.c.length))
-    const f = cyclic_label(uEnvelope, mod(u.now_idx - this.calc.zero.year_s, this.dic.f.length))
+    //
+    // year60/year12/year10/year_s(calc.zero)は「初期値文字列をパースした
+    // 生の年(元号調整前の絶対年、def_idx()の o.y)」から逆算した zero であり、
+    // u.now_idx(元号調整後、元号ごとに1へリセットされる相対年)とは基準が
+    // 合わない。元号を持つ暦(平気法/定気法等)でこれを u.now_idx と組み合わせると、
+    // 元号を跨ぐたびに干支・九星が無関係な値になる実バグがあった
+    // (実測: 平気法 1970-01-01 の年干支が、初期値定義通りの「己酉」ではなく
+    // 「甲辰」になっていた)。u.raw_now_idx(元号非依存の絶対年、元号を
+    // 持たない暦では now_idx と同じ)を使うことで、元号の有無に関わらず
+    // 初期値定義と自己無矛盾になる。
+    const a = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year60, this.dic.a.length))
+    const b = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year12, this.dic.b.length))
+    const c = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year10, this.dic.c.length))
+    const f = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year_s, this.dic.f.length))
 
     // 月不断(四半期は月をまたぐため、区間は M(現在の月)のものをそのまま使う。
     // 四半期全体の境界ではない点に注意)
