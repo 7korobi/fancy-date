@@ -1,8 +1,8 @@
-import { Tempo } from './tempo';
-export declare const SECOND: number;
-export declare const MINUTE: number;
-export declare const HOUR: number;
-export declare const DAY: number;
+import { Tempo } from './tempo'
+export declare const SECOND: number
+export declare const MINUTE: number
+export declare const HOUR: number
+export declare const DAY: number
 /**
  * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
  * tempo.ts(旧 tempo-model.ts)の TempoView が Tempo としてリネームされた)は
@@ -27,16 +27,24 @@ export declare const DAY: number;
  * 導出された値を使うことで、YEAR=31556925.147(固定近似)のような不正確さも
  * 生まれない)。
  */
-export declare function to_tempo_bare(size: number, zero: number, write_at_src: number | Date): Tempo<{
-    write_at: number;
-}>;
-export declare function to_tempo_by(table: number[], zero: number, write_at: number): Tempo<{
-    write_at: number;
-}>;
+export declare function to_tempo_bare(
+  size: number,
+  zero: number,
+  write_at_src: number | Date,
+): Tempo<{
+  write_at: number
+}>
+export declare function to_tempo_by(
+  table: number[],
+  zero: number,
+  write_at: number,
+): Tempo<{
+  write_at: number
+}>
 export type DurationOptions = {
-    strict?: boolean;
-};
-export declare function to_msec(str: string, options?: DurationOptions): number;
+  strict?: boolean
+}
+export declare function to_msec(str: string, options?: DurationOptions): number
 /**
  * 時差(分)を timezoneDeg(経度換算: 15度 = 1時間、360度 = 1日)へ変換する。
  * spot(body, lat, lng, timezoneDeg) の第4引数にそのまま渡せる。
@@ -44,7 +52,7 @@ export declare function to_msec(str: string, options?: DurationOptions): number;
  * Date#getTimezoneOffset() は「UTC より遅れている分数」を返す(例: 東京 UTC+9 は
  * -540)ため、符号を反転してから経度に換算する。
  */
-export declare function to_timezone_deg(offsetMinutes: number): number;
+export declare function to_timezone_deg(offsetMinutes: number): number
 /**
  * 実行環境(ブラウザ)のタイムゾーンを timezoneDeg として得る。
  * spot(body, lat, lng, localTimezoneDeg()) のように使い、暦を現地時刻へ合わせる。
@@ -52,5 +60,5 @@ export declare function to_timezone_deg(offsetMinutes: number): number;
  * window が無い環境(SSR 等)では getTimezoneOffset() を参照できないため
  * fallbackDeg を返す(既定は東京 = UTC+9 = 135度)。
  */
-export declare function localTimezoneDeg(fallbackDeg?: number): number;
-export declare function to_sec(str: string, { strict }?: DurationOptions): number;
+export declare function localTimezoneDeg(fallbackDeg?: number): number
+export declare function to_sec(str: string, { strict }?: DurationOptions): number

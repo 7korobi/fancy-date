@@ -633,9 +633,9 @@ export class FancyDate {
     return this
   }
 
-  private format_number(value: number, size: number, appendix = '') {
+  private format_number(value: number, size: number) {
     const numeral = this.dic.numeral
-    if (numeral) return numeral.parse(value, appendix)
+    if (numeral) return numeral.parse(value)
     return `${value}`.padStart(size, '0')
   }
 

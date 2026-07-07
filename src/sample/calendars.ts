@@ -1,6 +1,6 @@
 import { FancyDate } from '../fancy-date'
 import type { PLANET } from '../fancy-date'
-import { mod } from '../number'
+import { mod, roman } from '../number'
 import { localTimezoneDeg } from '../time'
 import { 北朝元号 } from './eras'
 import {
@@ -436,6 +436,19 @@ const コプト暦 = g
   })
   .init()
 
+/**
+ * RomanClock: 時計の文字盤で定番のローマ数字表示を試すためのサンプル暦。
+ * Gregorian をそのまま複製し、数詞辞書だけ roman.upper に差し替えている。
+ *
+ * 現状の .numeral() は暦全体で1つの Numeral しか割り当てられない
+ * (トークンごとに数詞を出し分ける仕組みは未実装、docs/numeral-design.md
+ * 参照)ため、H(時)だけでなく y/M/d 等も roman.upper で描画される。
+ * ローマ数字には 0 の表記が無い(roman.parse(0) は素通しの '0' を返す)
+ * ため、0時・ちょうど0分のような値は数字のまま表示される——これは
+ * ローマ数字という記法自体の制約であり、このサンプル固有の不具合ではない。
+ */
+const RomanClock = Gregorian.dup().numeral(roman.upper).init()
+
 export const Calendar = {
   UTC,
   Gregorian,
@@ -454,4 +467,5 @@ export const Calendar = {
   Beat,
   エジプト民用暦,
   コプト暦,
+  RomanClock,
 }

@@ -1,8 +1,10 @@
-# 数詞ライブラリ設計案
+# 数詞ライブラリ設計案(実装済み)
 
-この文書は、`src/number.ts` の `DIC`/`Numeral` 基盤を、将来 fancy-date から独立した多言語数詞ライブラリとして切り出すことを見据えた設計案をまとめる。背景の調査経緯(CLDR/スラブ語/アラビア語/スワヒリ語/日本語/韓国語の数詞一致(agreement)体系調査、appendix配線の設計変遷)は [README](../README.md) の「今後の検討メモ」に記録済み。この文書はそれらの調査結果を実装可能な形に整理したものであり、調査の生の記録は README 側を正とする。
+この文書は、`src/number.ts` の `DIC`/`Numeral` 基盤を、将来 fancy-date から独立した多言語数詞ライブラリとして切り出すことを見据えた設計案をまとめる。背景の調査経緯(CLDR/スラブ語/アラビア語/スワヒリ語/日本語/韓国語の数詞一致(agreement)体系調査、appendix配線の設計変遷)は [development-notes.md](development-notes.md) に記録済み。この文書はそれらの調査結果を実装可能な形に整理したものであり、調査の生の記録は development-notes.md 側を正とする。
 
 セルフレビューを経て、初版から次の点を修正している: `DIC.parse()` の引数分割・`InflectedNumeral` との型不整合の解消、`old_jpn.rubys` を bare 使用した際に壊れた値を返す潜在バグの発見と「例外を投げる」方式での修正、`つくも`(99)修正の簡素化、ロケール登録簿の配線例を実在の `.lang()`/`.calendar()` シグネチャに合わせる修正、`arabic`/`roman` のロケール非依存化。
+
+**この設計は 3〜8 節・10 節の該当箇所を実装済み**(`src/number.ts`・`src/locale-registry.ts`・`src/sample/calendars.ts` の `RomanClock`、`__tests__/number-roundtrip-spec.js`・`__tests__/locale-spec.js`)。以下、各節の本文には実装済みの箇所に「(実装済み)」を付記する。実装時に見つかった追加の修正点(`ensure_number_map()` の逆引きキャッシュを appendix に依存しない DIC 向けに残す判断など)も反映済み。
 
 ## 1. 目的とスコープ
 
@@ -22,7 +24,7 @@ export type Numeral = {
 
 `parse` はもはや `appendix` 引数を取らない。文脈(助数詞・格・性・名詞クラス等)は呼び出し時ではなく、各言語モジュールが独自に用意する**屈折ファクトリ**で構築時に一度だけ確定する(次項)。
 
-## 3. 屈折ファクトリの命名方針とbare使用の事故防止
+## 3. 屈折ファクトリの命名方針とbare使用の事故防止(実装済み)
 
 当初 `bind(appendix): Numeral` を検討したが、`Function.prototype.bind`(引数の部分適用による `this`/引数の固定という汎用 JS 機構)を強く連想させ、実態(文脈に応じた語形変化の選択)とズレるため却下した。
 
@@ -48,12 +50,14 @@ class DIC {
 
   // 語尾(tail)を確定した Numeral を返す公開ファクトリ
   語尾(tail: string): Numeral {
-    return new InflectedNumeral(this, tail)   // InflectedNumeral の実装は4節
+    return new InflectedNumeral(this, tail) // InflectedNumeral の実装は4節
   }
 
   parse(num: number, appendix?: string): string {
     if (this.requires_tail && appendix === undefined) {
-      throw new Error('この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。')
+      throw new Error(
+        'この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。',
+      )
     }
     const tail = appendix ?? ''
     // ...tail を使って既存の _calc() を呼ぶ
@@ -62,12 +66,14 @@ class DIC {
 
 export const old_jpn = {
   rubys: new DIC(/* ... */)
-    .音便((num, str, tail = 'つ') => { /* 既存の switch */ })
+    .音便((num, str, tail = 'つ') => {
+      /* 既存の switch */
+    })
     .語尾必須(),
 }
 
-old_jpn.rubys.語尾('か')   // → Numeral、parse(20) === 'はつか'
-old_jpn.rubys.parse(1)     // → 例外: 語尾の指定が必須です
+old_jpn.rubys.語尾('か') // → Numeral、parse(20) === 'はつか'
+old_jpn.rubys.parse(1) // → 例外: 語尾の指定が必須です
 ```
 
 `InflectedNumeral.parse()`(4節)は常に `this.tail`(文字列)を明示的に渡すため、この例外を踏むことはない。例外が発生するのは `old_jpn.rubys` を `.語尾()` を通さず bare で `.numeral()` 等に渡してしまった場合のみ。`jpn.漢字`/`大字`/`rubys` のように appendix に依存しない DIC は `語尾必須()` を呼ばず、これまで通り bare でも安全に使える。
@@ -76,7 +82,7 @@ old_jpn.rubys.parse(1)     // → 例外: 語尾の指定が必須です
 
 `english.lower`/`roman.upper` のような語尾(tail)を持たない実装は、このファクトリを持つ必要がなく、素の object literal のまま `Numeral` を満たし続ける。
 
-## 4. 完全往復保証
+## 4. 完全往復保証(実装済み)
 
 `to_number(parse(num)) === num` を、屈折確定済みの各 `Numeral` について常に成り立たせることを目標とする。
 
@@ -128,7 +134,7 @@ class InflectedNumeral implements Numeral {
 
 今後追加されるあらゆる屈折済みバリアントについて、機械的に検証する共通テストヘルパー(`assertRoundTrips(numeral, label, { min, max, exempt })`)を導入し、「はつか」のように個別のケースが検証から漏れる事態を、屈折確定済みインスタンス単位でのテスト網羅により構造的に防ぐ。
 
-## 5. `つくも`(99)デッドコードの修正
+## 5. `つくも`(99)デッドコードの修正(実装済み)
 
 **原因**: `DIC._calc()` は数値を桁ごとに再帰分解し、`fix()`(音便コールバック)には常に「単一桁 × 基数のべき乗」の値(0-9, 10, 20…90, 100, 200…900, …)しか渡らない。複合値である99が `fix()` に直接渡ることは構造的に無いため、`old_jpn.rubys` の `case 99: return 'つくも'` は永久に到達不能。実際に `parse(99, 'つ')` は「ここのそぢまりここのつ」(90+9の合成)を返す。
 
@@ -145,7 +151,9 @@ class DIC {
 
   parse(num: number, appendix?: string): string {
     if (this.requires_tail && appendix === undefined) {
-      throw new Error('この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。')
+      throw new Error(
+        'この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。',
+      )
     }
     const composite = this.composites.get(num)
     if (composite !== undefined) return composite
@@ -153,24 +161,24 @@ class DIC {
   }
 }
 
-old_jpn.rubys.例外(99, 'つくも')   // switch文の case 99 は削除してよい
+old_jpn.rubys.例外(99, 'つくも') // switch文の case 99 は削除してよい
 ```
 
 `100`(もも)は既存の桁再帰(百の位の寄与)で自然に到達できるため対象外。この例外表は**完全一致のみ**を扱い、複合下二桁への一般化(199→「百つくも」等)はしない——`old_jpn` の音便コールバック自体が `if (100 < num) return str` で不規則形の対象を100以下に限定しており、99という特定の数への慣用句(付喪神の由来となった「九十九」)を再現する以上の一般化は史実的裏付けを欠くため、意図的にスコープ外とする。`つくも` は語尾によらず不変(既存コードの挙動を維持)——将来、語尾によって変わる複合語が必要になった場合は `例外(num, word | (tail: string) => word)` のように関数も受け付ける形へ拡張できる。
 
 `InflectedNumeral` の逆引きマップ構築(`dic.parse(num, tail)` をループで呼ぶだけ)はこの変更を自動的に反映するため、`つくも→99` の逆引きも追加コード無しで正しく成立する。
 
-## 6. 日本語数詞パターンの整理と `number.ts` への反映
+## 6. 日本語数詞パターンの整理と `number.ts` への反映(実装済み)
 
 暦での実用に絞って調査した結果、日本語の数詞表現だけでも次の5パターンが識別された。それぞれの `number.ts` 上の対応を整理する。
 
-| # | パターン | 例 | 対応 |
-|---|---|---|---|
-| 1 | アラビア数字表記(何もしない処理) | `13` | 新規 `export const arabic: Numeral`(桁を素通しするだけ、後述) |
-| 2 | 位取り記法の漢字表記 | 十三 | 既存 `jpn.漢字`/`jpn.大字`(変更不要) |
-| 3 | 桁表現文字の入る漢字表記(桁列挙) | 二〇二四 | 新規 `jpn.桁読み`(後述) |
-| 4 | 日付の読み仮名 | はつか、ついたち | `old_jpn.rubys.語尾('か')` |
-| 5 | 日付以外の読み仮名 | ひとつ、いち | `old_jpn.rubys.語尾('つ')` または `jpn.rubys` |
+| #   | パターン                         | 例               | 対応                                                          |
+| --- | -------------------------------- | ---------------- | ------------------------------------------------------------- |
+| 1   | アラビア数字表記(何もしない処理) | `13`             | 新規 `export const arabic: Numeral`(桁を素通しするだけ、後述) |
+| 2   | 位取り記法の漢字表記             | 十三             | 既存 `jpn.漢字`/`jpn.大字`(変更不要)                          |
+| 3   | 桁表現文字の入る漢字表記(桁列挙) | 二〇二四         | 新規 `jpn.桁読み`(後述)                                       |
+| 4   | 日付の読み仮名                   | はつか、ついたち | `old_jpn.rubys.語尾('か')`                                    |
+| 5   | 日付以外の読み仮名               | ひとつ、いち     | `old_jpn.rubys.語尾('つ')` または `jpn.rubys`                 |
 
 **パターン1(アラビア数字/何もしない)**: `.numeral()` を設定しない場合の `format_number()` の既定動作(ゼロ埋めした算用数字)と実質同じだが、後述する記法カタログ(8節)の中で明示的に選べる項目として名前を与える価値がある。特定言語の文法に紐づかないため、`DIC` を使わず言語非依存の対象とする。
 
@@ -190,7 +198,11 @@ export const arabic: Numeral = {
 ```ts
 function digitwise(num: number, items: readonly string[]): string {
   if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
-  return Math.abs(num).toString().split('').map((d) => items[Number(d)]).join('')
+  return Math.abs(num)
+    .toString()
+    .split('')
+    .map((d) => items[Number(d)])
+    .join('')
 }
 ```
 
@@ -198,7 +210,7 @@ function digitwise(num: number, items: readonly string[]): string {
 
 **大字・巨大数について**: 暦での利用を目的にすると、極端な年号を除いてはすぐに必要にならないと判断し、今回は現状維持(`jpn.大字` は既存のまま、命数法の万進/万万進境界や仏教超大数の実装拡張は行わない)。
 
-## 7. 英語・ローマ数字・韓国語(ハングル)の追加/修正
+## 7. 英語・ローマ数字・韓国語(ハングル)の追加/修正(実装済み)
 
 - **英語**: `english.lower`/`english.title` に完全往復保証のテスト(`assertRoundTrips`)を後追いで追加する。アーキテクチャ変更は不要(元々語尾を持たない実装のため)。
 - **ローマ数字**: 時計の文字盤はローマ数字表示の定番用途なので、`roman.upper` を時トークンに割り当てるサンプル(既存の「Romulus暦に `roman.upper` を割り当てる」提案とは別に、12時間制の時トークンをローマ数字で表示するクロックフェース的なサンプル)を実装候補として追加する。ローマ数字は英語固有ではなくラテン文字圏で広く使われる記法なので、8節で述べる言語非依存カタログに置く。
@@ -208,7 +220,7 @@ function digitwise(num: number, items: readonly string[]): string {
   - どちらの体系を使うかは**トークン単位で固定**(時=固有数詞、分=漢語数詞、日付=常に漢語数詞)であることは既に確認済みで、呼び出しごとに切り替える必要はない。
   - 結論: **新規アーキテクチャは一切不要**。2つの `DIC` インスタンス(漢語系・固有系)を追加し、ロケール登録簿(次節)の `ko` エントリへトークンごとに割り当てるだけで実装できる見込み。
 
-## 8. ロケール登録簿(Locale Registry)のフォーマット
+## 8. ロケール登録簿(Locale Registry)のフォーマット(実装済み、`src/locale-registry.ts`)
 
 言語表現が変わると数詞だけでなく、年月日時分秒の**既定パース書式・既定表示書式**も変わるべき、という指摘に基づき、数詞と書式既定値をまとめて発見できる登録簿を設計する。
 
@@ -227,15 +239,15 @@ export const SCRIPT_REGISTRY = {
   'roman-lower': roman.lower,
 }
 
-type NumeralPurpose = string   // 推奨語彙: 'cardinal' | 'cardinal-digit' | 'ordinal' | 'date-reading' | 'count-reading' など。閉じた enum にはしない
+type NumeralPurpose = string // 推奨語彙: 'cardinal' | 'cardinal-digit' | 'ordinal' | 'date-reading' | 'count-reading' など。閉じた enum にはしない
 
 type LocaleEntry = {
-  tag: string                              // 例: 'ja', 'ja-old', 'en', 'ko', 'ar'
-  displayName: string                      // 人間向け表示名
+  tag: string // 例: 'ja', 'ja-old', 'en', 'ko', 'ar'
+  displayName: string // 人間向け表示名
   numerals: Partial<Record<NumeralPurpose, Numeral>>
-  defaultParseFormat: string                // 例: 'y年M月d日'(.lang() の第1引数に対応)
-  defaultFormat: string                     // 例: 'Gy年M月d日(E)H時m分s秒'(.lang() の第2引数に対応)
-  labels?: Record<string, string>          // span の fallback 単位表記の既定値(.labels() 相当)
+  defaultParseFormat: string // 例: 'y年M月d日'(.lang() の第1引数に対応)
+  defaultFormat: string // 例: 'Gy年M月d日(E)H時m分s秒'(.lang() の第2引数に対応)
+  labels?: Record<string, string> // span の fallback 単位表記の既定値(.labels() 相当)
 }
 
 export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
@@ -256,7 +268,7 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
     displayName: 'English',
     numerals: {
       cardinal: english.lower,
-      ordinal: english.ordinal,   // 未実装。将来追加
+      ordinal: english.ordinal, // 未実装。将来追加
     },
     defaultParseFormat: 'y/M/d H:m:s',
     defaultFormat: 'Gy/M/d(E) H:m:s',
@@ -265,8 +277,9 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
     tag: 'ko',
     displayName: '한국어',
     numerals: {
-      'cardinal-sino': kor.漢語系,   // 未実装。既存 DIC エンジンの辞書差し替えで実現見込み
-      'cardinal-native': kor.固有系, // 未実装。音便より単純な縮約規則で実現見込み
+      'cardinal-sino': kor.漢語系, // 既存 DIC エンジンの辞書差し替えで実装済み
+      'cardinal-native': kor.固有系.基本, // 助数詞なしの素の計数(実装済み)
+      'count-reading-native': kor.固有系.助数詞前, // 助数詞直前の縮約形(実装済み)
     },
     defaultParseFormat: 'y년 M월 d일',
     defaultFormat: 'Gy년 M월 d일(E)',
@@ -315,13 +328,15 @@ new FancyDate()
 - スラブ語の格変化・アラビア語の性の極性・スワヒリ語の名詞クラス一致は、**アーキテクチャ(構築時に文脈を確定する屈折ファクトリ方式)が対応可能であることは調査で実証済み**だが、具体的な語彙・文法テーブルの実装は今回のスコープ外(需要が出た時点で着手する)。
 - 大字・命数法の万進/万万進境界・仏教超大数は、暦用途では優先度が低いと判断し、現状維持のまま据え置く。
 - `english.ordinal`(three→third)は本文書中で参照のみ行い、実装はまだ行っていない。
-- `kor.漢語系`/`kor.固有系` は設計方針のみで、DICインスタンスの実装自体はまだ行っていない。
+- (実装済み)`kor.漢語系`(既存 DIC エンジン流用)/`kor.固有系.基本`・`kor.固有系.助数詞前`(音便より単純な縮約規則)を実装した。ただし逆引き(`regex`/`to_number`)は format 方向のみのため未実装のまま(暦分野で往復保証が要る場面が出た時点で着手する)。
 
-## 10. 実装順序の目安
+## 10. 実装順序の目安(すべて完了)
 
-1. `DIC` に `語尾()`/`語尾必須()`/`例外()` を追加し、`old_jpn.rubys` の bare 使用を例外化しつつ `つくも` の到達可能性を修正(3・5節)。
-2. `InflectedNumeral` ラッパーと `assertRoundTrips` テストヘルパーを追加し、`old_jpn.rubys` の全語尾で完全往復を検証(4節)。
-3. `arabic`/`jpn.桁読み` を追加(6節)。
-4. `SCRIPT_REGISTRY`/`LOCALE_REGISTRY`(`ja`/`en` のみ、まず2言語)を追加し、既存サンプル暦を `.numeral()` の per-token map 経由で書き換える。
-5. ローマ数字クロックフェース・サンプルを追加。
-6. 韓国語(`kor.漢語系`/`kor.固有系`)と `LOCALE_REGISTRY.ko` を追加。
+1. (完了)`DIC` に `語尾()`/`語尾必須()`/`例外()` を追加し、`old_jpn.rubys` の bare 使用を例外化しつつ `つくも` の到達可能性を修正(3・5節)。
+2. (完了)`InflectedNumeral` ラッパーと `assertRoundTrips` テストヘルパーを追加し、`old_jpn.rubys` の全語尾で完全往復を検証(4節)。
+3. (完了)`arabic`/`jpn.桁読み` を追加(6節)。
+4. (完了)`SCRIPT_REGISTRY`/`LOCALE_REGISTRY`(`ja`/`en`/`ko`)を `src/locale-registry.ts` に追加した。既存サンプル暦の書き換えは行っていない(`.numeral()` はまだ暦全体で1つの Numeral しか受け付けず、per-token map 拡張は未実装のため——次点の課題として残す)。
+5. (完了)`RomanClock`(`src/sample/calendars.ts`)としてローマ数字クロックフェース・サンプルを追加した。
+6. (完了)韓国語(`kor.漢語系`/`kor.固有系.基本`/`kor.固有系.助数詞前`)と `LOCALE_REGISTRY.ko` を追加した(逆引きは未実装)。
+
+**次点の課題(未着手)**: `.numeral()` のトークンごと map 拡張(`Partial<TOKENS<ALL_DIC, Numeral>>`)、既存サンプル暦のロケール登録簿経由での書き換え、韓国語数詞の逆引き(`regex`/`to_number`)。

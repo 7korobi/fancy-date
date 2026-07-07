@@ -1,10 +1,13 @@
 type TDic = [string, string, string, string]
 
 export type Numeral = {
-  parse(num: number, appendix?: string): string
+  parse(num: number): string
   regex?: string
   to_number?(text: string): number | null
 }
+
+const TAIL_REQUIRED_MESSAGE =
+  'この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。'
 
 export function mod(value: number, by: number) {
   return ((value % by) + by) % by
@@ -13,6 +16,8 @@ export function mod(value: number, by: number) {
 export class DIC {
   private number_map?: Map<string, number>
   private number_regex?: string
+  private requires_tail = false
+  private composites = new Map<number, string>()
   units: number[]
   join_str: string
   zero_str: string
@@ -57,7 +62,36 @@ export class DIC {
     return str
   }
 
-  parse(num: number, appendix: string) {
+  // このインスタンスは語尾(appendix)の明示が必須、と宣言する。
+  // old_jpn のように音便コールバックが appendix に依存する DIC は、
+  // これを呼んでおくことで .語尾() を経由しない bare 使用(appendix が
+  // undefined のまま parse される)を即座に例外にできる。appendix に
+  // 依存しない DIC(jpn.漢字/大字/rubys 等)はこれを呼ぶ必要がない。
+  語尾必須() {
+    this.requires_tail = true
+    return this
+  }
+
+  // num にちょうど一致する完全一致の特例(慣用句的な不規則形)を登録する。
+  // _calc() の桁ごとの再帰分解を経由せず、parse() の入口で直接返す。
+  例外(num: number, word: string) {
+    this.composites.set(num, word)
+    return this
+  }
+
+  // 語尾(tail)を確定した Numeral を返す公開ファクトリ。
+  語尾(tail: string): Numeral {
+    return new InflectedNumeral(this, tail)
+  }
+
+  parse(num: number, appendix?: string): string {
+    if (this.requires_tail && appendix === undefined) {
+      throw new Error(TAIL_REQUIRED_MESSAGE)
+    }
+    const tail = appendix ?? ''
+    const composite = this.composites.get(num)
+    if (composite !== undefined) return composite
+
     const base = this.idxs.item
     let gap = 0
     let scale = 1
@@ -65,7 +99,7 @@ export class DIC {
       gap++
       scale *= base
     }
-    return this._calc(Math.floor(num * scale), -gap, appendix)
+    return this._calc(Math.floor(num * scale), -gap, tail)
   }
 
   get regex() {
@@ -80,9 +114,12 @@ export class DIC {
 
   private ensure_number_map() {
     if (this.number_map) return
+    if (this.requires_tail) {
+      throw new Error(TAIL_REQUIRED_MESSAGE)
+    }
     const map = new Map<string, number>()
     for (let num = 0; num <= 9999; num++) {
-      const text = this.parse(num, '')
+      const text = this.parse(num)
       if (text) map.set(text, num)
     }
     const chars = new Set([...map.keys()].join(''))
@@ -136,6 +173,90 @@ export class DIC {
 
 function escape_regexp(text: string) {
   return text.replace(/[\^$.*+?()[\]{}|\-]/g, '\\$&')
+}
+
+// DIC.語尾(tail) が返す、屈折(語尾)を確定済みの Numeral。
+// 逆引きマップ(regex/to_number)を DIC 本体の共有キャッシュとは独立に、
+// この束縛済みインスタンス自身の parse() 呼び出しから構築する。これにより
+// 「このインスタンスが実際に生成しうる出力だけを正しく含む」完全な逆引き
+// マップが tail ごとに独立して持てる(複数の tail が1つの共有キャッシュを
+// 取り合って汚染し合う事故を避ける)。
+class InflectedNumeral implements Numeral {
+  private number_map?: Map<string, number>
+  private number_regex?: string
+
+  constructor(
+    private dic: DIC,
+    private tail: string,
+    // 既定は実用上十分な範囲。遠い未来/過去の年やユリウス日通し番号のような
+    // 9999 を超えるトークンに使う場合は呼び出し側で明示的に上書きすること。
+    private range = 9999,
+  ) {}
+
+  parse(num: number): string {
+    return this.dic.parse(num, this.tail)
+  }
+
+  get regex(): string {
+    this.ensure_number_map()
+    return this.number_regex!
+  }
+
+  to_number(text: string): number | null {
+    this.ensure_number_map()
+    return this.number_map!.get(text) ?? null
+  }
+
+  private ensure_number_map() {
+    if (this.number_map) return
+    const map = new Map<string, number>()
+    for (let num = 0; num <= this.range; num++) {
+      const text = this.dic.parse(num, this.tail)
+      if (text) map.set(text, num)
+    }
+    const chars = new Set([...map.keys()].join(''))
+    this.number_regex = `[${[...chars].map(escape_regexp).join('')}]+`
+    this.number_map = map
+  }
+}
+
+// アラビア数字パススルー(何もしない処理)。特定言語の文法に紐づかない
+// ため DIC を使わず、桁を素通しするだけの薄い Numeral にする。
+export const arabic: Numeral = {
+  parse: (num) => `${num}`,
+  regex: '[0-9]+',
+  to_number: (text) => {
+    const n = Number(text)
+    return Number.isFinite(n) ? n : null
+  },
+}
+
+// 桁表現文字の入る漢字表記(桁列挙、例: 2024→二〇二四)。位取り記法
+// (十三、DIC._calc() の再帰)とは別のアルゴリズムで、西暦の4桁年のように
+// 桁を独立に読み下し位取りしない表記。english/roman と同様 DIC を
+// 継承しない薄い実装にする。
+function digitwise(items: readonly string[]): Numeral {
+  const to_digit = new Map(items.map((ch, idx) => [ch, idx]))
+  return {
+    parse(num: number): string {
+      if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
+      return Math.abs(num)
+        .toString()
+        .split('')
+        .map((d) => items[Number(d)])
+        .join('')
+    },
+    regex: `[${items.map(escape_regexp).join('')}]+`,
+    to_number(text: string): number | null {
+      let digits = ''
+      for (const ch of text) {
+        const digit = to_digit.get(ch)
+        if (digit === undefined) return null
+        digits += digit
+      }
+      return digits ? Number(digits) : null
+    },
+  }
 }
 
 export const jpn = {
@@ -194,6 +315,8 @@ export const jpn = {
         return str
     }
   }),
+
+  桁読み: digitwise('〇 一 二 三 四 五 六 七 八 九'.split(' ')),
 }
 
 export const old_jpn = {
@@ -205,66 +328,161 @@ export const old_jpn = {
     'れい ひと ふた み よ いつ む なな や ここの',
     'せいじょう こくう りっとく せつな だんし しゅんそく しゅゆ しゅんじゅん もこ ばく びょう あい じん しゃ せん び こつ し もう りん ぶ ひと そ ほ ち',
     'よろづ おく ちょう けい がい じょ じょう こう かん せい さい ごく ごうがしゃ あそうぎ なゆた ふかしぎ むりょうたいすう',
-  ).音便((num: number, str: string, tail = 'つ') => {
-    if (!str) return ''
-    if (num < 1) return str
-    if (100 < num) return str
-    switch (num) {
-      case 1:
-        if ('か' === tail) return 'ついたち'
-        break
-      case 2:
-        if ('か' === tail) return 'ふつか'
-        break
-      case 3:
-        if ('か' === tail) return 'みっか'
-        break
-      case 4:
-        if ('か' === tail) return 'よっか'
-        break
-      case 6:
-        if ('か' === tail) return 'むいか'
-        break
-      case 7:
-        if ('か' === tail) return 'なのか'
-        break
-      case 8:
-        if ('か' === tail) return 'ようか'
-        break
-      case 10:
-        switch (tail) {
-          case 'つ':
-            return 'とを'
-          case 'たり':
-            return 'とたり'
-          default:
-            return `とを${tail}`
-        }
-      case 20:
-        switch (tail) {
-          case 'つ':
-            return 'はたち'
-          case 'か':
-            return 'はつか'
-          default:
-            return `はた${tail}`
-        }
-      case 30:
-      case 40:
-      case 50:
-      case 60:
-      case 70:
-      case 80:
-      case 90:
-        if ('つ' === tail) tail = 'ぢ'
-        return `${str}${tail}`
-      case 99:
-        return 'つくも'
-      case 100:
-        return 'もも'
-    }
-    return `${str}${tail}`
-  }),
+  )
+    .音便((num: number, str: string, tail = 'つ') => {
+      if (!str) return ''
+      if (num < 1) return str
+      if (100 < num) return str
+      switch (num) {
+        case 1:
+          if ('か' === tail) return 'ついたち'
+          break
+        case 2:
+          if ('か' === tail) return 'ふつか'
+          break
+        case 3:
+          if ('か' === tail) return 'みっか'
+          break
+        case 4:
+          if ('か' === tail) return 'よっか'
+          break
+        case 6:
+          if ('か' === tail) return 'むいか'
+          break
+        case 7:
+          if ('か' === tail) return 'なのか'
+          break
+        case 8:
+          if ('か' === tail) return 'ようか'
+          break
+        case 10:
+          switch (tail) {
+            case 'つ':
+              return 'とを'
+            case 'たり':
+              return 'とたり'
+            default:
+              return `とを${tail}`
+          }
+        case 20:
+          switch (tail) {
+            case 'つ':
+              return 'はたち'
+            case 'か':
+              return 'はつか'
+            default:
+              return `はた${tail}`
+          }
+        case 30:
+        case 40:
+        case 50:
+        case 60:
+        case 70:
+        case 80:
+        case 90:
+          if ('つ' === tail) tail = 'ぢ'
+          return `${str}${tail}`
+        case 100:
+          return 'もも'
+      }
+      return `${str}${tail}`
+    })
+    // 99(つくも、付喪神の由来)は _calc() が数値を桁ごとに再帰分解する
+    // 構造上、複合値である99が fix() に直接渡ることが無く、音便コールバック
+    // の case として書いても永久に到達不能だった。完全一致の例外として
+    // 登録し、parse() の入口で _calc()/fix() を経由せず直接返す。
+    .例外(99, 'つくも')
+    // old_jpn の音便は appendix(語尾)によって出力が変わる(「か」なら
+    // 日付読み、既定は「つ」相当の汎用計数読み)。appendix を省略すると
+    // 音便コールバック自身の既定値(tail='つ')は発動せず(呼び出し時に
+    // undefined ではなく '' が渡ると想定した既存の抜け穴)、「ひとつ」の
+    // はずが「ひと」のような欠落した読みになる。bare 使用を黙って通す
+    // のではなく、.語尾() を経由しない呼び出しを例外にする。
+    .語尾必須(),
+}
+
+// 韓国語の数詞は漢語系(일이삼…)と固有系(하나둘셋…)の2系統が並立し、
+// どちらを使うかは文脈(語)で固定される(時=固有系、分/日付=漢語系等)。
+// 漢語系は日本語の jpn.漢字 と同型の万進位取り構造を持つが、DIC の
+// scales/bigs には(暦用途では使わない)分厘毛糸等の細かい端数の
+// 固有語彙まで正確に埋める必要があり、そこを誤って実装するリスクが
+// あるため、暦での実用範囲(0〜9999)に絞った薄い専用実装にする。
+// 固有系は 20 までの語根が不規則(二十=스물のように十の倍数を掛け算では
+// 作れない)なため、そもそも DIC の再帰エンジンに乗らない。
+// いずれも regex/to_number(逆引き)は未実装(format 方向のみ)。
+const KOREAN_SINO_DIGITS = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구']
+const KOREAN_SINO_SCALES = ['', '십', '백', '천']
+
+function sino_korean(num: number): string {
+  if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
+  if (num === 0) return '영'
+  if (num < 0 || 9999 < num) return `${num}`
+  const digits = String(num).padStart(4, '0').split('').map(Number)
+  let result = ''
+  for (let i = 0; i < 4; i++) {
+    const digit = digits[i]
+    const place = 3 - i
+    if (!digit) continue
+    const digit_str = digit === 1 && 0 < place ? '' : KOREAN_SINO_DIGITS[digit]
+    result += digit_str + KOREAN_SINO_SCALES[place]
+  }
+  return result
+}
+
+const KOREAN_NATIVE_ONES = ['', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉']
+const KOREAN_NATIVE_ONES_COUNTED = [
+  '',
+  '한',
+  '두',
+  '세',
+  '네',
+  '다섯',
+  '여섯',
+  '일곱',
+  '여덟',
+  '아홉',
+]
+const KOREAN_NATIVE_TENS = ['', '열', '스물', '서른', '마흔', '쉰', '예순', '일흔', '여든', '아흔']
+const KOREAN_NATIVE_TENS_COUNTED = [
+  '',
+  '열',
+  '스무',
+  '서른',
+  '마흔',
+  '쉰',
+  '예순',
+  '일흔',
+  '여든',
+  '아흔',
+]
+
+// counted: 助数詞(개/명/시 等)の直前で使う縮約形。조사한 範囲では
+// 하나→한/둘→두/셋→세/넷→네/스물→스무 の5語だけが縮約し、他の十の位
+// (서른/마흔/쉰/예순/일흔/여든/아흔)は縮約しない。縮約するのは常に
+// 「助数詞の直前に来る最後の語」(一の位が非ゼロならその語、ゼロなら
+// 十の位の語)。
+function native_korean(num: number, counted: boolean): string {
+  if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
+  if (num === 0) return '영'
+  if (num < 0 || 99 < num) return `${num}`
+  const tens = Math.floor(num / 10)
+  const ones = num % 10
+  if (!ones) {
+    return counted ? KOREAN_NATIVE_TENS_COUNTED[tens] : KOREAN_NATIVE_TENS[tens]
+  }
+  const tens_str = tens ? KOREAN_NATIVE_TENS[tens] : ''
+  const ones_str = counted ? KOREAN_NATIVE_ONES_COUNTED[ones] : KOREAN_NATIVE_ONES[ones]
+  return tens_str + ones_str
+}
+
+export const kor = {
+  漢語系: { parse: sino_korean } satisfies Numeral,
+  固有系: {
+    // 助数詞を伴わない素の計数(例: 番号として1,2,3…と数える)
+    基本: { parse: (num: number) => native_korean(num, false) } satisfies Numeral,
+    // 助数詞の直前で使う縮約形(例: 한 개, 두 명, 스무 살)
+    助数詞前: { parse: (num: number) => native_korean(num, true) } satisfies Numeral,
+  },
 }
 
 const ENGLISH_ONES = [
