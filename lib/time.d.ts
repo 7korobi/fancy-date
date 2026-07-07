@@ -45,4 +45,20 @@ export type DurationOptions = {
   strict?: boolean
 }
 export declare function to_msec(str: string, options?: DurationOptions): number
+/**
+ * 時差(分)を timezoneDeg(経度換算: 15度 = 1時間、360度 = 1日)へ変換する。
+ * spot(body, lat, lng, timezoneDeg) の第4引数にそのまま渡せる。
+ *
+ * Date#getTimezoneOffset() は「UTC より遅れている分数」を返す(例: 東京 UTC+9 は
+ * -540)ため、符号を反転してから経度に換算する。
+ */
+export declare function to_timezone_deg(offsetMinutes: number): number
+/**
+ * 実行環境(ブラウザ)のタイムゾーンを timezoneDeg として得る。
+ * spot(body, lat, lng, localTimezoneDeg()) のように使い、暦を現地時刻へ合わせる。
+ *
+ * window が無い環境(SSR 等)では getTimezoneOffset() を参照できないため
+ * fallbackDeg を返す(既定は東京 = UTC+9 = 135度)。
+ */
+export declare function localTimezoneDeg(fallbackDeg?: number): number
 export declare function to_sec(str: string, { strict }?: DurationOptions): number

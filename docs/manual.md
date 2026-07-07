@@ -189,6 +189,8 @@ custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label
 
 `labels()` は fallback の単位表記を差し替える。`algo()` の第3要素に relatives がある場合は、そちらが優先される。
 
+`前` / `後` を省略した表現(例: `'1年2ヶ月'`)は `後` として解釈される。`parse_span('1年2ヶ月')` と `parse_span('1年2ヶ月後')` は同じ結果になる。
+
 ## find
 
 `find([from, to], conditions, options?)` は範囲内で条件に合う暦境界を探す。

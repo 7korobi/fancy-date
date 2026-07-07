@@ -142,22 +142,7 @@ export declare function solor(
     copy(): TempoLike
     reset(now?: number): TempoLike
   },
-):
-  | import('../orbital-model').SolarObservation
-  | {
-      K: number
-      lat: number
-      時角: number
-      方向: number
-      高度: number
-      真夜中: number
-      日の出: number
-      南中時刻: number
-      日の入: number
-      南中高度: number
-      has_sunrise: boolean
-      is_up_all_day: boolean
-    }
+): import('../orbital-model').SolarObservation
 type SolarTerms = ReturnType<typeof solar_terms>
 /**
  * solar_terms_mean: 平気法(等角分割)版の二十四節気+雑節の基準15項目。

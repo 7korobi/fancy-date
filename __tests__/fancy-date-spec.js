@@ -202,6 +202,31 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(summerGa.has_sunrise).toBe(false)
     expect(summerGa.is_up_all_day).toBe(true)
   })
+
+  test('mean model solor() fills 日の出方位/日の入方位, mirroring 精密モデル within its own precision', () => {
+    // g(グレゴリオ暦)は hasSolarEvents を持たない簡易(mean)太陽モデル経路。
+    const utc = g.parse('2024年3月20日')
+    const mean = g.solor(utc)
+    expect(Number.isFinite(mean.日の出方位)).toBe(true)
+    expect(Number.isFinite(mean.日の入方位)).toBe(true)
+    expect(mean.日の出方位).toEqual(mean.方向)
+    expect(mean.日の入方位).toBeCloseTo(2 * Math.PI - mean.日の出方位, 10)
+
+    // 精密モデル(GregorianAstronomical)の実測値と大きく乖離しないことを確認する
+    // (平均モデルは1日を通して赤緯一定とみなす近似なので、分点付近で最大
+    // 0.5度程度の差は許容する)。
+    const precise = ga.solor(ga.parse('2024年3月20日'))
+    const toDeg = (rad) => (rad * 180) / Math.PI
+    expect(Math.abs(toDeg(mean.日の出方位) - toDeg(precise.日の出方位))).toBeLessThan(0.5)
+    expect(Math.abs(toDeg(mean.日の入方位) - toDeg(precise.日の入方位))).toBeLessThan(0.5)
+
+    // 白夜/極夜(has_sunrise=false)では他のイベント系フィールド同様 NaN になる。
+    const arctic = g.dup().spot(月, 78, 15.6, 15).init()
+    const arcticSummer = arctic.solor(arctic.parse('2024年6月21日'))
+    expect(arcticSummer.has_sunrise).toBe(false)
+    expect(Number.isNaN(arcticSummer.日の出方位)).toBe(true)
+    expect(Number.isNaN(arcticSummer.日の入方位)).toBe(true)
+  })
 })
 
 describe('moon phase', () => {
@@ -265,6 +290,17 @@ describe('Gregorio calculate', () => {
   test('sub 10y', () => {
     const msec = g.parse('401年1月1日')
     expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火)0時0分0秒')
+  })
+
+  test('SpanLike text without 前/後 is treated as 後', () => {
+    const msec = g.parse('2年2月2日')
+    const bare = g.parse_span('1年2ヶ月')
+    const withGo = g.parse_span('1年2ヶ月後')
+    expect(bare).toEqual(withGo)
+    expect(g.format(g.add(msec, '1年2ヶ月'))).toEqual(g.format(g.add(msec, '1年2ヶ月後')))
+    // 前/後 が明示されている場合は従来通りそちらが優先される(後扱いにはならない)。
+    const withMae = g.parse_span('1年2ヶ月前')
+    expect(withMae).not.toEqual(bare)
   })
 
   test('parse', () => {

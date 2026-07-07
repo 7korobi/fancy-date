@@ -826,10 +826,12 @@ export class FancyDate {
   private parse_span_parts(text: string): { parts: SpanPart[]; direction: SpanDirection } {
     const source = text.trim()
     if (source === '今') return { parts: [], direction: '前' }
+    // 前/後 のない表現(例: '1年2ヶ月')は、方向を明示しない「後」扱いとする
+    // (README「今後の検討メモ」の文法拡張)。前/後 が付いている場合は
+    // 従来通りそちらを解釈する。
     const match = source.match(/^(.*)(前|後)$/)
-    if (!match) throw new Error(`invalid relative time ${text}`)
-    const [, body] = match
-    const direction = match[2] as SpanDirection
+    const body = match ? match[1] : source
+    const direction = (match ? match[2] : '後') as SpanDirection
     if (!body) throw new Error(`invalid relative time ${text}`)
     const sign = direction === '後' ? -1 : 1
     let rest = body

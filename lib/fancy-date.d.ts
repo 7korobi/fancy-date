@@ -501,22 +501,7 @@ export declare class FancyDate {
       copy(): TempoLike
       reset(now?: number): TempoLike
     },
-  ):
-    | import('./orbital-model').SolarObservation
-    | {
-        K: number
-        lat: number
-        時角: number
-        方向: number
-        高度: number
-        真夜中: number
-        日の出: number
-        南中時刻: number
-        日の入: number
-        南中高度: number
-        has_sunrise: boolean
-        is_up_all_day: boolean
-      }
+  ): import('./orbital-model').SolarObservation
   lunar(utc: number, day?: TempoLike): import('./orbital-model').LunarObservation
   lunar_apsis(kind: LunarApsisKind, near: number): import('./orbital-model').LunarApsis
   lunar_node(kind: LunarNodeKind, near: number): import('./orbital-model').LunarNode
