@@ -203,6 +203,21 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(summerGa.is_up_all_day).toBe(true)
   })
 
+  test("daily('Sunny')(不定時法)は極域(緯度66.5度以遠)では construction 時点で例外になる", () => {
+    // 不定時法は日の出・日の入りの間隔を等分する前提のため、日の出/日の入りが
+    // 存在しない期間が生じる極域では成立しない(調査結果、development-notes.md 参照)。
+    expect(() => g.dup().spot(月, 78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+    expect(() => g.dup().spot(月, -78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+    // 極圏ちょうど(66.5度)も含めて例外にする(下限として扱う)。
+    expect(() => g.dup().spot(月, 66.5, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+
+    // 極域でなければ daily('Sunny') は従来どおり構築できる
+    // (東京: 北緯約35.7度、既存の平気法/定気法サンプルと同じ緯度帯)。
+    expect(() => g.dup().spot(月, 35.7, 139.7, 135).daily('Sunny').init()).not.toThrow()
+    // spot()/daily() の呼び出し順が逆でも同様に検出できる。
+    expect(() => g.dup().daily('Sunny').spot(月, 78, 15.6, 15).init()).toThrow(/極域/)
+  })
+
   test('mean model solor() fills 日の出方位/日の入方位, mirroring 精密モデル within its own precision', () => {
     // g(グレゴリオ暦)は hasSolarEvents を持たない簡易(mean)太陽モデル経路。
     const utc = g.parse('2024年3月20日')
@@ -1116,11 +1131,15 @@ describe('エジプト民用暦', () => {
     expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'y年M月d日')).toBe(
       '-746年2月26日',
     )
+    // 曜日(E)の値は、旧来の def_zero() が d(暦日)自身のシフト分を二重に
+    // 差し引いていたバグ修正の影響で変わった(Julian の anchor
+    // '1582/10/5(金)...' 自身が示す通り、1582年10月5日は金曜日である
+    // ことを確認済み——development-notes.md 参照)。
     expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Y-ww-E')).toBe(
-      '-746-09-日',
+      '-746-09-水',
     )
     expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'GY-ww-E')).toBe(
-      '紀元前747-09-日',
+      '紀元前747-09-水',
     )
     expect(Calendar.Julian.format(Calendar.Julian.parse('-746年2月26日'), 'Gy年MM月dd日')).toBe(
       '紀元前747年02月26日',

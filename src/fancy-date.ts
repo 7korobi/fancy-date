@@ -51,7 +51,62 @@ export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from 
 export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar'
 export type { PreparedSpot, PreparedSpotModels } from './prepare'
 export { prepareSpot, prepareSpotModels } from './prepare'
-export * from './orbital-model'
+// export * from はコンパイル時に tslib.__exportStar() という実行時関数呼び出しになり、
+// 静的な named export 解析に依存するバンドラで再エクスポート名が undefined になる
+// 不具合があった(development-notes.md 参照)。明示的な named export に置き換える。
+export {
+  bodyProfileOf,
+  centerOf,
+  hasLunarEvents,
+  hasLunarOrbitEvents,
+  hasSolarEvents,
+  isPlanetSkyBody,
+  orbitalOf,
+  placePlanet,
+  placeSatellite,
+  placeStar,
+  resolveSkyBody,
+  rotationOf,
+} from './orbital-model'
+export type {
+  BodyProfile,
+  BodyProfileReference,
+  STAR,
+  PLANET_TUPLE,
+  SATELLITE_TUPLE,
+  PlanetPlacement,
+  SatellitePlacement,
+  PLANET,
+  SATELLITE,
+  SKY_BODY,
+  SPOT,
+  TIMEZONE,
+  ORBITAL,
+  ROTATION,
+  PlanetPlacementOptions,
+  SatellitePlacementOptions,
+  OrbitalModel,
+  OrbitalTransformOptions,
+  RotationModel,
+  ResolvedSkyBody,
+  SolarObservationOptions,
+  SolarObservation,
+  SolarEquatorialCoordinates,
+  SolarHorizontalCoordinates,
+  SolarPositionModel,
+  SolarEventModel,
+  LunarObservationOptions,
+  LunarObservation,
+  LunarEquatorialCoordinates,
+  LunarHorizontalCoordinates,
+  LunarPositionModel,
+  LunarEventModel,
+  LunarApsisKind,
+  LunarApsis,
+  LunarNodeKind,
+  LunarNode,
+  LunarOrbitEventModel,
+} from './orbital-model'
 
 export type ERA = readonly [string, number, string?]
 export type ERA_WITH_YEAR = readonly [string, number, number]
@@ -688,6 +743,20 @@ export class FancyDate {
   }
 
   init() {
+    // 不定時法(daily('Sunny'))は日の出・日の入りの間隔を等分するため、
+    // 極域(概ね北緯/南緯66.5度=極圏以遠)では日の出/日の入りが存在しない
+    // 期間が生じ、そもそも成立しない。調査の結果、不定時法を極域に
+    // 「正しく拡張する」実例・自然な答えは見当たらなかったため(README/
+    // development-notes.md 参照)、黙って退化した値を返すのではなく
+    // construction 時点(init())で例外にする。66.5度は「これより先は
+    // 確実に不可能」という下限であり、唯一の閾値ではない(手前でも夏至・
+    // 冬至付近で退化するケースは残る)。
+    if (this.dic.is_solor && this.dic.geo && 66.5 <= Math.abs(this.dic.geo[0])) {
+      throw new Error(
+        `不定時法(daily('Sunny'))は極域(緯度${this.dic.geo[0]}度)では成立しません。極圏(66.5度)以遠では日の出・日の入りが存在しない期間が生じ、昼夜を等分する不定時法の前提が崩れます。`,
+      )
+    }
+
     // 暦設定が(再)確定するたびに、直近解決キャッシュを破棄する
     // (古い設定に基づく envelope/lunisolar 結果を持ち越さないため)。
     this._orbital_season_rule = undefined
@@ -2229,12 +2298,20 @@ export class FancyDate {
     const mjd = to_tempo_bare(this.calc.msec.day, day_utc, -3506716800000).last_at //   -40587   * 86400000
 
     // 干支、九星、週
-    const week = day + zero_size('E', 'day')
-    const day_9 = day + zero_size('F', 'day')
-    const day10 = day + zero_size('C', 'day')
-    const day12 = day + zero_size('B', 'day')
-    const day60 = day + zero_size('A', 'day')
-    const day28 = day + zero_size('V', 'day')
+    // E/F/C/B/A/V はいずれも d(暦日)とは別の、独立した日次巡回トークン
+    // なので、それぞれ自分自身の idx(anchor でのその token の値)だけを
+    // 差し引いてゼロ点を求める必要がある。d で既に -idx.d 日ぶんシフト
+    // 済みの `day` を起点にすると、d のシフト分が二重に効いてしまい
+    // (実測: 定気法で `format(anchor_epoch, ...)` の A が idx.d + idx.A
+    // 日ぶんずれた値になっていた)、anchor 自身の epoch を format() した
+    // 結果が anchor 文字列と一致しなくなる。d のシフトを含まない `hour`
+    // (anchor 実日の日付境界 = H-index 0 の位置)を起点にする。
+    const week = hour + zero_size('E', 'day')
+    const day_9 = hour + zero_size('F', 'day')
+    const day10 = hour + zero_size('C', 'day')
+    const day12 = hour + zero_size('B', 'day')
+    const day60 = hour + zero_size('A', 'day')
+    const day28 = hour + zero_size('V', 'day')
     Object.assign(this.calc.zero, {
       period,
       era,
@@ -3037,6 +3114,7 @@ K   = @dic.earthy[2] / 360
     if (Q) {
       M += (Q * this.dic.M.length) / 4
     }
+    const era_relative_y = y
     y += this.calc.eras[G][2] - 1
     if (u) {
       y += u
@@ -3072,6 +3150,41 @@ K   = @dic.earthy[2] / 360
       utc += this.calc.zero.period + p * this.calc.msec.period + (this.table.msec.year[y - 1] || 0)
 
       year_size = Math.floor(this.calc.msec.day * this.table.range.year[y])
+    } else if (
+      !this.is_table_month &&
+      hasSolarEvents(this.dic.sunny) &&
+      hasLunarEvents(this.dic.moony)
+    ) {
+      // 観測太陰太陽暦(定気法など、実軌道モデル)は、to_tempos() 側
+      // (ObservedLunisolarYearRule)がグレゴリオ暦の西暦年をそのまま
+      // now_idx として使うのに対し、この行の直前で計算した y は
+      // 「calc.zero.season 相対の連続 index」という別の数値体系を前提に
+      // していた(this.calc.eras[G][2] が平気法のような mean モデルでは
+      // その連続 index だが、観測太陰太陽暦モデルではグレゴリオ暦の
+      // 西暦年そのものになるため)。両者を混同すると year が実際より
+      // 約660年(皇紀のズレ)小さい値になり、`zero + y*msec.year` が
+      // 全く無関係な世紀の日付を指してしまう(実測: 定気法.parse(
+      // '令和6年3月10日',...) が「貞治3年3月9日」になる。
+      // development-notes.md 参照)。
+      //
+      // ここでは calc.zero.season 相対の index を経由せず、対象の元号
+      // (calc.eras[G])自身が実際に開始した msec(this.calc.eras[G][1]、
+      // 暦の計算方式に依存しない事実)を起点に、実際の lunisolar() 探索
+      // (37ヶ月窓の朔・節気探索)で目標のグレゴリオ暦年へ収束させる。
+      // 目標年数(1年=1公転)ぶんの msec を足すだけの近似シードで
+      // 十分近い年に着地するため、収束は通常1回で終わる(念のため上限
+      // 3回)。
+      const eraStartMsec = this.calc.eras[G][1]
+      const targetYear = this.lunisolar(eraStartMsec).year + era_relative_y - 1
+      let guess = eraStartMsec + (era_relative_y - 1) * this.calc.msec.year
+      let resolved = this.lunisolar(guess)
+      for (let i = 0; i < 3 && resolved.year !== targetYear; i++) {
+        guess += (targetYear - resolved.year) * this.calc.msec.year
+        resolved = this.lunisolar(guess)
+      }
+      last_at = resolved.year_start_at
+      year_size = resolved.next_year_start_at - resolved.year_start_at
+      utc += last_at
     } else {
       if (this.is_table_month) {
         zero = this.calc.zero.spring
