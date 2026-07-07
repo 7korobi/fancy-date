@@ -1,6 +1,7 @@
 import { FancyDate } from '../fancy-date'
 import type { PLANET } from '../fancy-date'
 import { mod } from '../number'
+import { localTimezoneDeg } from '../time'
 import { 北朝元号 } from './eras'
 import {
   七曜,
@@ -103,14 +104,10 @@ const GregorianAstronomical = g
  * 作れる(dup().spot(...) は fancy-date が「同じ暦を別地点/別タイムゾーンで
  * 複製する」ために元々用意している機構)。
  *
- * timezoneDeg は経度換算(15度 = 1時間)。getTimezoneOffset() は
- * 「UTCより遅れている分数」を返す(例: 東京は -540)ため符号を反転する。
- * ブラウザ以外(SSR等)では window が無いため、東京(UTC+9)を既定値とする。
+ * timezoneDeg(経度換算)は localTimezoneDeg() が実行環境から算出する
+ * (ブラウザ以外では東京 UTC+9 を既定値とする)。
  */
-const has_window = 'undefined' !== typeof window && window !== null
-const timezoneOffsetMinutes = has_window ? new Date().getTimezoneOffset() : -540
-const timezoneDeg = (-timezoneOffsetMinutes / 60) * 15
-const LocalGregorian = Gregorian.dup().spot(月, 0, 0, timezoneDeg).init()
+const LocalGregorian = Gregorian.dup().spot(月, 0, 0, localTimezoneDeg()).init()
 
 const Julian = g
   .dup()
