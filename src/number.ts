@@ -289,7 +289,18 @@ const ENGLISH_ONES = [
   'eighteen',
   'nineteen',
 ]
-const ENGLISH_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+const ENGLISH_TENS = [
+  '',
+  '',
+  'twenty',
+  'thirty',
+  'forty',
+  'fifty',
+  'sixty',
+  'seventy',
+  'eighty',
+  'ninety',
+]
 
 function englishize(num: number) {
   if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
@@ -298,10 +309,14 @@ function englishize(num: number) {
     if (value < 20) return ENGLISH_ONES[value]
     if (value < 100) {
       const tail = value % 10
-      return tail ? `${ENGLISH_TENS[Math.floor(value / 10)]}-${ENGLISH_ONES[tail]}` : ENGLISH_TENS[value / 10]
+      return tail
+        ? `${ENGLISH_TENS[Math.floor(value / 10)]}-${ENGLISH_ONES[tail]}`
+        : ENGLISH_TENS[value / 10]
     }
     const tail = value % 100
-    return tail ? `${ENGLISH_ONES[Math.floor(value / 100)]} hundred ${underThousand(tail)}` : `${ENGLISH_ONES[value / 100]} hundred`
+    return tail
+      ? `${ENGLISH_ONES[Math.floor(value / 100)]} hundred ${underThousand(tail)}`
+      : `${ENGLISH_ONES[value / 100]} hundred`
   }
   if (num < 1000) return underThousand(num)
   const tail = num % 1000
@@ -310,11 +325,16 @@ function englishize(num: number) {
 }
 
 function english_to_number(text: string) {
-  const words = text.toLowerCase().split(/[\s-]+/).filter(Boolean)
+  const words = text
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter(Boolean)
   if (!words.length) return null
   const ones = new Map(ENGLISH_ONES.map((word, index) => [word, index]))
   const tens = new Map<string, number>(
-    ENGLISH_TENS.flatMap((word, index) => (word ? ([[word, index * 10]] as [string, number][]) : [])),
+    ENGLISH_TENS.flatMap((word, index) =>
+      word ? ([[word, index * 10]] as [string, number][]) : [],
+    ),
   )
   let total = 0
   let current = 0
@@ -342,19 +362,19 @@ function english_to_number(text: string) {
 }
 
 const ROMAN_TABLE = [
-    [1000, 'M'],
-    [900, 'CM'],
-    [500, 'D'],
-    [400, 'CD'],
-    [100, 'C'],
-    [90, 'XC'],
-    [50, 'L'],
-    [40, 'XL'],
-    [10, 'X'],
-    [9, 'IX'],
-    [5, 'V'],
-    [4, 'IV'],
-    [1, 'I'],
+  [1000, 'M'],
+  [900, 'CM'],
+  [500, 'D'],
+  [400, 'CD'],
+  [100, 'C'],
+  [90, 'XC'],
+  [50, 'L'],
+  [40, 'XL'],
+  [10, 'X'],
+  [9, 'IX'],
+  [5, 'V'],
+  [4, 'IV'],
+  [1, 'I'],
 ] as const
 
 function romanize(num: number) {
@@ -385,12 +405,20 @@ function roman_to_number(text: string) {
 
 export const english = {
   lower: { parse: englishize, regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*', to_number: english_to_number },
-  title: { parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()), regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*', to_number: english_to_number },
+  title: {
+    parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()),
+    regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*',
+    to_number: english_to_number,
+  },
 }
 
 export const roman = {
   upper: { parse: romanize, regex: '[IVXLCDM]+', to_number: roman_to_number },
-  lower: { parse: (num: number) => romanize(num).toLowerCase(), regex: '[ivxlcdm]+', to_number: roman_to_number },
+  lower: {
+    parse: (num: number) => romanize(num).toLowerCase(),
+    regex: '[ivxlcdm]+',
+    to_number: roman_to_number,
+  },
 }
 
 const _0__59 = [Array(60)].map((_, i) => i).join(' ')

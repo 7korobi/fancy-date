@@ -646,7 +646,11 @@ export class ObservedLunisolarYearRule implements TempoRule<TempoBase> {
   }
 }
 
-function table_envelope_by_idx(table: readonly number[], zero: number, now_idx: number): TempoEnvelope {
+function table_envelope_by_idx(
+  table: readonly number[],
+  zero: number,
+  now_idx: number,
+): TempoEnvelope {
   const idx = mod(now_idx, table.length)
   const table_idx = Math.floor(now_idx / table.length)
   const table_diff = table_idx ? table[table.length - 1] * table_idx : 0
@@ -771,8 +775,20 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
     // 必要はない。dayEnvelope(既に解決済みの区間)に write_at だけを
     // 差し込んだ TempoView を渡す(この View 自体は .slide() されない
     // ため、渡す rule の中身は実質問われない)。
-    const day = new Tempo(dayEnvelope, { write_at }, new FixedTempoRule(this.dayMsec, dayEnvelope.zero))
-    const solarNoon = noon(this.sunny, this.dayMsec, this.dayZero, this.yearMsec, this.seasonZero, write_at, day)
+    const day = new Tempo(
+      dayEnvelope,
+      { write_at },
+      new FixedTempoRule(this.dayMsec, dayEnvelope.zero),
+    )
+    const solarNoon = noon(
+      this.sunny,
+      this.dayMsec,
+      this.dayZero,
+      this.yearMsec,
+      this.seasonZero,
+      write_at,
+      day,
+    )
     const { 日の出, 日の入 } = solor(
       this.sunny,
       this.earthy,
@@ -845,7 +861,9 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
     const boundaryAt = (idx: number) =>
       solar_phase(this.sunny, idx / this.divisions - this.referencePhaseOffset, write_at)
 
-    let idx = Math.floor(mod(this.sunny.phaseAt(write_at) + this.referencePhaseOffset, 1) * this.divisions)
+    let idx = Math.floor(
+      mod(this.sunny.phaseAt(write_at) + this.referencePhaseOffset, 1) * this.divisions,
+    )
     let last_at = boundaryAt(idx)
     while (write_at < last_at) {
       idx = mod(idx - 1, this.divisions)

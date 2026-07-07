@@ -1,7 +1,13 @@
 const { Calendar, 天文月 } = require('../../lib/sample')
-const { NAOJ_LUNAR_EVENT_FIXTURES, NAOJ_LUNAR_EVENT_SOURCE } = require('../fixtures/lunar-events-naoj')
+const {
+  NAOJ_LUNAR_EVENT_FIXTURES,
+  NAOJ_LUNAR_EVENT_SOURCE,
+} = require('../fixtures/lunar-events-naoj')
 const { NAOJ_LUNAR_PHASE_FIXTURES } = require('../fixtures/lunar-phases-naoj')
-const { NAOJ_SOLAR_EVENT_FIXTURES, NAOJ_SOLAR_EVENT_SOURCE } = require('../fixtures/solar-events-naoj')
+const {
+  NAOJ_SOLAR_EVENT_FIXTURES,
+  NAOJ_SOLAR_EVENT_SOURCE,
+} = require('../fixtures/solar-events-naoj')
 const { NAOJ_SOLAR_TERM_FIXTURES } = require('../fixtures/solar-terms-naoj')
 
 const SOLAR_TERM_DIFF_FIELDS = ['diffMinutes']

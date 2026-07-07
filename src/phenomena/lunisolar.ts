@@ -50,13 +50,11 @@ export function lunisolar(options: LunisolarOptions, utc: number): LunisolarDate
   const currentMonth = month
   const currentYear = month.year
   const yearStartAt =
-    months.find(({ year, month, is_leap }) =>
-      year === currentYear && month === 1 && !is_leap,
-    )?.last_at ?? currentMonth.last_at
+    months.find(({ year, month, is_leap }) => year === currentYear && month === 1 && !is_leap)
+      ?.last_at ?? currentMonth.last_at
   const nextYearStartAt =
-    months.find(({ year, month, is_leap }) =>
-      year === currentYear + 1 && month === 1 && !is_leap,
-    )?.last_at ?? currentMonth.next_at
+    months.find(({ year, month, is_leap }) => year === currentYear + 1 && month === 1 && !is_leap)
+      ?.last_at ?? currentMonth.next_at
   const day = to_tempo_bare(options.dayMsec, options.dayZero, utc)
   return {
     ...month,

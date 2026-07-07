@@ -119,15 +119,7 @@ export function solor(
   idx = 2,
   solarNoon = noon(sunny, dayMsec, dayZero, yearMsec, seasonZero, utc),
 ) {
-  const days = [
-    6,
-    -18 / 60,
-    -50 / 60,
-    -6,
-    -7.36,
-    -12,
-    -18,
-  ]
+  const days = [6, -18 / 60, -50 / 60, -6, -7.36, -12, -18]
   if (hasSolarEvents(sunny)) {
     return sunny.solarEvents(utc, {
       latitudeDeg: geo[0],
@@ -359,12 +351,7 @@ export function 雑節_by_phase(
   stemLength: number,
   utc: number,
 ) {
-  return 雑節_from_terms(
-    dayMsec,
-    day10Zero,
-    stemLength,
-    solar_terms(sunny, dayMsec, dayZero, utc),
-  )
+  return 雑節_from_terms(dayMsec, day10Zero, stemLength, solar_terms(sunny, dayMsec, dayZero, utc))
 }
 
 export function to_tempo_by_solor(

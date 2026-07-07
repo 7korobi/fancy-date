@@ -1,1 +1,1 @@
-export * from './naoj/index';
+export * from './naoj/index'

@@ -1,10 +1,7 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { to_msec } = require('../lib/time')
-const {
-  NAOJ_LUNISOLAR_FIXTURES,
-  NAOJ_LUNISOLAR_SOURCE,
-} = require('./fixtures/lunisolar-naoj')
+const { NAOJ_LUNISOLAR_FIXTURES, NAOJ_LUNISOLAR_SOURCE } = require('./fixtures/lunisolar-naoj')
 
 describe('NAOJ lunisolar fixtures', () => {
   test('source metadata is explicit', () => {
@@ -172,14 +169,10 @@ describe('NAOJ lunisolar fixtures', () => {
       parts: [{ unit: 'hour', value: -20, label: '20刻' }],
     })
     const twentyHoursLater = Calendar.定気法.add(base, '20刻後')
-    expect(Calendar.定気法.span(twentyHoursLater, base, { precise: 'H' })).toBe(
-      '1日8刻後',
-    )
+    expect(Calendar.定気法.span(twentyHoursLater, base, { precise: 'H' })).toBe('1日8刻後')
 
     const thirtyHoursAgo = Calendar.定気法.add(base, '30刻前')
-    expect(Calendar.定気法.span(thirtyHoursAgo, base, { precise: 'H' })).toBe(
-      '2日6刻前',
-    )
+    expect(Calendar.定気法.span(thirtyHoursAgo, base, { precise: 'H' })).toBe('2日6刻前')
     expect(Calendar.定気法.add(base, '1年1刻半1112秒154ミリ秒後')).toBe(target)
   })
 

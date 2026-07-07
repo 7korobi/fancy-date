@@ -234,7 +234,12 @@ describe('tempo', () => {
     // 既存 drill_down() のテーブル無し分岐は to_tempo_bare(size, base.last_at, at) と同じ式。
     test('at() matches to_tempo_bare(size, parent.last_at, write_at) across many parents', () => {
       for (let year = -2; year <= 2; year++) {
-        const parent = { zero: 0, now_idx: year, last_at: parentLastAt(year), next_at: parentLastAt(year + 1) }
+        const parent = {
+          zero: 0,
+          now_idx: year,
+          last_at: parentLastAt(year),
+          next_at: parentLastAt(year + 1),
+        }
         for (let i = -2; i <= 25; i++) {
           const write_at = parent.last_at + i * SEASON + 100
           const envelope = rule.at(write_at, { write_at, parent })
@@ -275,7 +280,9 @@ describe('tempo', () => {
       const start = moonZero - 50 * moonMsec
       for (let i = 0; i < 100; i++) {
         const write_at = start + i * moonMsec * 0.97
-        const expected = envelopeOf(floorTempo(to_tempo_bare(moonMsec, moonZero, write_at), daySize, dayZero))
+        const expected = envelopeOf(
+          floorTempo(to_tempo_bare(moonMsec, moonZero, write_at), daySize, dayZero),
+        )
         expect(rule.at(write_at)).toEqual(expected)
       }
     })
@@ -391,7 +398,9 @@ describe('tempo', () => {
     const springZero = rg.calc.zero.spring
     const rgDaySize = rg.calc.msec.day
     const rgDayZero = rg.calc.zero.day
-    const singleRule = new FloorTempoRule(yearMsec, springZero, [{ size: rgDaySize, zero: rgDayZero }])
+    const singleRule = new FloorTempoRule(yearMsec, springZero, [
+      { size: rgDaySize, zero: rgDayZero },
+    ])
 
     test('at() matches to_tempo_bare(year).floor(day) (single floor step)', () => {
       const start = springZero - 5 * yearMsec
@@ -614,7 +623,16 @@ describe('tempo', () => {
     const yearMsec = g.calc.msec.year
     const seasonZero = g.calc.zero.season
     const hourLength = g.dic.H.length
-    const rule = new SolarDayHourTempoRule(sunny, earthy, geo, dayMsec, dayZero, yearMsec, seasonZero, hourLength)
+    const rule = new SolarDayHourTempoRule(
+      sunny,
+      earthy,
+      geo,
+      dayMsec,
+      dayZero,
+      yearMsec,
+      seasonZero,
+      hourLength,
+    )
 
     // 既存 to_tempo_by_solor() と同じ計算になることを、昼夜の長さ差が大きい
     // 夏至・冒至付近の複数日・日内の複数時刻で確認する。
@@ -626,7 +644,18 @@ describe('tempo', () => {
           for (let h = 0; h < hourLength; h++) {
             const write_at = day.last_at + Math.floor((h + 0.3) * (day.size / hourLength))
             const expected = envelopeOf(
-              to_tempo_by_solor(sunny, earthy, geo, dayMsec, dayZero, yearMsec, seasonZero, hourLength, write_at, day),
+              to_tempo_by_solor(
+                sunny,
+                earthy,
+                geo,
+                dayMsec,
+                dayZero,
+                yearMsec,
+                seasonZero,
+                hourLength,
+                write_at,
+                day,
+              ),
             )
             const actual = rule.at(write_at, { write_at, day: envelopeOf(day) })
             expect(actual).toEqual(expected)
@@ -641,7 +670,18 @@ describe('tempo', () => {
       const day = to_tempo_bare(dayMsec, dayZero, Date.UTC(2024, 11, 21) + 1000)
       const startWriteAt = day.last_at + 100
       const base = { write_at: startWriteAt, day: envelopeOf(day) }
-      let tempo = to_tempo_by_solor(sunny, earthy, geo, dayMsec, dayZero, yearMsec, seasonZero, hourLength, startWriteAt, day)
+      let tempo = to_tempo_by_solor(
+        sunny,
+        earthy,
+        geo,
+        dayMsec,
+        dayZero,
+        yearMsec,
+        seasonZero,
+        hourLength,
+        startWriteAt,
+        day,
+      )
       let envelope = rule.at(startWriteAt, base)
       for (const amount of [1, 1, 1, -1, 2, -2, 3, -4]) {
         tempo = tempo.slide(amount)
@@ -819,7 +859,13 @@ describe('EraAdjustedTempoRule', () => {
     ])
   }
   function buildRule(g, innerRule) {
-    return new EraAdjustedTempoRule(innerRule, g.calc.msec.year, g.table.msec.era, g.calc.zero.era, g.calc.eras)
+    return new EraAdjustedTempoRule(
+      innerRule,
+      g.calc.msec.year,
+      g.table.msec.era,
+      g.calc.zero.era,
+      g.calc.eras,
+    )
   }
 
   const g = Calendar.平気法
@@ -877,7 +923,13 @@ describe('EraAdjustedTempoRule', () => {
   // 元号調整前の raw な値をそのまま返すことを確認する。
   test('with_era() bootstrapping guard returns the raw (era-unadjusted) envelope when eraTable is not yet available', () => {
     const inner = heikiInnerRule(g)
-    const bootstrapping = new EraAdjustedTempoRule(inner, g.calc.msec.year, undefined, g.calc.zero.era, g.calc.eras)
+    const bootstrapping = new EraAdjustedTempoRule(
+      inner,
+      g.calc.msec.year,
+      undefined,
+      g.calc.zero.era,
+      g.calc.eras,
+    )
     const utc = Date.UTC(2020, 0, 1)
     expect(bootstrapping.at(utc, { write_at: utc })).toEqual(inner.at(utc))
   })

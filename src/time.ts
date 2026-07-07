@@ -36,8 +36,6 @@ export function to_tempo_bare(size: number, zero: number, write_at_src: number |
   return Tempo.at(new FixedTempoRule(size, zero), { write_at })
 }
 
-
-
 export function to_tempo_by(table: number[], zero: number, write_at: number) {
   return Tempo.at(new TableTempoRule(table, zero), { write_at })
 }

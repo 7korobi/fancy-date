@@ -252,7 +252,8 @@ export class EarthMoonOrbital implements LunarEventModel {
     const obliquityDeg = true_obliquity_deg(jde)
     const rightAscensionDeg = mod(
       atan2_deg(
-        sin_deg(longitudeDeg) * cos_deg(obliquityDeg) - tan_deg(latitudeDeg) * sin_deg(obliquityDeg),
+        sin_deg(longitudeDeg) * cos_deg(obliquityDeg) -
+          tan_deg(latitudeDeg) * sin_deg(obliquityDeg),
         cos_deg(longitudeDeg),
       ),
       360,
@@ -286,7 +287,8 @@ export class EarthMoonOrbital implements LunarEventModel {
     const heightKm = heightM / 1000
     const rhoSinPhiPrime =
       0.99664719 * Math.sin(u) + (heightKm / EARTH_EQUATORIAL_RADIUS_KM) * sin_deg(latitudeDeg)
-    const rhoCosPhiPrime = Math.cos(u) + (heightKm / EARTH_EQUATORIAL_RADIUS_KM) * cos_deg(latitudeDeg)
+    const rhoCosPhiPrime =
+      Math.cos(u) + (heightKm / EARTH_EQUATORIAL_RADIUS_KM) * cos_deg(latitudeDeg)
     const parallaxRad = equatorial.horizontalParallaxDeg * DEG_TO_RAD
     const hourAngleRad = hourAngleDeg * DEG_TO_RAD
     const declinationRad = equatorial.declinationDeg * DEG_TO_RAD
@@ -294,7 +296,10 @@ export class EarthMoonOrbital implements LunarEventModel {
       -rhoCosPhiPrime * Math.sin(parallaxRad) * Math.sin(hourAngleRad),
       Math.cos(declinationRad) - rhoCosPhiPrime * Math.sin(parallaxRad) * Math.cos(hourAngleRad),
     )
-    const topocentricRightAscensionDeg = mod(equatorial.rightAscensionDeg + deltaAlphaRad * RAD_TO_DEG, 360)
+    const topocentricRightAscensionDeg = mod(
+      equatorial.rightAscensionDeg + deltaAlphaRad * RAD_TO_DEG,
+      360,
+    )
     const topocentricDeclinationDeg = atan2_deg(
       (Math.sin(declinationRad) - rhoSinPhiPrime * Math.sin(parallaxRad)) * Math.cos(deltaAlphaRad),
       Math.cos(declinationRad) - rhoCosPhiPrime * Math.sin(parallaxRad) * Math.cos(hourAngleRad),
@@ -324,13 +329,34 @@ export class EarthMoonOrbital implements LunarEventModel {
     } = options
     const timezoneMsec = (timezoneDeg / 360) * MSEC_PER_DAY
     const dayStartUtc =
-      options.dayStartUtc ?? Math.floor((utc + timezoneMsec) / MSEC_PER_DAY) * MSEC_PER_DAY - timezoneMsec
+      options.dayStartUtc ??
+      Math.floor((utc + timezoneMsec) / MSEC_PER_DAY) * MSEC_PER_DAY - timezoneMsec
     const samples = this.lunarSamples(dayStartUtc, latitudeDeg, longitudeDeg, heightM)
-    const moonrise = this.findAltitudeEvent(samples, horizonDeg, 1, horizonDeg, latitudeDeg, longitudeDeg, heightM)
-    const moonset = this.findAltitudeEvent(samples, horizonDeg, -1, horizonDeg, latitudeDeg, longitudeDeg, heightM)
+    const moonrise = this.findAltitudeEvent(
+      samples,
+      horizonDeg,
+      1,
+      horizonDeg,
+      latitudeDeg,
+      longitudeDeg,
+      heightM,
+    )
+    const moonset = this.findAltitudeEvent(
+      samples,
+      horizonDeg,
+      -1,
+      horizonDeg,
+      latitudeDeg,
+      longitudeDeg,
+      heightM,
+    )
     const transit = this.findTransitEvent(samples, latitudeDeg, longitudeDeg, heightM)
-    const rise = Number.isNaN(moonrise) ? undefined : this.lunarHorizontal(moonrise, latitudeDeg, longitudeDeg, heightM)
-    const set = Number.isNaN(moonset) ? undefined : this.lunarHorizontal(moonset, latitudeDeg, longitudeDeg, heightM)
+    const rise = Number.isNaN(moonrise)
+      ? undefined
+      : this.lunarHorizontal(moonrise, latitudeDeg, longitudeDeg, heightM)
+    const set = Number.isNaN(moonset)
+      ? undefined
+      : this.lunarHorizontal(moonset, latitudeDeg, longitudeDeg, heightM)
     const transitHorizontal = Number.isNaN(transit)
       ? undefined
       : this.lunarHorizontal(transit, latitudeDeg, longitudeDeg, heightM)
@@ -349,11 +375,16 @@ export class EarthMoonOrbital implements LunarEventModel {
   }
 
   lunarApsis(kind: LunarApsisKind, near: number): LunarApsis {
-    const compare = kind === 'perigee' ? (a: number, b: number) => a < b : (a: number, b: number) => b < a
+    const compare =
+      kind === 'perigee' ? (a: number, b: number) => a < b : (a: number, b: number) => b < a
     let at = near
     let distanceKm = this.lunarEquatorial(at).distanceKm
     const step = MSEC_PER_DAY / 4
-    for (let cursor = near - 14 * MSEC_PER_DAY; cursor <= near + 14 * MSEC_PER_DAY; cursor += step) {
+    for (
+      let cursor = near - 14 * MSEC_PER_DAY;
+      cursor <= near + 14 * MSEC_PER_DAY;
+      cursor += step
+    ) {
       const candidateDistanceKm = this.lunarEquatorial(cursor).distanceKm
       if (compare(candidateDistanceKm, distanceKm)) {
         at = cursor
@@ -367,7 +398,9 @@ export class EarthMoonOrbital implements LunarEventModel {
       const right = to - (to - from) / 3
       const leftDistanceKm = this.lunarEquatorial(left).distanceKm
       const rightDistanceKm = this.lunarEquatorial(right).distanceKm
-      if (kind === 'perigee' ? leftDistanceKm < rightDistanceKm : rightDistanceKm < leftDistanceKm) {
+      if (
+        kind === 'perigee' ? leftDistanceKm < rightDistanceKm : rightDistanceKm < leftDistanceKm
+      ) {
         to = right
       } else {
         from = left
@@ -412,11 +445,21 @@ export class EarthMoonOrbital implements LunarEventModel {
     return { kind, at: eventAt, longitudeDeg, latitudeDeg }
   }
 
-  private lunarSamples(dayStartUtc: number, latitudeDeg: number, longitudeDeg: number, heightM: number) {
+  private lunarSamples(
+    dayStartUtc: number,
+    latitudeDeg: number,
+    longitudeDeg: number,
+    heightM: number,
+  ) {
     const samples: { at: number; altitudeDeg: number; hourAngleDeg: number }[] = []
     for (let i = 0; i <= 24; i++) {
       const at = dayStartUtc + i * 60 * MSEC_PER_MINUTE
-      const { altitudeDeg, hourAngleDeg } = this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM)
+      const { altitudeDeg, hourAngleDeg } = this.lunarHorizontal(
+        at,
+        latitudeDeg,
+        longitudeDeg,
+        heightM,
+      )
       samples.push({ at, altitudeDeg, hourAngleDeg })
     }
     return samples
@@ -479,7 +522,8 @@ export class EarthMoonOrbital implements LunarEventModel {
     return bisect_zero(
       from,
       to,
-      (at) => this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM).altitudeDeg - altitudeDeg,
+      (at) =>
+        this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM).altitudeDeg - altitudeDeg,
     )
   }
 

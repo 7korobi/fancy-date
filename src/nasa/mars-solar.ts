@@ -37,7 +37,10 @@ export class MarsSolarOrbital {
     ]
   }
 
-  static planet(center: STAR = MarsSolarOrbital.sun, options: MarsSolarOrbitalOptions = {}): PLANET {
+  static planet(
+    center: STAR = MarsSolarOrbital.sun,
+    options: MarsSolarOrbitalOptions = {},
+  ): PLANET {
     const { body, ...orbitalOptions } = options
     return placePlanet({
       body,
@@ -76,12 +79,12 @@ export class MarsSolarOrbital {
       0.0039 * cosDeg((0.985626 * days) / 1.1177 + 191.837) +
       0.0037 * cosDeg((0.985626 * days) / 15.7866 + 21.736) +
       0.0021 * cosDeg((0.985626 * days) / 2.1354 + 15.704) +
-      0.0020 * cosDeg((0.985626 * days) / 2.4694 + 95.528) +
+      0.002 * cosDeg((0.985626 * days) / 2.4694 + 95.528) +
       0.0018 * cosDeg((0.985626 * days) / 32.8493 + 49.095)
     const equationOfCenterDeg =
       (10.691 + 3e-7 * days) * sinDeg(meanAnomalyDeg) +
       0.623 * sinDeg(2 * meanAnomalyDeg) +
-      0.050 * sinDeg(3 * meanAnomalyDeg) +
+      0.05 * sinDeg(3 * meanAnomalyDeg) +
       0.005 * sinDeg(4 * meanAnomalyDeg) +
       0.0005 * sinDeg(5 * meanAnomalyDeg) +
       pbsDeg

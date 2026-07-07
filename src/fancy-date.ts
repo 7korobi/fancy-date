@@ -176,11 +176,7 @@ export type Span = {
 export type SpanOptions = {
   precise?: boolean | Precision
 }
-export type SpanLike =
-  | string
-  | Span
-  | SpanPartLike
-  | readonly SpanPartLike[]
+export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[]
 const span_anchor = Symbol('span_anchor')
 type AnchoredSpan = Span & {
   [span_anchor]?: readonly [from: number, to: number, calendar: FancyDate]
@@ -856,10 +852,16 @@ export class FancyDate {
   }
 
   private format_span_parts(parts: readonly SpanPart[], direction: SpanDirection): Span {
-    const activeParts = parts.filter(({ value }) => value).map((part) => ({
-      ...part,
-      label: this.span_part_label(part.token, Math.abs(part.value), this.span_part_fallback_unit(part.token)),
-    }))
+    const activeParts = parts
+      .filter(({ value }) => value)
+      .map((part) => ({
+        ...part,
+        label: this.span_part_label(
+          part.token,
+          Math.abs(part.value),
+          this.span_part_fallback_unit(part.token),
+        ),
+      }))
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
     return {
@@ -884,7 +886,12 @@ export class FancyDate {
   }
 
   private invert_span(span: SpanLike): readonly SpanPart[] {
-    return this.span_parts_of(span).map(({ token, unit, value, label }) => ({ token, unit, value: 0 - value, label }))
+    return this.span_parts_of(span).map(({ token, unit, value, label }) => ({
+      token,
+      unit,
+      value: 0 - value,
+      label,
+    }))
   }
 
   private parse_span_part(text: string, sign: number) {
@@ -939,7 +946,11 @@ export class FancyDate {
       'Z',
       'Zz',
       'u',
-    ].map((token) => [token as Token, this.span_part_unit(token as Token), this.span_part_fallback_unit(token as Token)])
+    ].map((token) => [
+      token as Token,
+      this.span_part_unit(token as Token),
+      this.span_part_fallback_unit(token as Token),
+    ])
   }
 
   private span_target(utc: number, parts: readonly SpanPart[]) {
@@ -1030,7 +1041,10 @@ export class FancyDate {
    * 食い違って年が余分に1つ進む不具合があった。都度 to_tempos() で
    * 再構築すれば、暦の種類によらず常に正しい年内番号の M が得られる。
    */
-  private step_month(month: Tempo<TempoBase> & TempoMonth, amount: number): Tempo<TempoBase> & TempoMonth {
+  private step_month(
+    month: Tempo<TempoBase> & TempoMonth,
+    amount: number,
+  ): Tempo<TempoBase> & TempoMonth {
     let result = month
     let remaining = amount
     while (remaining > 0) {
@@ -1049,7 +1063,8 @@ export class FancyDate {
     const yearStart = this.find_span_year_start(target.u, target.near)
     const yearWeek = this.to_tempos(yearStart).w
     const week = yearWeek.slide_to(target.week)
-    const at = week.last_at + Math.min(Math.max(0, target.sourceWeekSince), Math.max(0, week.size - 1))
+    const at =
+      week.last_at + Math.min(Math.max(0, target.sourceWeekSince), Math.max(0, week.size - 1))
     const tempos = this.to_tempos(at)
     target.u = tempos.u.raw_now_idx
     target.y = tempos.y.now_idx
@@ -1060,7 +1075,11 @@ export class FancyDate {
   }
 
   private normalize_span_target(target: SpanTarget) {
-    const carry = (token: 'M' | 'H' | 'm' | 's' | 'S', parent: 'y' | 'd' | 'H' | 'm' | 's', size: number) => {
+    const carry = (
+      token: 'M' | 'H' | 'm' | 's' | 'S',
+      parent: 'y' | 'd' | 'H' | 'm' | 's',
+      size: number,
+    ) => {
       const amount = Math.floor(target[token] / size)
       target[token] = mod(target[token], size)
       target[parent] += amount
@@ -1108,7 +1127,10 @@ export class FancyDate {
     const month = this.find_span_month(target)
     const dayIndex =
       target.changedRank <= span_rank('M')
-        ? Math.min(Math.max(target.d, 0), Math.max(0, Math.floor(month.size / this.calc.msec.day) - 1))
+        ? Math.min(
+            Math.max(target.d, 0),
+            Math.max(0, Math.floor(month.size / this.calc.msec.day) - 1),
+          )
         : target.d
     const day = this.to_tempos(month.last_at + dayIndex * this.calc.msec.day).d
     if (target.changedRank <= span_rank('d')) {
@@ -1126,14 +1148,19 @@ export class FancyDate {
     if (hour.now_idx !== target.H) return null
 
     let at = hour.last_at
-    if (target.changedRank < span_rank('m')) return at + Math.min(Math.max(0, target.sourceHourSince), Math.max(0, hour.size - 1))
+    if (target.changedRank < span_rank('m'))
+      return at + Math.min(Math.max(0, target.sourceHourSince), Math.max(0, hour.size - 1))
 
     const minuteSize = hour.size / this.dic.m.length
     if (span_rank('m') <= target.changedRank) at += target.m * (hour.size / this.dic.m.length)
-    if (target.changedRank < span_rank('s')) return at + Math.min(Math.max(0, target.sourceMinuteSince), Math.max(0, minuteSize - 1))
+    if (target.changedRank < span_rank('s'))
+      return at + Math.min(Math.max(0, target.sourceMinuteSince), Math.max(0, minuteSize - 1))
 
     if (span_rank('s') <= target.changedRank) at += target.s * this.calc.msec.second
-    if (target.changedRank < span_rank('S')) return at + Math.min(Math.max(0, target.sourceSecondSince), Math.max(0, this.calc.msec.second - 1))
+    if (target.changedRank < span_rank('S'))
+      return (
+        at + Math.min(Math.max(0, target.sourceSecondSince), Math.max(0, this.calc.msec.second - 1))
+      )
 
     if (span_rank('S') <= target.changedRank) at += target.S
     return at
@@ -1141,7 +1168,11 @@ export class FancyDate {
 
   private find_span_month(target: SpanTarget) {
     const near = this.to_tempos(target.near)
-    if (near.u.raw_now_idx === target.u && near.M.now_idx === target.M && near.M.is_leap === target.M_is_leap) {
+    if (
+      near.u.raw_now_idx === target.u &&
+      near.M.now_idx === target.M &&
+      near.M.is_leap === target.M_is_leap
+    ) {
       return near.M
     }
 
@@ -1415,7 +1446,12 @@ export class FancyDate {
         )
       }
     }
-    return this.with_span_anchor(from, to, { unit: 'day', value: 0, label: '今', parts: [] }, toTempos.s.next_at)
+    return this.with_span_anchor(
+      from,
+      to,
+      { unit: 'day', value: 0, label: '今', parts: [] },
+      toTempos.s.next_at,
+    )
   }
 
   private with_span_anchor(from: number, to: number, span: Span, next_at?: number) {
@@ -1430,11 +1466,7 @@ export class FancyDate {
     return span
   }
 
-  private precise_span(
-    from: number,
-    to: number,
-    precision: Precision,
-  ): Span {
+  private precise_span(from: number, to: number, precision: Precision): Span {
     const parts = this.span_parts(from, to, precision)
 
     return this.format_span_parts(parts, to < from ? '後' : '前')
@@ -1482,7 +1514,14 @@ export class FancyDate {
     const coreRows: [Token, Unit, string, number, number, number][] = [
       ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
       ['M', 'month', 'ヶ月', earlierTempos.M.now_idx, laterTempos.M.now_idx, this.dic.M.length],
-      ['d', 'day', '日', earlierTempos.d.now_idx, laterTempos.d.now_idx, earlierTempos.M.size / this.calc.msec.day],
+      [
+        'd',
+        'day',
+        '日',
+        earlierTempos.d.now_idx,
+        laterTempos.d.now_idx,
+        earlierTempos.M.size / this.calc.msec.day,
+      ],
       ['H', 'hour', '時間', earlierTempos.H.now_idx, laterTempos.H.now_idx, this.dic.H.length],
       ['m', 'minute', '分', earlierTempos.m.now_idx, laterTempos.m.now_idx, this.dic.m.length],
       ['s', 'second', '秒', earlierTempos.s.now_idx, laterTempos.s.now_idx, this.dic.s.length],
@@ -1492,13 +1531,27 @@ export class FancyDate {
     if ('Y' === precision || 'w' === precision) {
       return [
         ['Y', 'year', '年', earlierTempos.Y.now_idx, laterTempos.Y.now_idx, Infinity],
-        ['w', 'day', '週', earlierTempos.w.now_idx, laterTempos.w.now_idx, Math.ceil(earlierTempos.y.size / this.calc.msec.week)],
+        [
+          'w',
+          'day',
+          '週',
+          earlierTempos.w.now_idx,
+          laterTempos.w.now_idx,
+          Math.ceil(earlierTempos.y.size / this.calc.msec.week),
+        ],
       ] as [Token, Unit, string, number, number, number][]
     }
     if ('D' === precision) {
       return [
         ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
-        ['D', 'day', '日', earlierTempos.D.now_idx, laterTempos.D.now_idx, earlierTempos.y.size / this.calc.msec.day],
+        [
+          'D',
+          'day',
+          '日',
+          earlierTempos.D.now_idx,
+          laterTempos.D.now_idx,
+          earlierTempos.y.size / this.calc.msec.day,
+        ],
       ] as [Token, Unit, string, number, number, number][]
     }
     return undefined
@@ -2595,10 +2648,14 @@ K   = @dic.earthy[2] / 360
         } else {
           u = Tempo.at(
             new EraAdjustedTempoRule(
-              new FloorTempoRule(this.calc.msec.year, this.calc.zero.season + this.calc.msec.season, [
-                { size: moon_msec, zero: this.calc.zero.moon },
-                { size: this.calc.msec.day, zero: this.calc.zero.day },
-              ]),
+              new FloorTempoRule(
+                this.calc.msec.year,
+                this.calc.zero.season + this.calc.msec.season,
+                [
+                  { size: moon_msec, zero: this.calc.zero.moon },
+                  { size: this.calc.msec.day, zero: this.calc.zero.day },
+                ],
+              ),
               this.calc.msec.year,
               this.table.msec.era,
               this.calc.zero.era,
@@ -2713,29 +2770,47 @@ K   = @dic.earthy[2] / 360
     const Q = cyclic_label(envelope_of(M), Math.floor((4 * M.now_idx) / this.dic.M.length))
 
     // 日不断(固定 zero からの周期を length で割った余りをラベルにする)
-    const A = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length), {
-      write_at: utc,
-    })
-    const B = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length), {
-      write_at: utc,
-    })
-    const C = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length), {
-      write_at: utc,
-    })
-    const F = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length), {
-      write_at: utc,
-    })
+    const A = Tempo.at(
+      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length),
+      {
+        write_at: utc,
+      },
+    )
+    const B = Tempo.at(
+      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length),
+      {
+        write_at: utc,
+      },
+    )
+    const C = Tempo.at(
+      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length),
+      {
+        write_at: utc,
+      },
+    )
+    const F = Tempo.at(
+      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length),
+      {
+        write_at: utc,
+      },
+    )
 
     let E: TempoLike | TempoLabelLike
     let V: TempoLike | TempoLabelLike
     if (this.is_table_leap) {
       // 旧暦では、週は月初にリセットする。
-      E = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length), {
-        write_at: utc,
-      })
-      V = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length), {
-        write_at: utc,
-      })
+      E = Tempo.at(
+        new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length),
+        {
+          write_at: utc,
+        },
+      )
+      V = Tempo.at(
+        new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length),
+        {
+          write_at: utc,
+        },
+      )
     } else {
       // 月/日の位置から直接導く番号であり、固定 zero からの日周期(A/B/C/F や
       // is_table_leap の E/V)とは別の意味付けなので、CyclicDayTempoRule
@@ -3076,4 +3151,3 @@ function span_unit_token(unit: Unit): keyof TempoDiff {
       return 'S'
   }
 }
-

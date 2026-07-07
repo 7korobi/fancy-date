@@ -334,7 +334,9 @@ describe('Gregorio calculate', () => {
   test('find can override inferred step', () => {
     const between = [g.parse('2020年3月1日'), g.parse('2020年3月2日')]
     const found = g.find(between, [{ H: '12' }], { step: 'H' })
-    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 HH時'))).toEqual(['2020年03月01日 12時'])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 HH時'))).toEqual([
+      '2020年03月01日 12時',
+    ])
   })
 
   // is_table_leap(SolarTable)の u は table.msec.year.length === dic.p.length
@@ -348,7 +350,9 @@ describe('Gregorio calculate', () => {
   // 4021年相当の位置に飛ぶ)。年をまたいだ find の step:'y'/'u' が
   // 該当年を1件も見つけられない、という形で実害があった。
   test('find with step y/u works across a leap-table period boundary (year 400+) — regression for a real date-jumping bug', () => {
-    const found = g.find([g.parse('2020年1月1日'), g.parse('2025年1月1日')], [{ y: '2021' }], { step: 'y' })
+    const found = g.find([g.parse('2020年1月1日'), g.parse('2025年1月1日')], [{ y: '2021' }], {
+      step: 'y',
+    })
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2021年01月01日'])
 
     const tempos = g.to_tempos(g.parse('2020年1月1日'))
@@ -392,7 +396,8 @@ describe('Gregorio calculate', () => {
   test('x (timezone) exposes the fixed offset and forbids succ()/back() (no dangerous stepping)', () => {
     const utc = g.parse('2020年6月15日')
     const tempos = g.to_tempos(utc)
-    const expectedTimezone = (g.calc.msec.day * (g.dic.geo[2] != null ? g.dic.geo[2] : g.dic.geo[1])) / 360
+    const expectedTimezone =
+      (g.calc.msec.day * (g.dic.geo[2] != null ? g.dic.geo[2] : g.dic.geo[1])) / 360
     expect(tempos.x.now_idx).toBe(expectedTimezone)
     expect(typeof tempos.x.succ).not.toBe('function')
     expect(typeof tempos.x.back).not.toBe('function')
@@ -575,7 +580,13 @@ describe('平気法 calculate', () => {
     // 起点値をグレゴリオ暦(2020年1月22日=甲子という既知の事実と一致
     // 済み)に合わせて乙亥/戊午に修正済み。
     const 定気法 = Calendar.定気法
-    const dates = ['2020年1月22日', '2022年7月4日', '2023年11月30日', '2024年3月10日', '2025年5月5日']
+    const dates = [
+      '2020年1月22日',
+      '2022年7月4日',
+      '2023年11月30日',
+      '2024年3月10日',
+      '2025年5月5日',
+    ]
     for (const d of dates) {
       // 日境界の揺れを避けるため現地正午で比較する。
       const utc = g.parse(d) + 12 * 3600 * 1000 - 9 * 3600 * 1000
@@ -597,7 +608,6 @@ describe('平気法 calculate', () => {
     // 60年進めると同じ干支に戻る(60年周期であることの直接確認)
     expect(平気法.format(msec, 'a')).toEqual(labels[0])
   })
-
 })
 
 describe('Dr.Stone', () => {
@@ -949,10 +959,7 @@ describe('Gregorian', () => {
   // sunnyのみ天文精度(平気法の moony はそのまま)にした合成暦で、
   // 既知の閘月判定が実軌道基準に切り替わっていることを確認する。
   test('Nn/Zs leap-month detection also switches to orbital phase alongside Z', () => {
-    const testCal = 平気法
-      .dup()
-      .spot([天文地球, 月[1], 月[2]], 東京[1], 東京[2], 東京[3])
-      .init()
+    const testCal = 平気法.dup().spot([天文地球, 月[1], 月[2]], 東京[1], 東京[2], 東京[3]).init()
     expect(testCal.dic.sunny.solarEvents || testCal.dic.sunny.timeOfPhase).toBeTruthy()
 
     // 以前の等角(平気法)ロジックでは mean=false だったが、
@@ -1050,12 +1057,24 @@ describe('エジプト民用暦', () => {
     const epoch = c.parse('1年1月1日')
 
     expect(c.dic.geo).toEqual([30, 31.2, 30])
-    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
-    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'y年M月d日')).toBe('-746年2月26日')
-    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Y-ww-E')).toBe('-746-09-日')
-    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'GY-ww-E')).toBe('紀元前747-09-日')
-    expect(Calendar.Julian.format(Calendar.Julian.parse('-746年2月26日'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
-    expect(Calendar.Julian.format(epoch + to_msec('12h'), 'Gy年MM月dd日')).toBe('紀元前747年02月26日')
+    expect(
+      Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Gy年MM月dd日'),
+    ).toBe('紀元前747年02月26日')
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'y年M月d日')).toBe(
+      '-746年2月26日',
+    )
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'Y-ww-E')).toBe(
+      '-746-09-日',
+    )
+    expect(Calendar.Julian.format(Calendar.Julian.parse('紀元前747年2月26日'), 'GY-ww-E')).toBe(
+      '紀元前747-09-日',
+    )
+    expect(Calendar.Julian.format(Calendar.Julian.parse('-746年2月26日'), 'Gy年MM月dd日')).toBe(
+      '紀元前747年02月26日',
+    )
+    expect(Calendar.Julian.format(epoch + to_msec('12h'), 'Gy年MM月dd日')).toBe(
+      '紀元前747年02月26日',
+    )
     expect(c.format(epoch, 'Gy年Mod日')).toBe('ナボナサル紀元1年トート1日')
     expect(c.format(epoch + to_msec('359d'), 'Gy年Mod日')).toBe('ナボナサル紀元1年メソリ30日')
     expect(c.format(epoch + to_msec('360d'), 'Gy年Mod日')).toBe('ナボナサル紀元1年余日1日')

@@ -1,8 +1,8 @@
-import { Tempo } from './tempo';
-export declare const SECOND: number;
-export declare const MINUTE: number;
-export declare const HOUR: number;
-export declare const DAY: number;
+import { Tempo } from './tempo'
+export declare const SECOND: number
+export declare const MINUTE: number
+export declare const HOUR: number
+export declare const DAY: number
 /**
  * Tempo(旧 TempoView。class Tempo は本ファイルから削除され、
  * tempo.ts(旧 tempo-model.ts)の TempoView が Tempo としてリネームされた)は
@@ -27,14 +27,22 @@ export declare const DAY: number;
  * 導出された値を使うことで、YEAR=31556925.147(固定近似)のような不正確さも
  * 生まれない)。
  */
-export declare function to_tempo_bare(size: number, zero: number, write_at_src: number | Date): Tempo<{
-    write_at: number;
-}>;
-export declare function to_tempo_by(table: number[], zero: number, write_at: number): Tempo<{
-    write_at: number;
-}>;
+export declare function to_tempo_bare(
+  size: number,
+  zero: number,
+  write_at_src: number | Date,
+): Tempo<{
+  write_at: number
+}>
+export declare function to_tempo_by(
+  table: number[],
+  zero: number,
+  write_at: number,
+): Tempo<{
+  write_at: number
+}>
 export type DurationOptions = {
-    strict?: boolean;
-};
-export declare function to_msec(str: string, options?: DurationOptions): number;
-export declare function to_sec(str: string, { strict }?: DurationOptions): number;
+  strict?: boolean
+}
+export declare function to_msec(str: string, options?: DurationOptions): number
+export declare function to_sec(str: string, { strict }?: DurationOptions): number

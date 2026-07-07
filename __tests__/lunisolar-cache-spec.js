@@ -88,7 +88,11 @@ describe('_lunisolar_cache tuning history (performance spec)', () => {
 
     const base = Calendar.Gregorian.parse('2024年3月10日')
     const target =
-      Calendar.Gregorian.parse('2025年2月28日') + to_msec('3h') + to_msec('45m') + to_msec('12s') + 345
+      Calendar.Gregorian.parse('2025年2月28日') +
+      to_msec('3h') +
+      to_msec('45m') +
+      to_msec('12s') +
+      345
 
     const resolves = countLunisolarResolves(g, () => {
       g.span_obj(target, base, { precise: 'S' })

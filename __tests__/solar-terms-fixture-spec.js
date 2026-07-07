@@ -67,7 +67,9 @@ describe('NAOJ solar term fixtures', () => {
   })
 
   test('2024 covers all 24 solar terms', () => {
-    const names = NAOJ_SOLAR_TERM_FIXTURES.filter(({ year }) => year === 2024).map(({ name }) => name)
+    const names = NAOJ_SOLAR_TERM_FIXTURES.filter(({ year }) => year === 2024).map(
+      ({ name }) => name,
+    )
     expect(SOLAR_TERM_NAMES_24.every((name) => names.includes(name))).toBe(true)
   })
 })
@@ -82,7 +84,9 @@ describe('NAOJ solar term conformance target', () => {
 
   conformanceTest('GregorianAstronomical solar_phase matches published JST minute fixtures', () => {
     const toleranceMinutes = Number(process.env.FANCY_DATE_NAOJ_TOLERANCE_MINUTES ?? 2)
-    const misses = solarTermDifferences().filter(({ diffMinutes }) => toleranceMinutes < diffMinutes)
+    const misses = solarTermDifferences().filter(
+      ({ diffMinutes }) => toleranceMinutes < diffMinutes,
+    )
 
     expect({ count: misses.length, samples: misses.slice(0, 5) }).toEqual({ count: 0, samples: [] })
   })

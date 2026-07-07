@@ -238,8 +238,14 @@ export const 時鐘かな = [
  * (伝統的な月名 Martius〜December を割り当てる)の両方を用意し、
  * どちらを list に選ぶかは呼び出し側(calendars.ts)に委ねる。
  */
-export const ロムルス月ラベル数値 = [...Array(10).fill(null), '暦外'] as unknown as readonly string[]
-export const ロムルス月ラベル数値かな = [...Array(10).fill(null), 'れきがい'] as unknown as readonly string[]
+export const ロムルス月ラベル数値 = [
+  ...Array(10).fill(null),
+  '暦外',
+] as unknown as readonly string[]
+export const ロムルス月ラベル数値かな = [
+  ...Array(10).fill(null),
+  'れきがい',
+] as unknown as readonly string[]
 
 export const ロムルス月ラベルラテン語 = [
   'Martius',
