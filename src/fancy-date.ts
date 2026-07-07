@@ -240,8 +240,12 @@ const main_tokens = 'ABCEFabcfx' + core_tokens
 const sub_tokens = 'DJNQVYZuw'
 const all_tokens = main_tokens + sub_tokens
 
+// y(年)は numeral_label()/numeral_label_ruby() 経由で yo/yr サフィックスを
+// 持てるように追加した(FancyDate.def_to_label() 末尾の y 配線を参照)。
+// 既存のフォーマット文字列に "yo"/"yr" という並びのリテラルは無い
+// (確認済み)ため、この拡張は後方互換。
 const reg_token =
-  /([ABCEFHMNQVZabcdfms][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
+  /([ABCEFHMNQVZabcdfmsy][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
 
 type NUMBER_RANGE = [number, number?]
 type MEASURE = {
@@ -286,6 +290,12 @@ type IDIC = IIDX & {
   parse: string
   format: string
   numeral?: Numeral | null
+  // y(年)のような、algo() の list/rubys(静的配列)が現実的でない
+  // 無界の数値トークン向けの、'o'/'r' サフィックス(yo/yr)専用の数詞。
+  // bare の y が使う numeral とは独立に設定できる(理由は
+  // FancyDate.numeral_label() のコメント参照)。
+  numeral_label?: Numeral | null
+  numeral_label_ruby?: Numeral | null
   sunny: OrbitalModel
   moony?: OrbitalModel
   earthy: RotationModel
@@ -628,8 +638,16 @@ export class FancyDate {
     return this
   }
 
-  labels(labels: SpanLabels) {
-    Object.assign(this.dic.labels, labels)
+  // y(年)のように list/rubys の静的配列が現実的でない無界の数値トークン
+  // 向けに、'o'/'r' サフィックス(yo/yr)専用の数詞を指定する。bare の y
+  // (.numeral() / format_number() 経由)とは独立した状態に持つ——
+  // format_number() は H/m/s/S/u/y と D/Q/d/p/w が丸ごと共有しているため、
+  // ここを numeral() と同じ状態にしてしまうと yo/yr を機能させるだけの
+  // つもりが bare の d/H/m/s まで意図せず巻き込んでしまう(既存の暦の
+  // 出力・スナップショットを壊す)。
+  numeral_label(numeral: Numeral | null = null, ruby: Numeral | null = null) {
+    this.dic.numeral_label = numeral
+    this.dic.numeral_label_ruby = ruby
     return this
   }
 
@@ -637,6 +655,24 @@ export class FancyDate {
     const numeral = this.dic.numeral
     if (numeral) return numeral.parse(value)
     return `${value}`.padStart(size, '0')
+  }
+
+  private format_numeral_label(value: number, size: number) {
+    const numeral = this.dic.numeral_label
+    if (numeral) return numeral.parse(value)
+    return `${value}`.padStart(size, '0')
+  }
+
+  private format_numeral_label_ruby(value: number) {
+    // 他トークンの 'r' サフィックス(rubys 未設定時)と同じ規約に合わせ、
+    // ふりがな用 Numeral が設定されていなければ空文字を返す。
+    const numeral = this.dic.numeral_label_ruby
+    return numeral ? numeral.parse(value) : ''
+  }
+
+  labels(labels: SpanLabels) {
+    Object.assign(this.dic.labels, labels)
+    return this
   }
 
   private parse_number(text: string) {
@@ -1969,6 +2005,14 @@ export class FancyDate {
       const indexer: Indexer = this.dic[key]
       indexer.to_ruby = val
     }
+
+    // y(年)は object/object1/object2 の対象に含めていない(list/rubys の
+    // 静的配列が現実的でない無界の数値トークンのため)。'o'/'r' サフィックス
+    // (yo/yr)は numeral_label()/numeral_label_ruby() 経由で「漢字表現」
+    // 「ふりがな表現」を bare の y(numeral()の挙動のまま)とは独立に
+    // 指定できるようにする。
+    this.dic.y.to_label = (_list, val, size) => this.format_numeral_label(val.now_idx, size)
+    this.dic.y.to_ruby = (_list, val) => this.format_numeral_label_ruby(val.now_idx)
   }
 
   def_calc() {

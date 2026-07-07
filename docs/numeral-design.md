@@ -4,7 +4,7 @@
 
 セルフレビューを経て、初版から次の点を修正している: `DIC.parse()` の引数分割・`InflectedNumeral` との型不整合の解消、`old_jpn.rubys` を bare 使用した際に壊れた値を返す潜在バグの発見と「例外を投げる」方式での修正、`つくも`(99)修正の簡素化、ロケール登録簿の配線例を実在の `.lang()`/`.calendar()` シグネチャに合わせる修正、`arabic`/`roman` のロケール非依存化。
 
-**この設計は 3〜8 節・10 節の該当箇所を実装済み**(`src/number.ts`・`src/locale-registry.ts`・`src/sample/calendars.ts` の `RomanClock`、`__tests__/number-roundtrip-spec.js`・`__tests__/locale-spec.js`)。以下、各節の本文には実装済みの箇所に「(実装済み)」を付記する。実装時に見つかった追加の修正点(`ensure_number_map()` の逆引きキャッシュを appendix に依存しない DIC 向けに残す判断など)も反映済み。
+**この設計は 3〜8 節・10 節の該当箇所を実装済み**(`src/number.ts`・`src/locale-registry.ts`・`src/sample/calendars.ts` の `RomanClock`・平気法・定気法、`__tests__/number-roundtrip-spec.js`・`__tests__/locale-spec.js`・`__tests__/heikihou-numeral-spec.js`)。以下、各節の本文には実装済みの箇所に「(実装済み)」を付記する。実装時に見つかった追加の修正点(`ensure_number_map()` の逆引きキャッシュを appendix に依存しない DIC 向けに残す判断、`y` 専用の `numeral_label()` の追加など)も反映済み。
 
 ## 1. 目的とスコープ
 
@@ -338,5 +338,10 @@ new FancyDate()
 4. (完了)`SCRIPT_REGISTRY`/`LOCALE_REGISTRY`(`ja`/`en`/`ko`)を `src/locale-registry.ts` に追加した。既存サンプル暦の書き換えは行っていない(`.numeral()` はまだ暦全体で1つの Numeral しか受け付けず、per-token map 拡張は未実装のため——次点の課題として残す)。
 5. (完了)`RomanClock`(`src/sample/calendars.ts`)としてローマ数字クロックフェース・サンプルを追加した。
 6. (完了)韓国語(`kor.漢語系`/`kor.固有系.基本`/`kor.固有系.助数詞前`)と `LOCALE_REGISTRY.ko` を追加した(逆引きは未実装)。
+7. (完了)平気法・定気法(`src/sample/calendars.ts`)へ実際に適用した。
 
-**次点の課題(未着手)**: `.numeral()` のトークンごと map 拡張(`Partial<TOKENS<ALL_DIC, Numeral>>`)、既存サンプル暦のロケール登録簿経由での書き換え、韓国語数詞の逆引き(`regex`/`to_number`)。
+   - `d`(日): `algo({ d: [和暦日付漢字, 和暦日付ふりがな, '日'] })` で `jpn.漢字`/`old_jpn.rubys.語尾('か')` を静的な30要素配列に事前展開し、既存の `list`/`rubys` 機構(`H:[時鐘,時鐘かな,'刻']` と同じ形)にそのまま乗せた。`do`(漢字)/`dr`(日付ふりがな)が機能するようになり、bare の `d`(算用数字)は変更していない。
+   - `y`(年): `list`/`rubys` の静的配列が無界の年には使えないため、新規メソッド `FancyDate.numeral_label(numeral, ruby)` を追加した。当初 `.numeral(numeral, ruby)` 自体を拡張する案を検討したが、`format_number()` は `y` だけでなく `H`/`m`/`s`/`S`/`u`、`d`/`D`/`Q`/`p`/`w` とも共有されており、`y` を狙って `.numeral()` を設定すると bare の `d`/`H`/`m`/`s` まで意図せず変わってしまう(既存のスナップショットを壊す)ため、`y` 専用の独立した状態(`dic.numeral_label`/`numeral_label_ruby`)を持つ形に設計を変更した。あわせて `def_to_label()` で `y` を `to_label`/`to_ruby` に配線し、tokenizer の正規表現(`reg_token`)にも `y` を `[or]` サフィックス対象として追加した(既存の format 文字列に `"yo"`/`"yr"` という並びは無いことを確認済みで後方互換)。平気法・定気法には `.numeral_label(jpn.漢字, jpn.rubys)` を設定し、`yo`(漢字)/`yr`(日付以外のふりがな、和語の old_jpn ではなく漢語の jpn.rubys——年のような3〜4桁の数は和語の数え方の対象外のため)が使えるようになった。
+   - この過程で、`定気法.parse('...年M月d日', 'Gy年M月d日')` が誤った日付を返す既存の潜在バグを発見した(平気法では発生しない、`d` の list/rubys 変更とは無関係——詳細は development-notes.md 参照)。今回の変更範囲外として修正はしていない。
+
+**次点の課題(未着手)**: `.numeral()`/`.numeral_label()` を他の暦(Julian・Romulus 等)や英語・ローマ数字ロケールへ横展開すること、`LOCALE_REGISTRY` 自体を暦定義に直接配線する仕組み化(今回は平気法/定気法に直接 `jpn.漢字`/`jpn.rubys`/`old_jpn.rubys` を割り当てており、レジストリ経由の配線ではない)、韓国語数詞の逆引き(`regex`/`to_number`)、定気法の parse 不具合の修正。

@@ -184,6 +184,8 @@ type IDIC = IIDX & {
   parse: string
   format: string
   numeral?: Numeral | null
+  numeral_label?: Numeral | null
+  numeral_label_ruby?: Numeral | null
   sunny: OrbitalModel
   moony?: OrbitalModel
   earthy: RotationModel
@@ -275,8 +277,11 @@ export declare class FancyDate {
   algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>): this
   daily(is_solor?: string | boolean): this
   numeral(numeral?: Numeral | null): this
-  labels(labels: SpanLabels): this
+  numeral_label(numeral?: Numeral | null, ruby?: Numeral | null): this
   private format_number
+  private format_numeral_label
+  private format_numeral_label_ruby
+  labels(labels: SpanLabels): this
   private parse_number
   private number_pattern
   init(): this

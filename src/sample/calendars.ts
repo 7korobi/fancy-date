@@ -1,6 +1,6 @@
 import { FancyDate } from '../fancy-date'
 import type { PLANET } from '../fancy-date'
-import { mod, roman } from '../number'
+import { jpn, mod, old_jpn, roman } from '../number'
 import { localTimezoneDeg } from '../time'
 import { 北朝元号 } from './eras'
 import {
@@ -143,6 +143,15 @@ const プールニマンタ = g
   })
   .init()
 
+// 和暦の日付(d)は最大30日(旧暦の大の月)。漢字表現(do)・日付のふりがな
+// 表現(dr)を list/rubys に静的展開しておく(bare の d は算用数字のまま
+// 変えない)。年(y)は無界のため同じ list/rubys 方式が使えず、
+// .numeral_label() 経由で yo/yr に別途「漢字表現」「日付以外のふりがな
+// 表現」(old_jpn ではなく jpn.rubys——年のような3桁4桁の数は和語の
+// 数え方(old_jpn)の対象外で漢語系の読みが自然なため)を割り当てる。
+const 和暦日付漢字 = Array.from({ length: 30 }, (_, i) => jpn.漢字.parse(i + 1))
+const 和暦日付ふりがな = Array.from({ length: 30 }, (_, i) => old_jpn.rubys.語尾('か').parse(i + 1))
+
 const 平気法 = g
   .dup()
   .lang('Gy年Mod日', 'Gy年Mod日(E)Homo')
@@ -154,10 +163,12 @@ const 平気法 = g
   // 依存しない実日の事実なので、辛巳ではなく乙亥が正しい起点値。
   .calendar(['2629年12月7日 赤口-昴 己酉-乙亥 九紫火-七赤金', 'y年M月d日 E-V a-A f-F', 0])
   .daily('Sunny')
+  .numeral_label(jpn.漢字, jpn.rubys)
   .algo({
     E: [六曜, 六曜かな],
     V: [二十七宿, 二十七宿かな],
     M: [和風月名, 和風月名かな],
+    d: [和暦日付漢字, 和暦日付ふりがな, '日'],
     H: [時鐘, 時鐘かな, '刻'],
     m: [
       ['', '半'],
@@ -188,10 +199,12 @@ const 定気法 = g
   // 辛巳ではなく戊午が正しい起点値。
   .calendar(['2629年11月24日 仏滅-房 己酉-戊午 一白水-七赤金', 'y年M月d日 E-V a-A f-F', 0])
   .daily('Sunny')
+  .numeral_label(jpn.漢字, jpn.rubys)
   .algo({
     E: [六曜, 六曜かな],
     V: [二十七宿, 二十七宿かな],
     M: [和風月名, 和風月名かな],
+    d: [和暦日付漢字, 和暦日付ふりがな, '日'],
     H: [時鐘, 時鐘かな, '刻'],
     m: [
       ['', '半'],
