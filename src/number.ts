@@ -403,11 +403,28 @@ function roman_to_number(text: string) {
   return rest ? null : total
 }
 
+// 数詞語彙だけに一致する正規表現を作る(以前は [A-Za-z]+ で英字列を
+// 無条件に飲み込んでいたため、同じ format 文字列内の元号名・曜日名等
+// 他の英字トークンと衝突しうる不具合があった)。先頭文字だけ大小両対応に
+// する(englishize()/title 版はいずれも先頭大文字化のみで、2文字目以降は
+// 変化しないため)。'seven' が 'seventeen' の接頭辞になるなど、短い語が
+// 長い語の一部になるケースがあるため、長い語から順に試すよう長さ降順で
+// 並べる(alternation は左から順に最初に一致したものを採用するため)。
+function case_insensitive_head(word: string) {
+  return `[${word[0].toUpperCase()}${word[0].toLowerCase()}]${word.slice(1)}`
+}
+const ENGLISH_WORD_PATTERN = [...ENGLISH_ONES, ...ENGLISH_TENS, 'hundred', 'thousand']
+  .filter(Boolean)
+  .sort((a, b) => b.length - a.length)
+  .map(case_insensitive_head)
+  .join('|')
+const ENGLISH_REGEX = `(?:${ENGLISH_WORD_PATTERN})(?:[- ](?:${ENGLISH_WORD_PATTERN}))*`
+
 export const english = {
-  lower: { parse: englishize, regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*', to_number: english_to_number },
+  lower: { parse: englishize, regex: ENGLISH_REGEX, to_number: english_to_number },
   title: {
     parse: (num: number) => englishize(num).replace(/\b\w/g, (char) => char.toUpperCase()),
-    regex: '[A-Za-z]+(?:[- ][A-Za-z]+)*',
+    regex: ENGLISH_REGEX,
     to_number: english_to_number,
   },
 }

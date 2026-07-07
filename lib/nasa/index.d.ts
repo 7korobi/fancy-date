@@ -1,1 +1,1 @@
-export * from './mars-solar'
+export * from './mars-solar';

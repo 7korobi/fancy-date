@@ -927,6 +927,23 @@ describe('Gregorian', () => {
     expect(g.dup().numeral().init().format(msec, 'yyyy年MM月dd日')).toBe('2024年03月10日')
   })
 
+  test('english numeral regex matches only number words, not arbitrary alphabetic tokens', () => {
+    // 以前は [A-Za-z]+ で英字列を無条件に飲み込んでいたため、同じ format
+    // 文字列内の元号名・曜日名等、他の英字トークンと衝突しうる不具合が
+    // あった。数詞語彙だけに一致することを直接検証する。
+    const re = new RegExp(`^(?:${english.lower.regex})$`)
+    expect(re.test('three')).toBe(true)
+    expect(re.test('twenty-one')).toBe(true)
+    expect(re.test('one hundred')).toBe(true)
+    // 元号名・曜日名など、数詞語彙に含まれない英単語は一致しない。
+    expect(re.test('monday')).toBe(false)
+    expect(re.test('ad')).toBe(false)
+    expect(re.test('march')).toBe(false)
+    // 'seventeen' は 'seven' の接頭辞を含むが、全体が一致し 'seven' で
+    // 途中一致してしまわないことを確認する。
+    expect('seventeen'.match(new RegExp(`^(?:${english.lower.regex})`))?.[0]).toBe('seventeen')
+  })
+
   test('太陽の動き', () => {
     const dst = earth_msecs.map((msec) => to_graph(g, msec))
     expect(dst).toMatchSnapshot()
