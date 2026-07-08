@@ -189,3 +189,5 @@ export const NewYork: SPOT = [月, 40.3, -74.0, 15 * -5] as const
 export const NewYork_Summer: SPOT = [月, 40.3, -74.0, 15 * -4] as const
 export const Madurai: SPOT = [白分月, 9.8, 78.1, 15 * +5.5] as const
 export const Jaypore: SPOT = [黒分月, 18.8, 82.5, 15 * +5.5] as const
+export const Babylon: SPOT = [月, 32.5, 44.4, 15 * +3] as const
+export const Istanbul: SPOT = [月, 41.0, 28.9, 15 * +2] as const

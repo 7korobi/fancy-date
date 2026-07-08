@@ -167,3 +167,5 @@ export declare const NewYork: SPOT
 export declare const NewYork_Summer: SPOT
 export declare const Madurai: SPOT
 export declare const Jaypore: SPOT
+export declare const Babylon: SPOT
+export declare const Istanbul: SPOT

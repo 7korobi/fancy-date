@@ -21,4 +21,8 @@ export declare const Calendar: {
   エジプト民用暦: FancyDate
   コプト暦: FancyDate
   RomanClock: FancyDate
+  バビロニア暦カスプ: FancyDate
+  バビロニア暦ベール: FancyDate
+  オスマン季節時法: FancyDate
+  アラトゥルカ: FancyDate
 }
