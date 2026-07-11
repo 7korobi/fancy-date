@@ -174,10 +174,14 @@ describe('オスマン帝国の時刻制度', () => {
 describe('日没起点の暦日境界', () => {
   test('dusk()/dayBoundary() のフラグが暦ごとに正しく設定される', () => {
     expect(Calendar.バビロニア暦カスプ.dic.is_dusk).toBe(true)
+    expect(Calendar.バビロニア暦カスプ.dic.day_start).toBe('sunset')
     expect(Calendar.バビロニア暦ベール.dic.is_dusk).toBe(false)
+    expect(Calendar.バビロニア暦ベール.dic.day_start).toBeUndefined()
     expect(Calendar.バビロニア暦ベール.dic.day_offset_hours).toBe(18)
     expect(Calendar.オスマン季節時法.dic.is_dusk).toBe(true)
+    expect(Calendar.オスマン季節時法.dic.day_start).toBe('sunset')
     expect(Calendar.アラトゥルカ.dic.is_dusk).toBe(false)
+    expect(Calendar.アラトゥルカ.dic.day_start).toBeUndefined()
     expect(Calendar.アラトゥルカ.dic.day_offset_hours).toBe(18)
   })
 

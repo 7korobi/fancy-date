@@ -44,6 +44,7 @@ import {
 } from './tempo'
 import type {
   SolarDayHourBase,
+  SolarDayBoundaryEvent,
   SubdivideBase,
   TempoBase,
   TempoEnvelope,
@@ -569,11 +570,13 @@ type IDIC = IIDX & {
   start: [string, string, number]
   is_solor: boolean
   day_offset_hours?: number
+  day_start?: DayStart
   is_dusk: boolean
 }
 export type DivisionOptions = {
   H?: false | 'equal' | 'solar'
 }
+export type DayStart = 'midnight' | SolarDayBoundaryEvent
 
 type ICALC = {
   eras: ERA_WITH_YEAR[]
@@ -765,8 +768,8 @@ export class FancyDate {
   // リセットする(暦の再設定に追従する)。
   private _orbital_season_rule?: CachedTempoRule<TempoBase>
   private _solar_hour_rule?: CachedTempoRule<SolarDayHourBase>
-  private _real_sunset_day_rule?: CachedTempoRule<SubdivideBase>
-  private _real_sunset_day_core_rule?: SolarEventDayTempoRule
+  private _solar_event_day_rule?: CachedTempoRule<SubdivideBase>
+  private _solar_event_day_core_rule?: SolarEventDayTempoRule
   // span/add/sub は「離れた2つの日時」を交互に問い合わせる(例:
   // span_obj() は from/to に加えて next_precise_span_at() で to を
   // 再度問い合わせる)。1スロットのキャッシュだと A→B→A の順で
@@ -925,14 +928,26 @@ export class FancyDate {
     return this
   }
 
-  // 実際の(季節で変動する)日没時刻そのものを暦日の境界にする
-  // (RealSunsetDayTempoRule 参照)。dayBoundary() が固定オフセットなのに
-  // 対し、こちらは division({ H: 'solar' }) と表裏一体で、季節時法の暦(バビロニア暦
-  // カスプ、オスマン季節時法)が伝統的に採る「日没に日付が変わる」を
-  // 再現する。division({ H: 'solar' }) と同様、極域(66.5度以遠)では成立しないため
-  // init() で例外にする。
+  // 暦日の境界を実際の太陽イベント(日の出/日の入)へ寄せる。
+  // dayBoundary() が固定オフセットなのに対し、こちらは実際の太陽イベント
+  // 時刻そのものを暦日境界にする。division({ H: 'solar' }) と同様、
+  // 極域(66.5度以遠)では成立しないため init() で例外にする。
+  dayStart(dayStart: DayStart = 'midnight') {
+    if (dayStart === 'midnight') {
+      delete this.dic.day_start
+    } else {
+      this.dic.day_start = dayStart
+    }
+    this.dic.is_dusk = dayStart === 'sunset'
+    this._solar_event_day_rule = undefined
+    this._solar_event_day_core_rule = undefined
+    return this
+  }
+
+  // 実際の(季節で変動する)日没時刻そのものを暦日の境界にする互換 alias。
+  // 新規コードでは dayStart('sunset') を使う。
   dusk(is_real_sunset: string | boolean = false) {
-    this.dic.is_dusk = !!is_real_sunset
+    this.dayStart(is_real_sunset ? 'sunset' : 'midnight')
     return this
   }
 
@@ -1000,12 +1015,12 @@ export class FancyDate {
     // 確実に不可能」という下限であり、唯一の閾値ではない(手前でも夏至・
     // 冬至付近で退化するケースは残る)。
     if (
-      (this.dic.is_solor || this.dic.is_dusk) &&
+      (this.dic.is_solor || this.day_start_event()) &&
       this.dic.geo &&
       66.5 <= Math.abs(this.dic.geo[0])
     ) {
       throw new Error(
-        `不定時法(division({ H: 'solar' }))・日没起点の暦日(dusk())は極域(緯度${this.dic.geo[0]}度)では成立しません。極圏(66.5度)以遠では日の出・日の入りが存在しない期間が生じ、これらの前提が崩れます。`,
+        `不定時法(division({ H: 'solar' }))・太陽イベント起点の暦日(dayStart())は極域(緯度${this.dic.geo[0]}度)では成立しません。極圏(66.5度)以遠では日の出・日の入りが存在しない期間が生じ、これらの前提が崩れます。`,
       )
     }
 
@@ -1013,8 +1028,8 @@ export class FancyDate {
     // (古い設定に基づく envelope/lunisolar 結果を持ち越さないため)。
     this._orbital_season_rule = undefined
     this._solar_hour_rule = undefined
-    this._real_sunset_day_rule = undefined
-    this._real_sunset_day_core_rule = undefined
+    this._solar_event_day_rule = undefined
+    this._solar_event_day_core_rule = undefined
     this._lunisolar_cache.length = 0
 
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
@@ -2867,10 +2882,17 @@ K   = @dic.earthy[2] / 360
     ))
   }
 
+  private day_start_event(): SolarDayBoundaryEvent | undefined {
+    const dayStart = this.dic.day_start
+    if (dayStart === 'sunrise' || dayStart === 'sunset') return dayStart
+    if (this.dic.is_dusk) return 'sunset'
+    return undefined
+  }
+
   /**
-  * d/N(dusk() による日没起点の暦日)で使う SolarEventDayTempoRule('sunset') を
+  * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
    * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
-   * 日をまたぐ遷移だけ天文計算(日の入探索)のやり直しが必要になる。
+   * 日をまたぐ遷移だけ天文計算(日の出/日の入探索)のやり直しが必要になる。
    * 束探索の起点(仮の civil day)には calc.zero.day(dusk() の有無に
    * 関わらず常にオフセット無しの実時計基準)を使う。
    *
@@ -2881,8 +2903,10 @@ K   = @dic.earthy[2] / 360
    * 以前は write_at の範囲だけでヒット判定していたため、異なる parent で
    * 呼ばれるとキャッシュ済みの誤った now_idx を返す実バグがあった。
    */
-  private real_sunset_day_core_rule(): SolarEventDayTempoRule {
-    return (this._real_sunset_day_core_rule ??= new SolarEventDayTempoRule(
+  private solar_event_day_core_rule(): SolarEventDayTempoRule {
+    const event = this.day_start_event()
+    if (!event) throw new Error('dayStart() is not configured for a solar event')
+    return (this._solar_event_day_core_rule ??= new SolarEventDayTempoRule(
       this.dic.sunny,
       this.dic.earthy,
       this.dic.geo,
@@ -2890,36 +2914,36 @@ K   = @dic.earthy[2] / 360
       this.calc.zero.day,
       this.calc.msec.year,
       this.calc.zero.season,
-      'sunset',
+      event,
     ))
   }
 
-  private real_sunset_day_rule(): CachedTempoRule<SubdivideBase> {
-    return (this._real_sunset_day_rule ??= new CachedTempoRule(
-      this.real_sunset_day_core_rule(),
+  private solar_event_day_rule(): CachedTempoRule<SubdivideBase> {
+    return (this._solar_event_day_rule ??= new CachedTempoRule(
+      this.solar_event_day_core_rule(),
       (base) => base.parent.last_at,
     ))
   }
 
-  private align_dusk_month_start(rawStart: number): number {
-    return this.real_sunset_day_core_rule().boundary_at_or_after(rawStart)
+  private align_day_start_month_start(rawStart: number): number {
+    return this.solar_event_day_core_rule().boundary_at_or_after(rawStart)
   }
 
   private month_rule<Base extends TempoBase>(rule: TempoRule<Base>): TempoRule<Base> {
-    return this.dic.is_dusk
-      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_dusk_month_start(rawStart))
+    return this.day_start_event()
+      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_day_start_month_start(rawStart))
       : rule
   }
 
   private year_rule<Base extends TempoBase>(rule: TempoRule<Base>): TempoRule<Base> {
-    return this.dic.is_dusk
-      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_dusk_month_start(rawStart))
+    return this.day_start_event()
+      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_day_start_month_start(rawStart))
       : rule
   }
 
   // d/N(月内日)を組み立てる規則を dusk()/dayBoundary() の有無で切り替える。
   private day_rule(): TempoRule<SubdivideBase> {
-    if (this.dic.is_dusk) return this.real_sunset_day_rule()
+    if (this.day_start_event()) return this.solar_event_day_rule()
     const offset = this.dic.day_offset_hours
       ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
       : 0
@@ -3695,7 +3719,8 @@ K   = @dic.earthy[2] / 360
    * キャッシュの再利用による恩恵より正しさを優先する。
    */
   private resolve_day_start(month_start: number, d: number): number {
-    if (!this.dic.is_dusk) {
+    const event = this.day_start_event()
+    if (!event) {
       const offset = this.dic.day_offset_hours
         ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
         : 0
@@ -3709,7 +3734,7 @@ K   = @dic.earthy[2] / 360
       this.calc.zero.day,
       this.calc.msec.year,
       this.calc.zero.season,
-      'sunset',
+      event,
     )
     const parent: TempoEnvelope = {
       zero: month_start,
@@ -3730,7 +3755,7 @@ K   = @dic.earthy[2] / 360
     // あった(実測: d=-1 が -2 と 0 の間を無限に往復し、収束せず月始点を
     // 返し続けた)。
     const clampGuess = (g: number) => (d < 0 ? Math.min(g, month_start - 1) : g)
-    const firstDayStart = d < 0 ? month_start : this.align_dusk_month_start(month_start)
+    const firstDayStart = d < 0 ? month_start : this.align_day_start_month_start(month_start)
     if (d === 0) return firstDayStart
     let guess = clampGuess(
       d < 0

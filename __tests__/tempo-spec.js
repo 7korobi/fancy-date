@@ -747,6 +747,23 @@ describe('tempo', () => {
       expect(sunriseRule.at(before, { write_at: before, parent }).next_at).toBe(sunrise)
       expect(sunriseRule.at(after, { write_at: after, parent }).last_at).toBe(sunrise)
     })
+
+    test('sunrise mode advances now_idx by civil day even when sunrise gets earlier', () => {
+      const monthStart = to_tempo_bare(dayMsec, dayZero, Date.UTC(2024, 5, 1)).last_at
+      const firstSunrise = sunriseRule.boundary_at_or_after(monthStart)
+      const parent = {
+        zero: monthStart,
+        now_idx: 0,
+        last_at: firstSunrise,
+        next_at: firstSunrise + 30 * dayMsec,
+      }
+      let current = Tempo.at(sunriseRule, { write_at: firstSunrise + 1000, parent })
+      for (let i = 0; i < 25; i++) {
+        const next = current.succ()
+        expect(next.now_idx).toBe(current.now_idx + 1)
+        current = next
+      }
+    })
   })
 
   describe('OrbitalPhaseTempoRule', () => {

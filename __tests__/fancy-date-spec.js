@@ -220,6 +220,21 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(() => g.dup().spot(月, 35.7, 139.7, 135).division({ H: 'solar' }).init()).not.toThrow()
     expect(g.dup().division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(true)
     expect(g.dup().division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(false)
+    expect(() => g.dup().spot(月, 78, 15.6, 15).dayStart('sunrise').init()).toThrow(/極域/)
+  })
+
+  test("dayStart('sunrise') uses actual sunrise as the civil day boundary", () => {
+    const dawn = g.dup().dayStart('sunrise').init()
+    const base = dawn.parse('2024年6月21日')
+    const tempos = dawn.to_tempos(base)
+    const next = tempos.d.succ().last_at
+
+    expect(dawn.dic.day_start).toBe('sunrise')
+    expect(dawn.dic.is_dusk).toBe(false)
+    expect(dawn.format(base - 1000, 'yyyy年MM月dd日')).toBe('2024年06月20日')
+    expect(dawn.format(base, 'yyyy年MM月dd日')).toBe('2024年06月21日')
+    expect(dawn.format(next, 'yyyy年MM月dd日')).toBe('2024年06月22日')
+    expect(dawn.add(base, '1日後')).toBe(next)
   })
 
   test('mean model solor() fills 日の出方位/日の入方位, mirroring 精密モデル within its own precision', () => {

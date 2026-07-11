@@ -25,7 +25,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ### 暦法・天文モデルの拡張
 
-- インド系暦を本格対応する場合、日の出始まりの civil day 自体は `SolarEventDayTempoRule(..., 'sunrise')` で表現できる。ただしヒンドゥー暦・パンチャーンガの実務では「日の出時点で存在する tithi をその日の日付/祭日に割り当てる」層が本体になる。必要な追加要素は、(1) tithi(月太陽離角12度ごとの30分割)・paksha(白分/黒分)・nakshatra/yoga/karana 等の位相トークン、(2) 日の出時点での tithi 採用、欠日(kshaya tithi)・重日(adhika/repeated tithi)の扱い、(3) amanta/purnimanta の月名方式、adhika masa/kshaya masa の月規則、(4) 太陽入宮(sankranti)による sidereal solar month と ayanamsha/黄道基準の選択、(5) 地域・宗派・祭日ごとの「前日/翌日採用」「日の出前後の持続条件」などの判定 DSL。単に `dawn()` を追加するだけでは不十分で、月相日を civil day へ投影する専用 rule/assignment 層が必要。
+- インド系暦を本格対応する場合、日の出始まりの civil day 自体は `.dayStart('sunrise')` で表現できる。ただしヒンドゥー暦・パンチャーンガの実務では「日の出時点で存在する tithi をその日の日付/祭日に割り当てる」層が本体になる。必要な追加要素は、(1) tithi(月太陽離角12度ごとの30分割)・paksha(白分/黒分)・nakshatra/yoga/karana 等の位相トークン、(2) 日の出時点での tithi 採用、欠日(kshaya tithi)・重日(adhika/repeated tithi)の扱い、(3) amanta/purnimanta の月名方式、adhika masa/kshaya masa の月規則、(4) 太陽入宮(sankranti)による sidereal solar month と ayanamsha/黄道基準の選択、(5) 地域・宗派・祭日ごとの「前日/翌日採用」「日の出前後の持続条件」などの判定 DSL。単に `dayStart('sunrise')` を追加するだけでは不十分で、月相日を civil day へ投影する専用 rule/assignment 層が必要。
 - 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
 - 歴史的時刻表現として、定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。ローマ・ユリウス暦サンプルでは、H を horae temporariae、m を pars minuta として表示し、秒・ミリ秒は標準表示から外した。秒は内部精度としては残すが、古代/中世以前の生活時刻語彙として一般化しない。
 - 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。今後は楕円軌道、彗星、多星系の暦を検討する。
@@ -43,7 +43,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 - `MeanLunisolarMonthRule` の年末閏月バグ: 閏月が年末に来る場合、`now_idx = mod(season.now_idx, termCount) >> 1` が0に巻き戻り、`parse_by()` の閏月シード式(月始め付近を想定)と噛み合わず round-trip が約1年ズレる。平気法でも再現し、40年間で8回程度。バビロニア暦カスプ/ベールでは `.notation({H:[12]})` による H.length の違いで `def_zero()` のタイムゾーン量子化が1時間ズレ、上記と合わさって稀に閏月の有無自体が食い違う(400ヶ月中7回)。`dusk()`/`dayBoundary()` とは無関係な latent bug。修正には `MeanLunisolarMonthRule`/`parse_by()` の閏月シード式の見直しが必要。
 - 元号あり暦の anchor 表記規約: `y` は実在の元号テーブルを持つ暦では元号相対の年数(例: 令和6年)に調整される。一方、`calendar()` の anchor 文字列に書く年数(例: 平気法の「2629年」=皇紀の絶対年)は era 調整前の生値として較正されるため、`format(anchor_epoch, 'y...')` は anchor 自身の絶対年ではなく era 調整後の値を返す。これは明確な二重計算ではなく表記規約の不一致に近い。修正には「anchor の年をどちらの規約として較正するか」という設計判断が要る。
-- `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dusk()` とは違い、月頭の切り詰め区間は既知の例外として残る。
+- `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dayStart('sunrise' | 'sunset')` とは違い、月頭の切り詰め区間は既知の例外として残る。
 
 ## 実装済み・検証済み
 
@@ -80,9 +80,9 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 極域での不定時法は construction 時点で例外化した。`.init()` 冒頭で `this.dic.is_solor && 66.5 <= Math.abs(this.dic.geo[0])` を検査する。66.5度は「これより先は確実に不可能」という下限であり、手前でも夏至/冬至付近の退化ケースは残る。
 - バビロニア暦(カスプ/ベール)・オスマン帝国の時刻制度(季節時法/アラトゥルカ)を追加した。バビロニア暦は平気法と同じ mean モデルの太陰太陽暦を使い、カスプ=不定時法+日没境界、ベール=1日12等分の等時法+固定境界で分けた。オスマン帝国の2暦はユリウス暦の日付構造を流用し、季節時法=不定時法、アラトゥルカ=等時法で分けた。
 - `dayBoundary(offsetHours)` は d/N(月内日)構築規則だけに作用する固定オフセットとして実装した。offsetHours は H.length ではなく day 長から換算する。def_zero の hour→day→month→year 連鎖へ直接入れると、月・年の zero 点まで動いてしまい、時刻体系だけが違う対の暦で日番号が大きく食い違うため避けた。
-- `dusk()` は `SolarEventDayTempoRule('sunset')` で実日没を暦日境界にする。月・年の開始候補も `StartAlignedTempoRule` で「その後に最初に来る実日没」へ丸め上げ、月初/年初直前の短い区間を前月末/前年末として扱う。これにより、月初の `d.succ()` と `add(..., '1日後')` の意味を一致させた。
-- `dusk()` の d/N では、`CachedTempoRule` に `parent.last_at` を cacheKey として渡し、異なる月親で同じ write_at のキャッシュが混ざらないようにした。
-- `find_span_time()` は `month.last_at + dayIndex*msec.day` ではなく `resolve_day_start()` を使うようにした。`dusk()`/`dayBoundary()` 暦で `add()`/`sub()` が1日早い日付を返す実バグを修正した。
+- `.dayStart('sunrise' | 'sunset')` は `SolarEventDayTempoRule` で実際の日の出/日の入を暦日境界にする。`dusk()` は `.dayStart('sunset')` の互換 alias。月・年の開始候補も `StartAlignedTempoRule` で「その後に最初に来る太陽イベント」へ丸め上げ、月初/年初直前の短い区間を前月末/前年末として扱う。これにより、月初の `d.succ()` と `add(..., '1日後')` の意味を一致させた。
+- `dayStart()` の d/N では、`CachedTempoRule` に `parent.last_at` を cacheKey として渡し、異なる月親で同じ write_at のキャッシュが混ざらないようにした。
+- `find_span_time()` は `month.last_at + dayIndex*msec.day` ではなく `resolve_day_start()` を使うようにした。`dayStart()`/`dayBoundary()` 暦で `add()`/`sub()` が1日早い日付を返す実バグを修正した。`SolarEventDayTempoRule` の `now_idx` は、親境界からの経過ミリ秒ではなく civil day index 差分で求める。日の出が前日より早くなる季節でも `d` が重複しないようにするため。
 
 Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [不定時法の説明 - THE SEIKO MUSEUM GINZA](https://museum.seiko.co.jp/knowledge/relation_16/) / [和時計 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%92%8C%E6%99%82%E8%A8%88) / [Danna (Mesopotamian) - Wikipedia](<https://en.wikipedia.org/wiki/Danna_(Mesopotamian)>) / [Hour - Wikipedia (Babylonian hours)](https://en.wikipedia.org/wiki/Babylonian_hours) / [Equinoctial hours - Wikipedia](https://en.wikipedia.org/wiki/Equinoctial_hours) / [Babylonian calendar - Wikipedia](https://en.wikipedia.org/wiki/Babylonian_calendar) / [Witnesses of time: How Ottoman Empire measured time - Türkiye Today](https://www.turkiyetoday.com/culture/witnesses-of-time-how-the-ottoman-empire-measured-regulated-and-lived-time-3212480) / [Our Time: On the Durability of the Alaturka Hour System in the Late Ottoman Empire](https://www.academia.edu/10068187/_Our_Time_On_the_Durability_of_the_Alaturka_Hour_System_in_the_Late_Ottoman_Empire_International_Journal_of_Turkish_Studies_16_2010_47_69)
 

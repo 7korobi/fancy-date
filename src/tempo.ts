@@ -972,28 +972,29 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
 
     let last_at: number
     let next_at: number
+    let lastCivilIdx: number
     if (write_at < event0) {
       last_at = this.event_of(
         fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx - 1),
       )
       next_at = event0
+      lastCivilIdx = civil.now_idx - 1
     } else {
       last_at = event0
       next_at = this.event_of(
         fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1),
       )
+      lastCivilIdx = civil.now_idx
     }
 
-    // floor で求める(round ではない)。SubdivideTempoRule/dayBoundary() の
-    // 兄弟枠組みは fixed_envelope() 経由で floor ベースの now_idx を使う
-    // ため、ここだけ round にすると月始点からの経過が「日境界のちょうど
-    // 中間」より前か後かで恣意的に丸められ、同じ月始点を共有するはずの
-    // 兄弟暦(dayBoundary() 側)と now_idx が恒常的に1ズレる実バグが
-    // あった(実測: バビロニア暦カスプ/ベールで1日のうち約91%の時間帯が
-    // 日番号不一致になっていた——round だと月初の端数日が「0日目」ではなく
-    // 「1日目」に切り上げられ、以後ずっと1ズレたまま平行していた)。
+    // now_idx は、イベント境界が属する civil day の index 差分で求める。
+    // 親境界からの経過ミリ秒を dayMsec で割るだけだと、日の出が前日より
+    // 早くなる季節に「2つ目の sunrise が親 sunrise からまだ1平均日未満」
+    // となり、2日目が now_idx=0 のまま重複する。sunset でも季節により
+    // 同じ問題が起きうるため、実イベントの時刻差ではなく civil day の
+    // 連番差を使う。
     //
-    // 月始点(base.parent.last_at)の直後、真の日没境界が来る前の区間は
+    // 月始点(base.parent.last_at)の直後、真の太陽イベント境界が来る前の区間は
     // now_idx が負(-1)になりうる(真の日没が月始点よりわずかに後に
     // 来るため)。SubdivideTempoRule(dayBoundary())と同じ理由(doc
     // コメント参照)で 0 に切り詰め、last_at も base.parent.last_at まで
@@ -1010,7 +1011,8 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
     // 切り詰めず自然な負の now_idx を返し、呼び出し元が返る last_at を
     // 元に to_tempos() を再解決すれば前の月が正しく求まる(SubdivideTempoRule
     // の slide() が envelope.zero を直接使って月を跨ぐのと同じ仕組み)。
-    const rawNowIdx = Math.floor((last_at - base.parent.last_at) / this.dayMsec)
+    const parentCivilIdx = fixed_envelope(this.dayMsec, this.civilDayZero, base.parent.last_at).now_idx
+    const rawNowIdx = lastCivilIdx - parentCivilIdx
     if (rawNowIdx < 0 && base.parent.last_at <= write_at) {
       const clampedLastAt = base.parent.last_at
       return { zero: clampedLastAt, now_idx: 0, last_at: clampedLastAt, next_at }

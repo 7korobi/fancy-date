@@ -2,7 +2,7 @@ import type { Numeral } from './number';
 import type { LunarApsisKind, LunarNodeKind, OrbitalModel, RotationModel, SPOT, TIMEZONE } from './orbital-model';
 import type { LunisolarDate } from './phenomena/lunisolar';
 import { Tempo } from './tempo';
-import type { SubdivideBase, TempoBase, TempoLabelLike, TempoLike } from './tempo';
+import type { SolarDayBoundaryEvent, SubdivideBase, TempoBase, TempoLabelLike, TempoLike } from './tempo';
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj';
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj';
 export { MarsSolarOrbital } from './nasa';
@@ -176,11 +176,13 @@ type IDIC = IIDX & {
     start: [string, string, number];
     is_solor: boolean;
     day_offset_hours?: number;
+    day_start?: DayStart;
     is_dusk: boolean;
 };
 export type DivisionOptions = {
     H?: false | 'equal' | 'solar';
 };
+export type DayStart = 'midnight' | SolarDayBoundaryEvent;
 type ICALC = {
     eras: ERA_WITH_YEAR[];
     idx: TOKENS<AnyDicToken, number>;
@@ -237,8 +239,8 @@ export declare class FancyDate {
     };
     private _orbital_season_rule?;
     private _solar_hour_rule?;
-    private _real_sunset_day_rule?;
-    private _real_sunset_day_core_rule?;
+    private _solar_event_day_rule?;
+    private _solar_event_day_core_rule?;
     private readonly _lunisolar_cache;
     constructor(o?: FancyDate);
     spot(...spot: SPOT): this;
@@ -250,6 +252,7 @@ export declare class FancyDate {
     division(options: DivisionOptions): this;
     daily(is_solor?: string | boolean): this;
     dayBoundary(offsetHours?: number): this;
+    dayStart(dayStart?: DayStart): this;
     dusk(is_real_sunset?: string | boolean): this;
     numeral(numeral?: Numeral | null): this;
     numeral_label(numeral?: Numeral | null, ruby?: Numeral | null): this;
@@ -699,10 +702,11 @@ export declare class FancyDate {
      * テーブル再構築ごと省略できる。
      */
     private solar_hour_rule;
+    private day_start_event;
     /**
-    * d/N(dusk() による日没起点の暦日)で使う SolarEventDayTempoRule('sunset') を
+    * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
      * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
-     * 日をまたぐ遷移だけ天文計算(日の入探索)のやり直しが必要になる。
+     * 日をまたぐ遷移だけ天文計算(日の出/日の入探索)のやり直しが必要になる。
      * 束探索の起点(仮の civil day)には calc.zero.day(dusk() の有無に
      * 関わらず常にオフセット無しの実時計基準)を使う。
      *
@@ -713,9 +717,9 @@ export declare class FancyDate {
      * 以前は write_at の範囲だけでヒット判定していたため、異なる parent で
      * 呼ばれるとキャッシュ済みの誤った now_idx を返す実バグがあった。
      */
-    private real_sunset_day_core_rule;
-    private real_sunset_day_rule;
-    private align_dusk_month_start;
+    private solar_event_day_core_rule;
+    private solar_event_day_rule;
+    private align_day_start_month_start;
     private month_rule;
     private year_rule;
     private day_rule;
