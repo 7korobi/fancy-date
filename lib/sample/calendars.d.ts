@@ -10,6 +10,8 @@ export declare const Calendar: {
     Julian: FancyDate;
     アマンタ: FancyDate;
     プールニマンタ: FancyDate;
+    アマンタティティ: FancyDate;
+    プールニマンタティティ: FancyDate;
     平気法: FancyDate;
     定気法: FancyDate;
     Romulus: FancyDate;

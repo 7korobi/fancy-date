@@ -133,9 +133,16 @@ export {
   prepareSpotModels,
   resolveSkyBody,
   rotationOf,
+  tithi,
   transformOrbital,
 } from './fancy-date'
 export type {
+  AssignmentContext,
+  AssignmentOptions,
+  AssignmentRule,
+  AssignmentResult,
+  AssignmentToken,
+  DayStart,
   ERA,
   ERA_WITH_YEAR,
   TempoDiff,

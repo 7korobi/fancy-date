@@ -1,4 +1,4 @@
-import { FancyDate } from '../fancy-date'
+import { FancyDate, tithi } from '../fancy-date'
 import type { PLANET } from '../fancy-date'
 import { jpn, mod, old_jpn, roman } from '../number'
 import { localTimezoneDeg } from '../time'
@@ -100,20 +100,20 @@ function gregorianBase() {
     )
 }
 
-const g = gregorianBase()
+const g = FancyDate.lazy(() => gregorianBase()
   .spot(...London)
-  .init()
+  .init())
 
 const UTC = g
-const Gregorian = g
+const Gregorian = FancyDate.lazy(() => g
   .dup()
   .spot(...東京)
-  .init()
+  .init())
 
-const GregorianAstronomical = g
+const GregorianAstronomical = FancyDate.lazy(() => g
   .dup()
   .spot(...天文東京)
-  .init()
+  .init())
 
 /**
  * LocalGregorian: ブラウザ(実行環境)のタイムゾーンを反映した「現地グレゴリオ暦」。
@@ -128,9 +128,9 @@ const GregorianAstronomical = g
  * timezoneDeg(経度換算)は localTimezoneDeg() が実行環境から算出する
  * (ブラウザ以外では東京 UTC+9 を既定値とする)。
  */
-const LocalGregorian = Gregorian.dup().spot(月, 0, 0, localTimezoneDeg()).init()
+const LocalGregorian = FancyDate.lazy(() => Gregorian.dup().spot(月, 0, 0, localTimezoneDeg()).init())
 
-const Julian = baseCalendar()
+const Julian = FancyDate.lazy(() => baseCalendar()
   .lang('y年M月d日', 'Gy年M月d日(dC7) Ho mo')
   .spot(...Romus)
   .era('西暦', '紀元前')
@@ -150,9 +150,9 @@ const Julian = baseCalendar()
   // ぶら下がる pars minuta として表示する。秒・ミリ秒は計算精度としては
   // 残るが、ローマ暦サンプルの標準表示からは外す。
   .notation(romanTemporalNotation)
-  .init()
+  .init())
 
-const アマンタ = baseCalendar()
+const アマンタ = FancyDate.lazy(() => baseCalendar()
   .spot(...Madurai)
   .era('サカ歴', '紀元前')
   .calendar(['1891-09-08(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
@@ -161,9 +161,9 @@ const アマンタ = baseCalendar()
     yC9: [九星, 九星かな],
     dC9: [九星rev, 九星かなrev],
   })
-  .init()
+  .init())
 
-const プールニマンタ = baseCalendar()
+const プールニマンタ = FancyDate.lazy(() => baseCalendar()
   .spot(...Jaypore)
   .era('サカ歴', '紀元前')
   .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
@@ -172,7 +172,14 @@ const プールニマンタ = baseCalendar()
     yC9: [九星, 九星かな],
     dC9: [九星rev, 九星かなrev],
   })
-  .init()
+  .init())
+
+// 実用的なパンチャーンガ系の日付では、civil day の境界(日の出)そのものと、
+// その日の d に割り当てる tithi(月太陽離角12度ごとの30分割)は別の層になる。
+// dayStart('sunrise') が「日の出始まりの日」を作り、assign({ d: tithi() }) が
+// その日の d index を日の出時点の tithi へ投影する。
+const アマンタティティ = FancyDate.lazy(() => アマンタ.dup().dayStart('sunrise').assign({ d: tithi() }).init())
+const プールニマンタティティ = FancyDate.lazy(() => プールニマンタ.dup().dayStart('sunrise').assign({ d: tithi() }).init())
 
 // 和暦の日付(d)は最大30日(旧暦の大の月)。漢字表現(do)・日付のふりがな
 // 表現(dr)を list/rubys に静的展開しておく(bare の d は算用数字のまま
@@ -183,7 +190,7 @@ const プールニマンタ = baseCalendar()
 const 和暦日付漢字 = Array.from({ length: 30 }, (_, i) => jpn.漢字.parse(i + 1))
 const 和暦日付ふりがな = Array.from({ length: 30 }, (_, i) => old_jpn.rubys.語尾('か').parse(i + 1))
 
-const 平気法 = baseCalendar()
+const 平気法 = FancyDate.lazy(() => baseCalendar()
   .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
   .spot(...東京)
   .era('皇紀', '紀元前', 北朝元号)
@@ -215,9 +222,9 @@ const 平気法 = baseCalendar()
     yC9: [九星, 九星かな],
     dC9: [九星rev, 九星かなrev],
   })
-  .init()
+  .init())
 
-const 定気法 = baseCalendar()
+const 定気法 = FancyDate.lazy(() => baseCalendar()
   .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
   .spot(...天文東京)
   .era('皇紀', '紀元前', 北朝元号)
@@ -252,9 +259,9 @@ const 定気法 = baseCalendar()
     yC9: [九星, 九星かな],
     dC9: [九星rev, 九星かなrev],
   })
-  .init()
+  .init())
 
-const Romulus = baseCalendar()
+const Romulus = FancyDate.lazy(() => baseCalendar()
   // M(サフィックスなし)は常に数値のまま(def_to_label() 参照)なので、
   // 暦外ラベルを反映するには Mo(list 参照あり)を明示的に使う書式に
   // する必要がある。既定の 'Gy年M月d日...' のような「M+リテラル月」
@@ -296,7 +303,7 @@ const Romulus = baseCalendar()
   // Julian と同じ理由(horae temporariae、development-notes.md 参照)で
   // ロムルス暦の時代のローマも不定時法だった。
   .division({ H: 'solar' })
-  .init()
+  .init())
 
 // バビロニア暦: 太陰太陽暦(12ヶ月+閏月、当初は観測ベースで2〜3年毎に
 // 不規則な閏月挿入、前499年頃から19年235ヶ月周期(メトン周期相当、
@@ -322,7 +329,7 @@ const Romulus = baseCalendar()
 // 参照): カスプ(季節で伸縮する不定時法、division({ H: 'solar' })+dayStart('sunset')で
 // 表現)とベール(2時間ぶんの等時法、1日=12ベール、H:[12]+dayBoundary(18)
 // で表現)。
-const バビロニア暦カスプ = baseCalendar()
+const バビロニア暦カスプ = FancyDate.lazy(() => baseCalendar()
   .lang('y年M月d日', 'y年M月d日(dC7) H時m分s秒')
   .spot(...Babylon)
   .era('バビロニア紀元', '紀元前')
@@ -332,9 +339,9 @@ const バビロニア暦カスプ = baseCalendar()
   .notation({
     M: [バビロニア月名, バビロニア月名かな],
   })
-  .init()
+  .init())
 
-const バビロニア暦ベール = バビロニア暦カスプ
+const バビロニア暦ベール = FancyDate.lazy(() => バビロニア暦カスプ
   .dup()
   .division({ H: false })
   .dayStart('midnight')
@@ -342,7 +349,7 @@ const バビロニア暦ベール = バビロニア暦カスプ
   .notation({
     H: [12],
   })
-  .init()
+  .init())
 
 // オスマン帝国の時刻制度: "alaturka" という呼称自体が時代によって意味を
 // 変えているため(development-notes.md 参照)、2つの別名で分ける。
@@ -353,21 +360,21 @@ const バビロニア暦ベール = バビロニア暦カスプ
 //
 // オスマン季節時法: 初期イスラム世界に広く見られた季節時法の伝統
 // (昼夜それぞれ12不等分)。division({ H: 'solar' })+dayStart('sunset')で再現できる。
-const オスマン季節時法 = Julian.dup()
+const オスマン季節時法 = FancyDate.lazy(() => Julian.dup()
   .spot(...Istanbul)
   .era('ヒジュラ紀元', '紀元前')
   .division({ H: 'solar' })
   .dayStart('sunset')
-  .init()
+  .init())
 
 // アラトゥルカ: 機械式時計普及後、alafranga(西洋式、真夜中起点)と
 // 1926年の共和国暦改革まで併存した、より狭義の「alaturka」。史実通り、
 // 1時間の長さは等時法のまま日付・時刻の起点だけ日没にリセットする
 // (dayBoundary(18))。
-const アラトゥルカ = オスマン季節時法.dup().division({ H: false }).dayStart('midnight').dayBoundary(18).init()
+const アラトゥルカ = FancyDate.lazy(() => オスマン季節時法.dup().division({ H: false }).dayStart('midnight').dayBoundary(18).init())
 
 // Gregorianは太陽暦なので、衛星未定義でもよい
-const MarsGregorian = baseCalendar()
+const MarsGregorian = FancyDate.lazy(() => baseCalendar()
   .spot(火星, 35, 0, 0)
   .era('西暦', '紀元前')
   .calendar(
@@ -377,9 +384,9 @@ const MarsGregorian = baseCalendar()
   .notation({
     M: [20],
   })
-  .init()
+  .init())
 
-const Jupiter = baseCalendar()
+const Jupiter = FancyDate.lazy(() => baseCalendar()
   .spot(カリスト, 35, 0, 0)
   .era('西暦', '紀元前')
   .calendar(
@@ -391,9 +398,9 @@ const Jupiter = baseCalendar()
     N: [40],
     Z: [520],
   })
-  .init()
+  .init())
 
-const フランス革命暦 = baseCalendar()
+const フランス革命暦 = FancyDate.lazy(() => baseCalendar()
   .spot(...Paris)
   .era('革命暦', '紀元前')
   .calendar(
@@ -440,17 +447,20 @@ const フランス革命暦 = baseCalendar()
 
     dC10: [10],
   })
-  .init()
+  .init())
 
 const マヤ暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
 const マヤ長期暦13バクトゥン = 13 * 144000
-const マヤ長期暦基準日 = g.parse('2012年12月21日')!
+let マヤ長期暦基準日Cache: number | undefined
+function マヤ長期暦基準日() {
+  return (マヤ長期暦基準日Cache ??= g.parse('2012年12月21日')!)
+}
 
-const Maya = baseCalendar()
+const Maya = FancyDate.lazy(() => baseCalendar()
   .lang('Gy年Mod日', 'Mo do')
   .spot(マヤ暦地球, 0, 0, 0)
   .era('', '')
-  .calendar(['0年Kankin3日', 'y年Mod日', マヤ長期暦基準日], null, [
+  .calendar(['0年Kankin3日', 'y年Mod日', マヤ長期暦基準日()], null, [
     20,
     20,
     20,
@@ -475,10 +485,10 @@ const Maya = baseCalendar()
     M: [マヤハアブ, null],
     d: [マヤハアブ日, null],
   })
-  .init()
+  .init())
 
 function mayaKin(utc: number) {
-  return Math.floor((utc - マヤ長期暦基準日) / 86400000) + マヤ長期暦13バクトゥン
+  return Math.floor((utc - マヤ長期暦基準日()) / 86400000) + マヤ長期暦13バクトゥン
 }
 
 export function mayaLongCount(utc: number) {
@@ -510,31 +520,34 @@ export function mayaHaab(utc: number) {
   return `${day} ${name}`
 }
 
-const Beat = gregorianBase()
+const Beat = FancyDate.lazy(() => gregorianBase()
   .spot(...zürich)
   .era('@', '紀元前')
   .notation({
     H: [1000],
     m: [100],
   })
-  .init()
+  .init())
 
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
-const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
-const エジプト民用暦 = baseCalendar()
+let ナボナサル紀元Cache: number | undefined
+function ナボナサル紀元() {
+  return (ナボナサル紀元Cache ??= Julian.parse('紀元前747年2月26日'))
+}
+const エジプト民用暦 = FancyDate.lazy(() => baseCalendar()
   .spot(エジプト民用暦地球, Cairo[1], Cairo[2], Cairo[3])
   .era('ナボナサル紀元', '紀元前')
   .calendar(
-    ['1年トート1日', 'y年Mod日', ナボナサル紀元],
+    ['1年トート1日', 'y年Mod日', ナボナサル紀元()],
     [],
     [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
   )
   .notation({
     M: [エジプト月名, null],
   })
-  .init()
+  .init())
 
-const コプト暦 = baseCalendar()
+const コプト暦 = FancyDate.lazy(() => baseCalendar()
   .spot(...Alexandria)
   .era('コプト暦', '紀元前')
   .calendar(
@@ -546,7 +559,7 @@ const コプト暦 = baseCalendar()
   .notation({
     M: [コプト月名, null],
   })
-  .init()
+  .init())
 
 /**
  * RomanClock: 時計の文字盤で定番のローマ数字表示を試すためのサンプル暦。
@@ -559,7 +572,7 @@ const コプト暦 = baseCalendar()
  * ため、0時・ちょうど0分のような値は数字のまま表示される——これは
  * ローマ数字という記法自体の制約であり、このサンプル固有の不具合ではない。
  */
-const RomanClock = Gregorian.dup().numeral(roman.upper).init()
+const RomanClock = FancyDate.lazy(() => Gregorian.dup().numeral(roman.upper).init())
 
 export const Calendar = {
   UTC,
@@ -569,6 +582,8 @@ export const Calendar = {
   Julian,
   アマンタ,
   プールニマンタ,
+  アマンタティティ,
+  プールニマンタティティ,
   平気法,
   定気法,
   Romulus,

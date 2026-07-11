@@ -37,6 +37,13 @@ export type TempoEnvelope = {
      * raw_now_idx は常に単調な通し番号を保つため、この距離計算に使う。
      */
     raw_now_idx?: number;
+    /**
+     * AssignmentRule が now_idx へ投影する前の、assignment 側の通し番号。
+     * raw_now_idx は assignment 前の暦座標(civil day など)を保持する一方、
+     * assignment_raw_now_idx は tithi のような割当対象現象そのものの連続座標を
+     * 保持する。assignment を使わない token では設定されない。
+     */
+    assignment_raw_now_idx?: number;
 };
 /**
  * TempoBase: envelope を解決するときに渡す最小限の文脈。
@@ -702,6 +709,8 @@ export declare class Tempo<Base extends TempoBase = TempoBase> implements TempoL
      * TempoEnvelope.raw_now_idx のドキュメント参照。
      */
     get raw_now_idx(): number;
+    /** AssignmentRule が割り当てた現象側の通し番号。未設定なら undefined。 */
+    get assignment_raw_now_idx(): number | undefined;
     /**
      * 既存 Tempo.table と同じ役割。TableTempoRule/SolarDayHourTempoRule が
      * 解決した envelope に含まれるテーブルを読み取り専用で公開する

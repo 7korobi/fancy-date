@@ -191,10 +191,15 @@ export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> =
     dayStart: DayStart;
     at: number;
 };
-export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (dayStart: DayStart, context: AssignmentContext<Token>) => number;
+export type AssignmentResult = number | {
+    now_idx: number;
+    assignment_raw_now_idx?: number;
+};
+export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (dayStart: DayStart, context: AssignmentContext<Token>) => AssignmentResult;
 export type AssignmentOptions = Partial<{
     [Token in AssignmentToken]: AssignmentRule<Token> | undefined;
 }>;
+export declare function tithi(): AssignmentRule<'d'>;
 type ICALC = {
     eras: ERA_WITH_YEAR[];
     idx: TOKENS<AnyDicToken, number>;
@@ -255,6 +260,7 @@ export declare class FancyDate {
     private _solar_event_day_core_rule?;
     private readonly _lunisolar_cache;
     constructor(o?: FancyDate);
+    static lazy(create: () => FancyDate): FancyDate;
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;
     era(era: string, past: string, eras?: readonly ERA[]): this;
@@ -716,6 +722,7 @@ export declare class FancyDate {
      */
     private solar_hour_rule;
     private day_start_event;
+    private current_day_start;
     /**
     * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
      * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
@@ -736,6 +743,7 @@ export declare class FancyDate {
     private month_rule;
     private year_rule;
     private day_rule;
+    private assign_day_tempo;
     note(utc: number, tempos?: Tempos, arg1?: {
         立春: Tempo<{
             write_at: number;

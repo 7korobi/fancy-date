@@ -36,6 +36,10 @@ const g = Calendar.Gregorian
 const ga = Calendar.GregorianAstronomical
 const old = Calendar.平気法
 const observed = Calendar.定気法
+const amanta = Calendar.アマンタ
+const purnimanta = Calendar.プールニマンタ
+const amantaTithi = Calendar.アマンタティティ
+const purnimantaTithi = Calendar.プールニマンタティティ
 
 const base = g.parse('2024年3月10日')
 const target = g.parse('2025年2月28日') + to_msec('3h') + to_msec('45m') + to_msec('12s') + 345
@@ -88,6 +92,54 @@ const suites = [
     label: 'Observed lunisolar to_tempos',
     count: 20,
     run: () => observed.to_tempos(base),
+  },
+  {
+    key: 'toTemposAmanta',
+    label: 'Amanta baseline to_tempos',
+    count: 1000,
+    run: () => amanta.to_tempos(base),
+  },
+  {
+    key: 'formatAmanta',
+    label: 'Amanta baseline format',
+    count: 1000,
+    run: () => amanta.format(base),
+  },
+  {
+    key: 'toTemposAmantaTithi',
+    label: 'Amanta tithi assignment to_tempos',
+    count: 1000,
+    run: () => amantaTithi.to_tempos(base),
+  },
+  {
+    key: 'formatAmantaTithi',
+    label: 'Amanta tithi assignment format',
+    count: 1000,
+    run: () => amantaTithi.format(base),
+  },
+  {
+    key: 'toTemposPurnimanta',
+    label: 'Purnimanta baseline to_tempos',
+    count: 1000,
+    run: () => purnimanta.to_tempos(base),
+  },
+  {
+    key: 'formatPurnimanta',
+    label: 'Purnimanta baseline format',
+    count: 1000,
+    run: () => purnimanta.format(base),
+  },
+  {
+    key: 'toTemposPurnimantaTithi',
+    label: 'Purnimanta tithi assignment to_tempos',
+    count: 1000,
+    run: () => purnimantaTithi.to_tempos(base),
+  },
+  {
+    key: 'formatPurnimantaTithi',
+    label: 'Purnimanta tithi assignment format',
+    count: 1000,
+    run: () => purnimantaTithi.format(base),
   },
   {
     key: 'spanObservedPrecise',

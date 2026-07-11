@@ -33,11 +33,12 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ### 性能・パッケージ構成
 
-- `Calendar` 初期化の遅延化を検討した。`import { Calendar } from 'fancy-date'` だけで `src/sample/calendars.ts` の17個の `FancyDate` インスタンスが即座に構築され、Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因になった。
+- `Calendar` 初期化の遅延化を検討した。`import { Calendar } from 'fancy-date'` だけで `src/sample/calendars.ts` の多数の `FancyDate` インスタンスが即座に構築され、Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因になった。
+- 2026-07-11時点の perf 調査: `tithi()` assignment サンプル追加後、`bun run perf:core` で `アマンタティティ.to_tempos` は約0.011ms/call、通常 `アマンタ.to_tempos` は約0.006ms/call。`プールニマンタティティ.to_tempos` は約0.006ms/callで通常版と同程度。別プロセス cold require は対策前 `require('./lib/fancy-date')` が約6〜9ms、`require('./lib/sample')`/`require('./lib/index')` が約1.86〜1.97s。原因は `src/sample/calendars.ts` の全サンプル即時 `.init()` と、`src/index.ts` の sample 再エクスポートだった。`FancyDate.lazy(create)` を追加し、`Calendar` の各サンプルを enumerable lazy proxy 化して参照されたサンプルだけ初期化するようにした後は `require('./lib/index')`/`require('./lib/sample')`/`require('./lib/sample/calendars')` が約10〜14msまで低下した。
 - 調査の結果、コストの正体は「暦を何個構築するか」ではなく「モジュール評価そのもの」。`.init()` 配下は正規表現構築や固定長ループ中心で、天文学的な反復計算は `to_tempos()`/`lunisolar()` まで遅延されている。支配的コストは `sample/eras.ts` の元号配列や `naoj`/`nasa` の巨大な静的データ。
-- Proxy による遅延ゲッターは `.init()`/`.dup()` コストしか避けられず効果が小さい。同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しい。
+- Proxy による `Calendar` 遅延化は、サンプル暦の即時 `.init()`/`.dup()` を避ける効果が大きかった。一方、同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しく、そこまで必要ならサブパス分割や動的 import を別途検討する。
 - サブパス分割(`fancy-date/calendars/core` 等)は実効性があるが、現行の `Calendar.X` 集約アクセスを使い続ける限り恩恵はゼロ。消費側がサブパス import へ移行する非互換な変更が要る。将来、1〜数暦だけを使う利用者が現れた場合の候補として保留する。
-- svelte-tick-timer の `/fancy` ページは17暦全部を意図的に同時表示するデモなので、暦単位の遅延化をしても結局全部使う。その用途への対処は `export const ssr = false` のままでよい。
+- svelte-tick-timer の `/fancy` ページは複数の重い暦を意図的に同時表示するデモなので、暦単位の遅延化をしても結局多くを使う。その用途への対処は `export const ssr = false` のままでよい。
 
 ## 既知課題
 
@@ -47,7 +48,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ## 実装済み・検証済み
 
-### format / span / token 表記
+### 実装済み: format / span / token 表記
 
 - `format_parts(utc, fmt)` / `format_parts_by(utc, fmt)` を追加した。戻り値は `{ token, text, ruby? }[]`。`token` は元の format token、リテラル片は `''`、`text` の連結は常に `format()` と一致する。`ruby` は本文 token に添える読みがある場合だけ付け、`dC60r`/`Er` のような `r` suffix token は読みそのものを `text` にするため `ruby` を付けない。`format_parts_by()` が内部で `to_tempos_input()` するため、数値・文字列・解決済み `Tempos` のいずれでも使える。
 - `format()` は内部的に `format_parts_by(...).map((p) => p.text).join('')` へ委譲する形にしたため、文字列出力と parts API の整合性を実装上保証している。旧 `format_by()` の役割は `format()` と `format_parts_by()` が巻き取った。
@@ -56,9 +57,9 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
-- `.assign(...)` の受け皿を追加した。現時点では `d` の assignment rule を `dic.assignments` に非列挙で保存し、`dup()` でも保持するだけで、`to_tempos()` の index 生成にはまだ接続しない。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を先に固定するための足場。
+- `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持する。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。欠日・重日・祭日判定、parse candidate 化は未着手。
 
-### 数詞・ロケール
+### 実装済み: 数詞・ロケール
 
 - 暦ごとの数値辞書を使った format/parse 入出力に対応した。
 - `perf:*` 系の性能測定スクリプトを追加した。入力検証強化(NaN/Infinity ガード追加)後に `bun run perf:core` を実行し、parse/format/to_tempos/span/add-sub/太陰太陽暦/天文現象の既存水準から劣化していないことを確認済み。

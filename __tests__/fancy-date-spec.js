@@ -1,5 +1,5 @@
 require('../lib/sample')
-const { FancyDate } = require('../lib/fancy-date')
+const { FancyDate, tithi } = require('../lib/fancy-date')
 const { prepareSpot } = require('../lib/fancy-date')
 const {
   Calendar,
@@ -43,6 +43,8 @@ const ga = Calendar.GregorianAstronomical
 const 平気法 = Calendar.平気法
 const am = Calendar.アマンタ
 const pm = Calendar.プールニマンタ
+const amTithi = Calendar.アマンタティティ
+const pmTithi = Calendar.プールニマンタティティ
 const b = Calendar.Beat
 const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
@@ -991,8 +993,38 @@ describe('Gregorian', () => {
     expect(calendar.dic.assignments.d).toBe(assignment)
     expect(Object.prototype.propertyIsEnumerable.call(calendar.dic, 'assignments')).toBe(false)
     expect(clone.dic.assignments.d).toBe(assignment)
-    // Step 3 is only the storage/API boundary; assignment rules are not applied yet.
-    expect(calendar.format(utc, 'd')).toBe(g.dup().dayStart('sunrise').init().format(utc, 'd'))
+    expect(calendar.format(utc, 'd')).toBe('2')
+  })
+
+  test('FancyDate.lazy() defers construction until first use and memoizes it', () => {
+    let constructed = 0
+    const calendar = FancyDate.lazy(() => {
+      constructed++
+      return g.dup().init()
+    })
+
+    expect(calendar).toBeInstanceOf(FancyDate)
+    expect(constructed).toBe(0)
+    expect(calendar.format(0, 'Gy年MM月dd日')).toBe(g.format(0, 'Gy年MM月dd日'))
+    expect(constructed).toBe(1)
+    expect(calendar.format(g.parse('2024年3月10日'), 'Gy年MM月dd日')).toBe('西暦2024年03月10日')
+    expect(constructed).toBe(1)
+  })
+
+  test('tithi() assigns d from the lunar phase at the configured dayStart boundary', () => {
+    const calendar = g.dup().dayStart('sunrise').assign({ d: tithi() }).init()
+    const base = calendar.parse('2024年6月21日')
+    const day = calendar.to_tempos(base).d
+    const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
+    const next = day.succ()
+
+    expect(day.now_idx).toBe(expected)
+    expect(calendar.format(base, 'd')).toBe(String(expected + 1))
+    expect(day.raw_now_idx).toBe(g.dup().dayStart('sunrise').init().to_tempos(base).d.now_idx)
+    expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
+    expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)
+    expect(next.assignment_raw_now_idx).toBeGreaterThanOrEqual(day.assignment_raw_now_idx)
+    expect(next.last_at).toBe(day.next_at)
   })
 
   test('parse → fomat cycle', () => {
@@ -1247,6 +1279,25 @@ describe('Gregorian', () => {
 
     expect(found).toEqual(expected)
     expect(found.length).toBeGreaterThan(50)
+  })
+})
+
+describe('tithi calendar samples', () => {
+  test.each([
+    ['アマンタティティ', amTithi],
+    ['プールニマンタティティ', pmTithi],
+  ])('%s assigns d from tithi at sunrise while preserving civil-day movement', (_name, calendar) => {
+    const utc = g.parse('2024年6月21日')
+    const day = calendar.to_tempos(utc).d
+    const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
+    const next = day.succ()
+
+    expect(calendar.dic.day_start).toBe('sunrise')
+    expect(calendar.dic.assignments.d).toBeDefined()
+    expect(day.now_idx).toBe(expected)
+    expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
+    expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)
+    expect(next.last_at).toBe(day.next_at)
   })
 })
 

@@ -585,13 +585,29 @@ export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> =
   dayStart: DayStart
   at: number
 }
+export type AssignmentResult =
+  | number
+  | {
+      now_idx: number
+      assignment_raw_now_idx?: number
+    }
 export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (
   dayStart: DayStart,
   context: AssignmentContext<Token>,
-) => number
+) => AssignmentResult
 export type AssignmentOptions = Partial<{
   [Token in AssignmentToken]: AssignmentRule<Token> | undefined
 }>
+
+export function tithi(): AssignmentRule<'d'> {
+  return (_dayStart, { calendar, at }) => {
+    const moony = calendar.dic.moony
+    if (!moony) throw new Error('tithi() assignment requires a satellite orbital model')
+    const now_idx = Math.min(29, Math.floor(mod(moony.phaseAt(at), 1) * 30))
+    const cycle = Math.floor((at - moony.epochMsec) / moony.periodMsec)
+    return { now_idx, assignment_raw_now_idx: cycle * 30 + now_idx }
+  }
+}
 
 type ICALC = {
   eras: ERA_WITH_YEAR[]
@@ -665,6 +681,49 @@ function to_indexs<T>(zero: T): TOKENS<AnyDicToken, T> {
     data[key] = zero
   }
   return sync_legacy_token_aliases(data) as TOKENS<AnyDicToken, T>
+}
+
+class AssignedTempoRule<Base extends TempoBase, Token extends AssignmentToken>
+  implements TempoRule<Base>
+{
+  constructor(
+    private readonly innerRule: TempoRule<Base>,
+    private readonly token: Token,
+    private readonly calendar: FancyDate,
+    private readonly assignment: AssignmentRule<Token>,
+    private readonly currentDayStart: () => DayStart,
+  ) {}
+
+  assign(raw: TempoEnvelope): TempoEnvelope {
+    const dayStart = this.currentDayStart()
+    const assigned = this.assignment(dayStart, {
+      token: this.token,
+      calendar: this.calendar,
+      dayStart,
+      at: raw.last_at,
+    })
+    const now_idx = 'number' === typeof assigned ? assigned : assigned.now_idx
+    const assignment_raw_now_idx = 'number' === typeof assigned ? undefined : assigned.assignment_raw_now_idx
+    if (!Number.isFinite(now_idx)) throw new Error(`invalid assignment index ${now_idx}`)
+    return {
+      ...raw,
+      now_idx,
+      raw_now_idx: raw.raw_now_idx ?? raw.now_idx,
+      assignment_raw_now_idx,
+    }
+  }
+
+  at(write_at: number, base: Base): TempoEnvelope {
+    return this.assign(this.innerRule.at(write_at, base))
+  }
+
+  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
+    const rawEnvelope = {
+      ...envelope,
+      now_idx: envelope.raw_now_idx ?? envelope.now_idx,
+    }
+    return this.assign(this.innerRule.slide(rawEnvelope, amount, base))
+  }
 }
 
 const shift_up = function (a, b, size) {
@@ -830,6 +889,34 @@ export class FancyDate {
       }
       sync_legacy_token_aliases(this.dic)
     }
+  }
+
+  static lazy(create: () => FancyDate): FancyDate {
+    let calendar: FancyDate | undefined
+    const resolve = () => (calendar ??= create())
+    const target = Object.create(FancyDate.prototype) as FancyDate
+    return new Proxy(target, {
+      get(_target, property) {
+        const resolved = resolve()
+        const value = Reflect.get(resolved, property)
+        return 'function' === typeof value ? value.bind(resolved) : value
+      },
+      set(_target, property, value) {
+        return Reflect.set(resolve(), property, value)
+      },
+      has(_target, property) {
+        return property in resolve()
+      },
+      ownKeys() {
+        return Reflect.ownKeys(resolve())
+      },
+      getOwnPropertyDescriptor(_target, property) {
+        return Object.getOwnPropertyDescriptor(resolve(), property)
+      },
+      getPrototypeOf() {
+        return FancyDate.prototype
+      },
+    })
   }
 
   spot(...spot: SPOT) {
@@ -2915,6 +3002,10 @@ K   = @dic.earthy[2] / 360
     return undefined
   }
 
+  private current_day_start(): DayStart {
+    return this.day_start_event() ?? 'midnight'
+  }
+
   /**
   * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
    * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
@@ -2974,6 +3065,19 @@ K   = @dic.earthy[2] / 360
       ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
       : 0
     return new SubdivideTempoRule(this.calc.msec.day, offset)
+  }
+
+  private assign_day_tempo(day: Tempo<SubdivideBase>): Tempo<SubdivideBase> {
+    const assignment = this.dic.assignments.d
+    if (!assignment) return day
+    const rule = new AssignedTempoRule(
+      day.rule,
+      'd',
+      this,
+      assignment,
+      () => this.current_day_start(),
+    )
+    return new Tempo(rule.assign(envelope_of(day)), day.base, rule)
   }
 
   note(
@@ -3254,6 +3358,8 @@ K   = @dic.earthy[2] / 360
         }
       }
     }
+
+    d = this.assign_day_tempo(d)
 
     // hour minute second  in day
     if (this.dic.is_solor) {
