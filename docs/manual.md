@@ -28,6 +28,9 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `parse_span(text, options?)`             | 相対表現を `Span` に変換する              |
 | `format_span(span, direction?)`          | `SpanLike` を現在の暦の表記へ整える       |
 | `span_msec(span, options?)`              | anchor 付き span を実ミリ秒へ変換する     |
+| `span_add(left, right)`                  | span 同士を token ごとに足す              |
+| `span_sub(left, right)`                  | span 同士を token ごとに引く              |
+| `span_neg(span)`                         | span の向きを反転する                     |
 | `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
 | `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
 | `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
@@ -256,9 +259,17 @@ const parsed = g.parse_span('1ヶ月後', { at: g.parse('2024年1月31日') })
 g.span_msec(parsed)
 // 2024年1月31日から1ヶ月後までの実ミリ秒
 
+g.span_add('3日後', '1日前').label
+// '2日後'
+
+g.span_add('1ヶ月後', '31日前').label
+// '1ヶ月後31日前'
+
 custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'
 ```
+
+`span_add()` / `span_sub()` は symbolic な演算で、同じ token だけを相殺する。月と日のような異なる token 間の繰り上げ・相殺は行わない。演算後の span は `msec` anchor を失い、`at` が残っていれば `span_msec()` がその時点から再計算する。
 
 `labels()` は fallback の単位表記を差し替える。`notation()` の第3要素に relatives がある場合は、そちらが優先される。
 

@@ -55,6 +55,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - svelte-tick-timer の `/fancy` ページは `format_parts()` ベースへ移行し、空白 split と固定配列分割代入をやめた。`FormatPart` から `{ text, ruby }` を作って `<ruby>{text}<rt>{ruby}</rt></ruby>` に流し込む形になり、format 文字列・分割代入・テンプレートの三重管理を解消した。
 - `labels()` と `parse_span()` / `format_span()` を追加し、span の表記を暦ごとに調整できるようにした。
 - `Span` の内部 anchor を `{ calendar, at?, msec? }` に整理した。`span_obj(to, from)` 由来の span は `at=from` と `msec=to-from` を持ち、`parse_span(text, { at })` は msec なしの基準時刻だけを持つ。`span_msec(span, { at? })` は anchor の msec を使うか、基準時刻から `add()` して実ミリ秒へ変換する。span 同士の演算後は msec を喪失させる方針。
+- `span_neg()` / `span_add()` / `span_sub()` を追加した。これは symbolic な span 演算で、同 token の値だけを足し引きし、異 token 間の繰り上げ・相殺は行わない。混合方向は `1ヶ月後31日前` のように part ごとに方向を表示する。演算後は msec を保持せず、anchor の `at` だけ条件付きで残す。
 - `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。

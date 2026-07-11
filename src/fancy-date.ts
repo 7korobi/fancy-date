@@ -1323,6 +1323,24 @@ export class FancyDate {
     return this.format_span_parts(parts, spanDirection)
   }
 
+  span_neg(span: SpanLike) {
+    const result = this.format_span_parts(this.invert_span(span))
+    const at = this.span_anchor_at(span)
+    return at == null ? result : this.with_span_anchor_at(at, result)
+  }
+
+  span_add(left: SpanLike, right: SpanLike) {
+    const result = this.format_span_parts(this.merge_span_parts(left, right))
+    const at = this.merge_span_anchor_at(left, right)
+    return at == null ? result : this.with_span_anchor_at(at, result)
+  }
+
+  span_sub(left: SpanLike, right: SpanLike) {
+    const result = this.format_span_parts(this.merge_span_parts(left, this.invert_span(right)))
+    const at = this.merge_span_anchor_at(left, right)
+    return at == null ? result : this.with_span_anchor_at(at, result)
+  }
+
   span_msec(span: SpanLike, options: SpanMsecOptions = {}) {
     const anchor = 'string' === typeof span ? undefined : (span as AnchoredSpan)[span_anchor]
     if (anchor?.calendar === this && anchor.msec != null) return anchor.msec
@@ -1369,7 +1387,7 @@ export class FancyDate {
     return parts.map((part) => (part.token === 'd' ? { ...part, token: 'D' as Token } : part))
   }
 
-  private format_span_parts(parts: readonly SpanPart[], direction: SpanDirection): Span {
+  private format_span_parts(parts: readonly SpanPart[], direction?: SpanDirection): Span {
     const activeParts = parts
       .filter(({ value }) => value)
       .map((part) => ({
@@ -1382,10 +1400,15 @@ export class FancyDate {
       }))
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
+    const signs = new Set(activeParts.map(({ value }) => (value < 0 ? '後' : '前')))
+    const label =
+      direction || signs.size === 1
+        ? `${activeParts.map(({ label }) => label).join('')}${direction ?? signs.values().next().value}`
+        : activeParts.map((part) => `${part.label}${part.value < 0 ? '後' : '前'}`).join('')
     return {
       unit: primary.unit,
       value: primary.value,
-      label: `${activeParts.map(({ label }) => label).join('')}${direction}`,
+      label,
       parts: activeParts,
     }
   }
@@ -1410,6 +1433,48 @@ export class FancyDate {
       value: 0 - value,
       label,
     }))
+  }
+
+  private merge_span_parts(left: SpanLike, right: SpanLike) {
+    const merged = new Map<Token, SpanPart>()
+    const seen = new Map<Token, number>()
+    const addPart = (part: SpanPart, index: number) => {
+      const token = part.token
+      const current = merged.get(token)
+      if (!seen.has(token)) seen.set(token, index)
+      merged.set(token, {
+        token,
+        unit: this.span_part_unit(token),
+        value: (current?.value ?? 0) + part.value,
+        label: '',
+      })
+    }
+    let index = 0
+    for (const part of this.span_parts_of(left)) addPart(part, index++)
+    for (const part of this.span_parts_of(right)) addPart(part, index++)
+    const order = new Map(this.span_parse_rows().map(([token], rowIndex) => [token, rowIndex]))
+    return [...merged.values()].sort((a, b) => {
+      const orderA = order.get(a.token)
+      const orderB = order.get(b.token)
+      if (orderA != null && orderB != null && orderA !== orderB) return orderA - orderB
+      if (orderA != null && orderB == null) return -1
+      if (orderA == null && orderB != null) return 1
+      return (seen.get(a.token) ?? 0) - (seen.get(b.token) ?? 0)
+    })
+  }
+
+  private span_anchor_at(span: SpanLike) {
+    if ('string' === typeof span || Array.isArray(span)) return undefined
+    const anchor = (span as AnchoredSpan)[span_anchor]
+    return anchor?.calendar === this ? anchor.at : undefined
+  }
+
+  private merge_span_anchor_at(left: SpanLike, right: SpanLike) {
+    const leftAt = this.span_anchor_at(left)
+    const rightAt = this.span_anchor_at(right)
+    if (leftAt == null) return rightAt
+    if (rightAt == null || leftAt === rightAt) return leftAt
+    return undefined
   }
 
   private parse_span_part(text: string, sign: number) {

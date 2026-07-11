@@ -354,6 +354,20 @@ describe('Gregorio calculate', () => {
     expect(() => g.span_msec(g.parse_span('1ヶ月後'))).toThrow(/anchor time/)
   })
 
+  test('symbolic span arithmetic merges only matching tokens and drops stored msec', () => {
+    const from = g.parse('2024年1月31日')
+    const anchoredMonth = g.parse_span('1ヶ月後', { at: from })
+    const doubled = g.span_add(anchoredMonth, '1ヶ月後')
+
+    expect(g.span_neg('3日後').label).toBe('3日前')
+    expect(g.span_add('3日後', '1日前').label).toBe('2日後')
+    expect(g.span_sub('3日後', '1日後').label).toBe('2日後')
+    expect(g.span_add('1ヶ月後', '31日前').label).toBe('1ヶ月後31日前')
+    expect(doubled.label).toBe('2ヶ月後')
+    expect(g.span_msec(doubled)).toBe(g.add(from, doubled) - from)
+    expect(g.span_msec(doubled)).not.toBe(g.span_msec(anchoredMonth))
+  })
+
   test('parse', () => {
     return
     expect([g.format(g.parse('2000年夏至', 'y年Z'))]).toEqual(['123'])

@@ -361,6 +361,9 @@ export declare class FancyDate {
     span_obj(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
     parse_span(text: string, options?: ParseSpanOptions): Span;
     format_span(span: SpanLike, direction?: SpanDirection): Span;
+    span_neg(span: SpanLike): Span;
+    span_add(left: SpanLike, right: SpanLike): Span;
+    span_sub(left: SpanLike, right: SpanLike): Span;
     span_msec(span: SpanLike, options?: SpanMsecOptions): number;
     private add_span;
     private parse_span_parts;
@@ -369,6 +372,9 @@ export declare class FancyDate {
     private span_parts_of;
     private normalize_span_part;
     private invert_span;
+    private merge_span_parts;
+    private span_anchor_at;
+    private merge_span_anchor_at;
     private parse_span_part;
     private span_parse_rows;
     private span_target;

@@ -122,6 +122,12 @@ const anchored = g.parse_span('1ヶ月後', { at: from })
 g.span_msec(anchored)
 // from から1ヶ月後までの実ミリ秒
 
+g.span_add('3日後', '1日前').label
+// '2日後'
+
+g.span_add('1ヶ月後', '31日前').label
+// '1ヶ月後31日前'
+
 custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'
 ```
