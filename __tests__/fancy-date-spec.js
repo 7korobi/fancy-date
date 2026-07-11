@@ -982,6 +982,19 @@ describe('Gregorian', () => {
     expect(legacy.format(utc, 'E')).toBe(notation.format(utc, 'E'))
   })
 
+  test('assign() stores token assignment rules separately from notation', () => {
+    const utc = g.parse('2024年3月10日')
+    const assignment = (dayStart, context) => (dayStart === 'sunrise' && context.token === 'd' ? 1 : 0)
+    const calendar = g.dup().dayStart('sunrise').assign({ d: assignment }).init()
+    const clone = calendar.dup()
+
+    expect(calendar.dic.assignments.d).toBe(assignment)
+    expect(Object.prototype.propertyIsEnumerable.call(calendar.dic, 'assignments')).toBe(false)
+    expect(clone.dic.assignments.d).toBe(assignment)
+    // Step 3 is only the storage/API boundary; assignment rules are not applied yet.
+    expect(calendar.format(utc, 'd')).toBe(g.dup().dayStart('sunrise').init().format(utc, 'd'))
+  })
+
   test('parse → fomat cycle', () => {
     const str = 'Gy年MM月dd日(E)H時m分s秒'
     expect(

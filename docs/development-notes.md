@@ -56,6 +56,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
+- `.assign(...)` の受け皿を追加した。現時点では `d` の assignment rule を `dic.assignments` に非列挙で保存し、`dup()` でも保持するだけで、`to_tempos()` の index 生成にはまだ接続しない。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を先に固定するための足場。
 
 ### 数詞・ロケール
 

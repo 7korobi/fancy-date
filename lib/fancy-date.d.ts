@@ -177,12 +177,24 @@ type IDIC = IIDX & {
     is_solor: boolean;
     day_offset_hours?: number;
     day_start?: DayStart;
+    assignments: AssignmentOptions;
     is_dusk: boolean;
 };
 export type DivisionOptions = {
     H?: false | 'equal' | 'solar';
 };
 export type DayStart = 'midnight' | SolarDayBoundaryEvent;
+export type AssignmentToken = 'd';
+export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> = {
+    token: Token;
+    calendar: FancyDate;
+    dayStart: DayStart;
+    at: number;
+};
+export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (dayStart: DayStart, context: AssignmentContext<Token>) => number;
+export type AssignmentOptions = Partial<{
+    [Token in AssignmentToken]: AssignmentRule<Token> | undefined;
+}>;
 type ICALC = {
     eras: ERA_WITH_YEAR[];
     idx: TOKENS<AnyDicToken, number>;
@@ -249,6 +261,7 @@ export declare class FancyDate {
     calendar(start?: (string | number)[], leaps?: number[] | null, month_divs?: (number | null)[] | null, leap_shift?: number): this;
     notation(o: Partial<TOKENS<ALGO_DIC | LegacyTokenAlias, IndexerProps>>): this;
     algo(o: Partial<TOKENS<ALGO_DIC | LegacyTokenAlias, IndexerProps>>): this;
+    assign(assignments: AssignmentOptions): this;
     division(options: DivisionOptions): this;
     daily(is_solor?: string | boolean): this;
     dayBoundary(offsetHours?: number): this;
