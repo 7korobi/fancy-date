@@ -1,5 +1,5 @@
-import { FancyDate, tithi } from '../fancy-date'
-import type { PLANET } from '../fancy-date'
+import { FancyDate, tithi, transformOrbital } from '../fancy-date'
+import type { PLANET, SATELLITE } from '../fancy-date'
 import { jpn, mod, old_jpn, roman } from '../number'
 import { localTimezoneDeg } from '../time'
 import { 北朝元号 } from './eras'
@@ -54,6 +54,7 @@ import {
   zürich,
   カリスト,
   太陽,
+  天文月,
   天文東京,
   東京,
   火星,
@@ -177,9 +178,30 @@ const プールニマンタ = FancyDate.lazy(() => baseCalendar()
 // 実用的なパンチャーンガ系の日付では、civil day の境界(日の出)そのものと、
 // その日の d に割り当てる tithi(月太陽離角12度ごとの30分割)は別の層になる。
 // dayStart('sunrise') が「日の出始まりの日」を作り、assign({ d: tithi() }) が
-// その日の d index を日の出時点の tithi へ投影する。
-const アマンタティティ = FancyDate.lazy(() => アマンタ.dup().dayStart('sunrise').assign({ d: tithi() }).init())
-const プールニマンタティティ = FancyDate.lazy(() => プールニマンタ.dup().dayStart('sunrise').assign({ d: tithi() }).init())
+// その日の d index を日の出時点の tithi へ投影する。観測に寄る暦なので、
+// tithi 版は mean の アマンタ/プールニマンタ から派生しつつ spot() を
+// 天文月(および満月基準の天文黒分月)へ差し替える。
+const 天文黒分月: SATELLITE = [
+  天文月[0],
+  transformOrbital(天文月[1], { phaseOffset: 0.5 }),
+  天文月[2],
+] as const
+const アマンタティティ = FancyDate.lazy(() =>
+  アマンタ
+    .dup()
+    .spot(天文月, Madurai[1], Madurai[2], Madurai[3])
+    .dayStart('sunrise')
+    .assign({ d: tithi() })
+    .init(),
+)
+const プールニマンタティティ = FancyDate.lazy(() =>
+  プールニマンタ
+    .dup()
+    .spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3])
+    .dayStart('sunrise')
+    .assign({ d: tithi() })
+    .init(),
+)
 
 // 和暦の日付(d)は最大30日(旧暦の大の月)。漢字表現(do)・日付のふりがな
 // 表現(dr)を list/rubys に静的展開しておく(bare の d は算用数字のまま

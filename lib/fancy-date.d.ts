@@ -197,10 +197,13 @@ export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> =
     calendar: FancyDate;
     dayStart: DayStart;
     at: number;
+    previousAt: number;
+    nextAt: number;
 };
 export type AssignmentResult = number | {
     now_idx: number;
     assignment_raw_now_idx?: number;
+    assignment_flags?: readonly string[];
 };
 export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (dayStart: DayStart, context: AssignmentContext<Token>) => AssignmentResult;
 export type AssignmentOptions = Partial<{

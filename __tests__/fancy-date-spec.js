@@ -1,5 +1,5 @@
 require('../lib/sample')
-const { FancyDate, tithi } = require('../lib/fancy-date')
+const { FancyDate, hasSolarEvents, tithi } = require('../lib/fancy-date')
 const { prepareSpot } = require('../lib/fancy-date')
 const {
   Calendar,
@@ -1056,6 +1056,30 @@ describe('Gregorian', () => {
     expect(next.last_at).toBe(day.next_at)
   })
 
+  test('tithi() marks skipped and repeated tithi without other panchanga elements', () => {
+    const collectFlags = (calendar, start, days) => {
+      let at = start
+      const flags = []
+      for (let i = 0; i < days; i++) {
+        const day = calendar.to_tempos(at).d
+        flags.push(...day.assignment_flags)
+        at = day.next_at + 1000
+      }
+      return flags
+    }
+
+    expect(collectFlags(amTithi, g.parse('2024年1月1日'), 180)).toContain('skipped')
+
+    const slowMoon = [月[0], [31 * to_msec('1d'), 月[1][1]], 月[2]]
+    const repeatedCalendar = g
+      .dup()
+      .spot(slowMoon, 東京[1], 東京[2], 東京[3])
+      .dayStart('sunrise')
+      .assign({ d: tithi() })
+      .init()
+    expect(collectFlags(repeatedCalendar, g.parse('2024年1月1日'), 90)).toContain('repeated')
+  })
+
   test('parse → fomat cycle', () => {
     const str = 'Gy年MM月dd日(E)H時m分s秒'
     expect(
@@ -1323,6 +1347,7 @@ describe('tithi calendar samples', () => {
 
     expect(calendar.dic.day_start).toBe('sunrise')
     expect(calendar.dic.assignments.d).toBeDefined()
+    expect(hasSolarEvents(calendar.dic.sunny)).toBe(true)
     expect(day.now_idx).toBe(expected)
     expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
     expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)

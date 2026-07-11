@@ -44,6 +44,7 @@ export type TempoEnvelope = {
      * 保持する。assignment を使わない token では設定されない。
      */
     assignment_raw_now_idx?: number;
+    assignment_flags?: readonly string[];
 };
 /**
  * TempoBase: envelope を解決するときに渡す最小限の文脈。
@@ -711,6 +712,7 @@ export declare class Tempo<Base extends TempoBase = TempoBase> implements TempoL
     get raw_now_idx(): number;
     /** AssignmentRule が割り当てた現象側の通し番号。未設定なら undefined。 */
     get assignment_raw_now_idx(): number | undefined;
+    get assignment_flags(): readonly string[];
     /**
      * 既存 Tempo.table と同じ役割。TableTempoRule/SolarDayHourTempoRule が
      * 解決した envelope に含まれるテーブルを読み取り専用で公開する

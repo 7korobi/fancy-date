@@ -47,6 +47,7 @@ export type TempoEnvelope = {
    * 保持する。assignment を使わない token では設定されない。
    */
   assignment_raw_now_idx?: number
+  assignment_flags?: readonly string[]
 }
 
 /**
@@ -1327,6 +1328,9 @@ export class Tempo<Base extends TempoBase = TempoBase> implements TempoLike {
   /** AssignmentRule が割り当てた現象側の通し番号。未設定なら undefined。 */
   get assignment_raw_now_idx() {
     return this.envelope.assignment_raw_now_idx
+  }
+  get assignment_flags() {
+    return this.envelope.assignment_flags ?? []
   }
   /**
    * 既存 Tempo.table と同じ役割。TableTempoRule/SolarDayHourTempoRule が

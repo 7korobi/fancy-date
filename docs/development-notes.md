@@ -8,7 +8,7 @@ fancy-date の開発者向け検討メモ・調査結果・実装ログ。エン
 
 - 実装済み: `SpanPart` は `token` を持つ。`parse_span()` と `format_span()` は分離済みで、`parse_span()` は現在の `labels()` / `notation(..., relatives)` から文字列を `SpanPart[]` へ戻し、`format_span()` は同じ parts を現在のラベル設定で再表示できる。`Precision = CorePrecision | Token` なので、`precise` には不断 token も指定できる。`format_parts()` / `format_parts_by()` も実装済みで、HTML ruby 用に `{ token, text, ruby? }[]` を返す。
 - 部分実装: 不断 token の span は「循環上の差分」として parse/format/find できるが、`add()`/`sub()` では意図的に例外にしている。暦上の実日付移動として解釈できるのは `y/M/d/H/m/s/S` と `Y/w/D` の階層 token だけ。不断 token の加算を許すなら、「次の甲子日」なのか「周期差だけを足す」のか、別の探索 semantics が必要。
-- 残課題: span 同士の演算は未実装。`SpanPart[]` は現状の正本だが、同じ unit/token を複数持たない前提を強めるなら Record 形式に寄せる余地がある。
+- 部分実装: span 同士の symbolic 演算は `span_neg()` / `span_add()` / `span_sub()` で実装済み。同じ token だけを相殺し、異なる token 間の繰り上げ・相殺はしない。残課題は、平均サイズによる lossy な `span_approx()`、anchor 時刻の実暦境界に基づく `span_normalize()`、cyclic token span をどこまで演算対象に含めるかの整理。
 - 採用済み token 命名: `dC<number>` は「日不断の number-cycle」、`yC<number>` は「年不断の number-cycle」を表す正本 token とする。干支系は `dC60/dC10/dC12`・`yC60/yC10/yC12` が正本で、既存の `dC/dCS/dCB`・`yC/yCS/yCB` と `A/C/B/a/c/b` は文化的 alias として残す。ルビは `dC60r` / `dC10r` / `dC12r` / `yC60r` など数値付き token に付く。同じ multi-character token registry で `Ha`=午前午後、`da`=paksha のような派生 token も扱える。
 - 周期・暦注 token 方針: 九星は `yC9`=年九星、`dC9`=日九星。`E` は一般的な weekday token として、暦ごとの週相当 cycle (`dC7` / `dC8` / `dC10`) を指す。二十八宿のような日不断の宿は `dC28`。六曜は天文現象や lunar mansion ではなく旧暦月日から決まる暦注なので、固有 token `R6`(rokuyo 6)にする。二十七宿は lunar mansion ではあるが日不断ではなく旧暦月日由来なので `LM27` とし、`dC28` と分ける。旧 `f/F/V` alias は廃止し、それぞれ `yC9` / `dC9` / `dC28` または `LM27` を明示する。これらは format/find 表示・検索条件には使うが、通常 parse では日時座標の決定に使わない。干支などの周期 token から候補日時を推定する用途は、parse ではなく将来の find/候補探索 API 拡張で扱う。
 - 今後の制約: multi-character token 追加時も、`format_parts()` の `{ token, text, ruby? }` 契約と「`text` 連結が `format()` と一致する」性質を維持する。
@@ -34,7 +34,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 ### 性能・パッケージ構成
 
 - `Calendar` 初期化の遅延化を検討した。`import { Calendar } from 'fancy-date'` だけで `src/sample/calendars.ts` の多数の `FancyDate` インスタンスが即座に構築され、Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因になった。
-- 2026-07-11時点の perf 調査: `tithi()` assignment サンプル追加後、`bun run perf:core` で `アマンタティティ.to_tempos` は約0.011ms/call、通常 `アマンタ.to_tempos` は約0.006ms/call。`プールニマンタティティ.to_tempos` は約0.006ms/callで通常版と同程度。別プロセス cold require は対策前 `require('./lib/fancy-date')` が約6〜9ms、`require('./lib/sample')`/`require('./lib/index')` が約1.86〜1.97s。原因は `src/sample/calendars.ts` の全サンプル即時 `.init()` と、`src/index.ts` の sample 再エクスポートだった。`FancyDate.lazy(create)` を追加し、`Calendar` の各サンプルを enumerable lazy proxy 化して参照されたサンプルだけ初期化するようにした後は `require('./lib/index')`/`require('./lib/sample')`/`require('./lib/sample/calendars')` が約10〜14msまで低下した。
+- 2026-07-11時点の perf 調査: 明確な劣等は cold require だった。対策前は `require('./lib/sample')`/`require('./lib/index')` が約1.86〜1.97sで、原因は `src/sample/calendars.ts` の全サンプル即時 `.init()` と、`src/index.ts` の sample 再エクスポートだった。`FancyDate.lazy(create)` を追加し、`Calendar` の各サンプルを enumerable lazy proxy 化して参照されたサンプルだけ初期化するようにした後は `require('./lib/index')`/`require('./lib/sample')`/`require('./lib/sample/calendars')` が約10〜14msまで低下した。`tithi()` assignment の per-call cost は現時点では支配的でないため、詳細値は `scripts/perf.js` 側の測定項目に留める。
 - 調査の結果、コストの正体は「暦を何個構築するか」ではなく「モジュール評価そのもの」。`.init()` 配下は正規表現構築や固定長ループ中心で、天文学的な反復計算は `to_tempos()`/`lunisolar()` まで遅延されている。支配的コストは `sample/eras.ts` の元号配列や `naoj`/`nasa` の巨大な静的データ。
 - Proxy による `Calendar` 遅延化は、サンプル暦の即時 `.init()`/`.dup()` を避ける効果が大きかった。一方、同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しく、そこまで必要ならサブパス分割や動的 import を別途検討する。
 - サブパス分割(`fancy-date/calendars/core` 等)は実効性があるが、現行の `Calendar.X` 集約アクセスを使い続ける限り恩恵はゼロ。消費側がサブパス import へ移行する非互換な変更が要る。将来、1〜数暦だけを使う利用者が現れた場合の候補として保留する。
@@ -59,7 +59,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
-- `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持する。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。欠日・重日・祭日判定、parse candidate 化は未着手。
+- `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持し、前後の raw tithi と比較して `assignment_flags` に `skipped`/`repeated` を付ける。これは tithi 自体の判定なので `nakshatra()`/`yoga()`/`karana()` は不要で、パンチャーンガの別要素として後回しにできる。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。tithi サンプルは観測に寄る暦として `天文月` / 満月基準の `天文黒分月` を使い、日の出境界も `hasSolarEvents` を持つ太陽モデルで解決する。祭日判定、parse candidate 化は未着手。
 
 ### 実装済み: 数詞・ロケール
 

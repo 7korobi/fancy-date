@@ -1,6 +1,6 @@
 {
   "name": "fancy-date",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "架空の暦を扱う",
   "type": "commonjs",
   "main": "lib/index.js",
@@ -14,7 +14,10 @@
     "./package.json": "./package.json"
   },
   "packageManager": "bun@1.2.16",
-  "repository": "git@github.com:7korobi/fancy-date.git",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/7korobi/fancy-date.git"
+  },
   "homepage": "https://github.com/7korobi/fancy-date",
   "bugs": {
     "url": "https://github.com/7korobi/fancy-date/issues"

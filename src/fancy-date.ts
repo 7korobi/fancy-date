@@ -596,12 +596,15 @@ export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> =
   calendar: FancyDate
   dayStart: DayStart
   at: number
+  previousAt: number
+  nextAt: number
 }
 export type AssignmentResult =
   | number
   | {
       now_idx: number
       assignment_raw_now_idx?: number
+      assignment_flags?: readonly string[]
     }
 export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (
   dayStart: DayStart,
@@ -612,12 +615,23 @@ export type AssignmentOptions = Partial<{
 }>
 
 export function tithi(): AssignmentRule<'d'> {
-  return (_dayStart, { calendar, at }) => {
+  return (_dayStart, { calendar, at, previousAt, nextAt }) => {
     const moony = calendar.dic.moony
     if (!moony) throw new Error('tithi() assignment requires a satellite orbital model')
-    const now_idx = Math.min(29, Math.floor(mod(moony.phaseAt(at), 1) * 30))
-    const cycle = Math.floor((at - moony.epochMsec) / moony.periodMsec)
-    return { now_idx, assignment_raw_now_idx: cycle * 30 + now_idx }
+    const rawAt = (targetAt: number) => {
+      const now_idx = Math.min(29, Math.floor(mod(moony.phaseAt(targetAt), 1) * 30))
+      const cycle = Math.floor((targetAt - moony.epochMsec) / moony.periodMsec)
+      return cycle * 30 + now_idx
+    }
+    const assignment_raw_now_idx = rawAt(at)
+    const now_idx = mod(assignment_raw_now_idx, 30)
+    const previous = rawAt(previousAt)
+    const next = rawAt(nextAt)
+    const assignment_flags = [
+      assignment_raw_now_idx === previous ? 'repeated' : undefined,
+      assignment_raw_now_idx + 1 < next ? 'skipped' : undefined,
+    ].filter((flag): flag is string => !!flag)
+    return { now_idx, assignment_raw_now_idx, assignment_flags }
   }
 }
 
@@ -706,35 +720,46 @@ class AssignedTempoRule<Base extends TempoBase, Token extends AssignmentToken>
     private readonly currentDayStart: () => DayStart,
   ) {}
 
-  assign(raw: TempoEnvelope): TempoEnvelope {
+  private raw_envelope(envelope: TempoEnvelope): TempoEnvelope {
+    return {
+      ...envelope,
+      now_idx: envelope.raw_now_idx ?? envelope.now_idx,
+    }
+  }
+
+  assign(raw: TempoEnvelope, base: Base): TempoEnvelope {
+    const rawEnvelope = this.raw_envelope(raw)
+    const previous = this.innerRule.slide(rawEnvelope, -1, base)
+    const next = this.innerRule.slide(rawEnvelope, 1, base)
     const dayStart = this.currentDayStart()
     const assigned = this.assignment(dayStart, {
       token: this.token,
       calendar: this.calendar,
       dayStart,
-      at: raw.last_at,
+      at: rawEnvelope.last_at,
+      previousAt: previous.last_at,
+      nextAt: next.last_at,
     })
     const now_idx = 'number' === typeof assigned ? assigned : assigned.now_idx
     const assignment_raw_now_idx = 'number' === typeof assigned ? undefined : assigned.assignment_raw_now_idx
+    const assignment_flags = 'number' === typeof assigned ? undefined : assigned.assignment_flags
     if (!Number.isFinite(now_idx)) throw new Error(`invalid assignment index ${now_idx}`)
     return {
-      ...raw,
+      ...rawEnvelope,
       now_idx,
-      raw_now_idx: raw.raw_now_idx ?? raw.now_idx,
+      raw_now_idx: raw.raw_now_idx ?? rawEnvelope.now_idx,
       assignment_raw_now_idx,
+      assignment_flags,
     }
   }
 
   at(write_at: number, base: Base): TempoEnvelope {
-    return this.assign(this.innerRule.at(write_at, base))
+    return this.assign(this.innerRule.at(write_at, base), base)
   }
 
   slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
-    const rawEnvelope = {
-      ...envelope,
-      now_idx: envelope.raw_now_idx ?? envelope.now_idx,
-    }
-    return this.assign(this.innerRule.slide(rawEnvelope, amount, base))
+    const rawEnvelope = this.raw_envelope(envelope)
+    return this.assign(this.innerRule.slide(rawEnvelope, amount, base), base)
   }
 }
 
@@ -3178,7 +3203,7 @@ K   = @dic.earthy[2] / 360
       assignment,
       () => this.current_day_start(),
     )
-    return new Tempo(rule.assign(envelope_of(day)), day.base, rule)
+    return new Tempo(rule.assign(envelope_of(day), day.base), day.base, rule)
   }
 
   note(
