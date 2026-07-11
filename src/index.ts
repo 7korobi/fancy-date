@@ -148,6 +148,7 @@ export type {
   FindOrder,
   SteppableTempoKey,
   FindOptions,
+  FormatPart,
   SpanPart,
   SpanPartLike,
   Span,
@@ -187,7 +188,10 @@ export {
   ObservedLunisolarMonthRule,
   ObservedLunisolarYearRule,
   OrbitalPhaseTempoRule,
+  RealSunsetDayTempoRule,
+  SolarEventDayTempoRule,
   SolarDayHourTempoRule,
+  StartAlignedTempoRule,
   SubdivideTempoRule,
   TableTempoRule,
   Tempo,
@@ -196,6 +200,7 @@ export {
   join,
 } from './tempo'
 export type {
+  SolarDayBoundaryEvent,
   TempoEnvelope,
   TempoBase,
   TempoRule,

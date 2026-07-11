@@ -31,7 +31,7 @@ g.format(utc, 'Gy年MM月dd日(E)')
 // '西暦2024年03月10日(日)'
 ```
 
-書式は `y/M/d/H/m/s/S` のような階層 token と、`G` 元号、`E` 曜日、`a/A` 干支などの暦 token を組み合わせる。`G` を含めない古い年は、符号付き通年として出る。
+書式は `y/M/d/H/m/s/S` のような階層 token と、`G` 元号、`E` 曜日、`yC60/dC60` 干支などの暦 token を組み合わせる。`G` を含めない古い年は、符号付き通年として出る。
 
 ```ts
 const nabonassar = Calendar.Julian.parse('紀元前747年2月26日')
@@ -68,7 +68,7 @@ g.sub(to, '1年2ヶ月9日4時間5分後')
 // 2024年1月1日 0時0分
 ```
 
-`a/b/c/f/A/B/C/E/F/V` などの循環 token は、干支・曜日・宿のような循環位相の差を表す。日時加算としては曖昧なので、`add()` / `sub()` では使わない。
+`yC60/yC12/yC10/yC9/dC60/dC12/dC10/dC9/dC7/dC28/R6/LM27` などの周期・暦注 token は、干支・曜日・宿・六曜のようなラベル差を表す。日時加算としては曖昧なので、`add()` / `sub()` では使わない。旧 `a/c/b/A/C/B` や `yC/yCB/yCS/dC/dCB/dCS` も互換 alias として使える。
 
 ### find
 
@@ -77,7 +77,7 @@ g.sub(to, '1年2ヶ月9日4時間5分後')
 ```ts
 const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
 
-g.find(between, [{ Ao: '甲子' }]).map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))
+g.find(between, [{ dC60o: '甲子' }]).map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))
 // ['2020年01月22日 甲子']
 ```
 
@@ -95,10 +95,10 @@ g.find([g.parse('2020年3月1日'), g.parse('2020年3月2日')], [{ H: '12' }], 
   step: 'H',
 })
 
-g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }], { limit: 1 })
+g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }], { limit: 1 })
 // 次の甲子日
 
-g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
+g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
   order: -1,
   limit: 1,
 })
@@ -110,7 +110,7 @@ g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
 `parse_span()` は相対表現を `Span` にし、`format_span()` は `SpanLike` を現在の暦の表記へ整える。
 
 ```ts
-const custom = g.dup().labels({ w: '週目', A: '日巡り' }).init()
+const custom = g.dup().labels({ w: '週目', dC: '日巡り' }).init()
 
 custom.span([from, to], { precise: 'w' })
 // '1年10週目後'
@@ -118,11 +118,11 @@ custom.span([from, to], { precise: 'w' })
 custom.parse_span('1日巡り後')
 // { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
 
-custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label
+custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'
 ```
 
-`labels()` は fallback の単位表記を差し替える。`algo()` の第3要素で token ごとの相対表現を定義している場合は、そちらが優先される。
+`labels()` は fallback の単位表記を差し替える。`notation()` の第3要素で token ごとの相対表現を定義している場合は、そちらが優先される。`algo()` は互換 alias として残している。
 
 ### サンプル暦
 

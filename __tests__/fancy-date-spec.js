@@ -77,20 +77,20 @@ function solarShiftCalendar(shiftMsec) {
 }
 
 const calendars = [
-  [utc, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [g, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [fg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [j, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [rg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [平気法, 'J Z aA yyyy年MM月dd日(E) Homo ssss:S G'],
-  [am, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [pm, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [b, 'J Z a-A yyyy年MM月dd日(E) @H.m'],
-  [mg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [jg, 'J Z a-A yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
+  [utc, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [g, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [fg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [j, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [rg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [平気法, 'J Z yC60dC60 yyyy年MM月dd日(R6) Homo ssss:S G'],
+  [am, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [pm, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @H.m'],
+  [mg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [jg, 'J Z yC60-dC60 yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
 ]
 
-function to_graph(c, msec, str = 'Gyyyy-MM-dd HH:mm a-Z-E') {
+function to_graph(c, msec, str = 'Gyyyy-MM-dd HH:mm yC60-Z-E') {
   const { PI } = Math
   const deg_to_rad = (2 * PI) / 360
   const { 方向, 時角, 真夜中, 日の出, 南中時刻, 日の入 } = c.solor(msec)
@@ -203,7 +203,7 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(summerGa.is_up_all_day).toBe(true)
   })
 
-  test("daily('Sunny')(不定時法)は極域(緯度66.5度以遠)では construction 時点で例外になる", () => {
+  test("division({ H: 'solar' })(不定時法)は極域(緯度66.5度以遠)では construction 時点で例外になる", () => {
     // 不定時法は日の出・日の入りの間隔を等分する前提のため、日の出/日の入りが
     // 存在しない期間が生じる極域では成立しない(調査結果、development-notes.md 参照)。
     expect(() => g.dup().spot(月, 78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
@@ -211,11 +211,15 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     // 極圏ちょうど(66.5度)も含めて例外にする(下限として扱う)。
     expect(() => g.dup().spot(月, 66.5, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
 
-    // 極域でなければ daily('Sunny') は従来どおり構築できる
+    // 極域でなければ不定時法は従来どおり構築できる
     // (東京: 北緯約35.7度、既存の平気法/定気法サンプルと同じ緯度帯)。
     expect(() => g.dup().spot(月, 35.7, 139.7, 135).daily('Sunny').init()).not.toThrow()
     // spot()/daily() の呼び出し順が逆でも同様に検出できる。
     expect(() => g.dup().daily('Sunny').spot(月, 78, 15.6, 15).init()).toThrow(/極域/)
+    expect(() => g.dup().spot(月, 78, 15.6, 15).division({ H: 'solar' }).init()).toThrow(/極域/)
+    expect(() => g.dup().spot(月, 35.7, 139.7, 135).division({ H: 'solar' }).init()).not.toThrow()
+    expect(g.dup().division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(true)
+    expect(g.dup().division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(false)
   })
 
   test('mean model solor() fills 日の出方位/日の入方位, mirroring 精密モデル within its own precision', () => {
@@ -274,12 +278,12 @@ describe('Gregorio calculate', () => {
 
   test('find rejects NaN on either end of the range, even with a limit', () => {
     const valid = g.parse('2020年1月1日')
-    expect(() => g.find([valid, NaN], [{ Ao: '甲子' }], { limit: 3 })).toThrow(/invalid range/)
-    expect(() => g.find([NaN, valid], [{ Ao: '甲子' }], { order: -1, limit: 3 })).toThrow(
+    expect(() => g.find([valid, NaN], [{ dC60o: '甲子' }], { limit: 3 })).toThrow(/invalid range/)
+    expect(() => g.find([NaN, valid], [{ dC60o: '甲子' }], { order: -1, limit: 3 })).toThrow(
       /invalid range/,
     )
     // Infinity は無制限範囲の正規の用法なので引き続き許容する
-    expect(g.find([valid, Infinity], [{ Ao: '甲子' }], { limit: 1 })).toEqual([1579618800000])
+    expect(g.find([valid, Infinity], [{ dC60o: '甲子' }], { limit: 1 })).toEqual([1579618800000])
   })
 
   test('add 10/10/10', () => {
@@ -325,8 +329,8 @@ describe('Gregorio calculate', () => {
 
   test('find day cycle in range', () => {
     const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
-    const found = g.find(between, [{ Ao: '甲子' }])
-    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年01月22日 甲子'])
+    const found = g.find(between, [{ dC60o: '甲子' }])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年01月22日 甲子'])
   })
 
   test('find note in range', () => {
@@ -350,16 +354,23 @@ describe('Gregorio calculate', () => {
     expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日'))).toEqual(['2020年09月19日'])
   })
 
-  test('find supports next and prev style unbounded search with limit', () => {
-    const next = g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }], { limit: 1 })
-    expect(next.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年03月22日 甲子'])
+  test('find note follows astronomical solar precision selected by spot()', () => {
+    const between = [g.parse('2020年9月18日'), g.parse('2020年9月24日')]
+    const found = ga.find(between, [{ note: '秋分' }])
+    expect(found.map((utc) => ga.format(utc, 'yyyy年MM月dd日'))).toEqual(['2020年09月22日'])
+    expect(ga.note(g.parse('2020年9月22日'))).toContain('秋分')
+  })
 
-    const prev = g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
+  test('find supports next and prev style unbounded search with limit', () => {
+    const next = g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }], { limit: 1 })
+    expect(next.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年03月22日 甲子'])
+
+    const prev = g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
       order: -1,
       limit: 1,
     })
-    expect(prev.map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))).toEqual(['2020年01月22日 甲子'])
-    expect(() => g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }])).toThrow(
+    expect(prev.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年01月22日 甲子'])
+    expect(() => g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }])).toThrow(
       /unbounded find requires limit/,
     )
   })
@@ -368,10 +379,10 @@ describe('Gregorio calculate', () => {
   // 無限値を渡すと有効な Tempo を作れない。アンカー側が有限でない場合は明示的にエラーにする。
   test('find throws when the anchor side implied by order is not finite', () => {
     expect(() =>
-      g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], { limit: 1 }),
+      g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], { limit: 1 }),
     ).toThrow(/finite anchor/)
     expect(() =>
-      g.find([g.parse('2020年1月1日'), Infinity], [{ Ao: '甲子' }], { order: -1, limit: 1 }),
+      g.find([g.parse('2020年1月1日'), Infinity], [{ dC60o: '甲子' }], { order: -1, limit: 1 }),
     ).toThrow(/finite anchor/)
   })
 
@@ -412,7 +423,7 @@ describe('Gregorio calculate', () => {
     expect(g.to_tempos(next.last_at).u.now_idx).toBe(2021)
   })
 
-  // Y/a/b/c/f/Q は親トークン(u/M)から導かれる周期ラベルで、succ()/back() を
+  // Y/yC60/yC12/yC10/yC9/Q は親トークン(u/M)から導かれる周期ラベルで、succ()/back() を
   // 持たない(TempoLabelLike)。TS 経由なら SteppableTempoKey により
   // コンパイル時に弾かれるが、JS 利用時は型で守られないため、実行時にも
   // 明確なエラーになることを確認する。
@@ -423,10 +434,10 @@ describe('Gregorio calculate', () => {
 
   // cyclic_label() が親の実区間(last_at/next_at)をそのまま流用していることを確認する
   // (now_idx だけを差し替えたラベルであり、独自の区間を持つわけではない)。
-  test('cyclic label tokens (Y/a/b/c/f/Q) honestly expose the parent envelope span', () => {
+  test('cyclic label tokens (Y/yC60/yC12/yC10/yC9/Q) honestly expose the parent envelope span', () => {
     const utc = g.parse('2020年6月15日')
     const tempos = g.to_tempos(utc)
-    for (const token of ['Y', 'a', 'b', 'c', 'f']) {
+    for (const token of ['Y', 'yC60', 'yC12', 'yC10', 'yC9']) {
       expect(tempos[token].last_at).toBe(tempos.u.last_at)
       expect(tempos[token].next_at).toBe(tempos.u.next_at)
       expect(tempos[token].is_cover(utc)).toBe(true)
@@ -461,19 +472,18 @@ describe('Gregorio calculate', () => {
 })
 
 describe('平気法 calculate', () => {
-  // E/V(else 分岐, is_table_leap でない暦)は今日(d)の実区間をそのまま
-  // 使うラベルであり、d 自体とは別の(月/日から都度導く)now_idx を持つ。
+  // R6/LM27 は今日(d)の実区間をそのまま使う暦注ラベルであり、d 自体とは別の(月/日から都度導く)now_idx を持つ。
   // last_at/next_at が d と一致し、is_cover() が正しく機能することを確認する。
-  test('E/V (else branch) honestly expose the current day envelope', () => {
+  test('R6/LM27 honestly expose the current day envelope', () => {
     const utc = 平気法.parse('明治9年文月1日 暁九ツ')
     const tempos = 平気法.to_tempos(utc)
-    expect(tempos.E.last_at).toBe(tempos.d.last_at)
-    expect(tempos.E.next_at).toBe(tempos.d.next_at)
-    expect(tempos.E.is_cover(utc)).toBe(true)
-    expect(tempos.E.is_cover(tempos.d.last_at - 1)).toBe(false)
-    expect(tempos.V.last_at).toBe(tempos.d.last_at)
-    expect(tempos.V.next_at).toBe(tempos.d.next_at)
-    expect(tempos.V.is_cover(utc)).toBe(true)
+    expect(tempos.R6.last_at).toBe(tempos.d.last_at)
+    expect(tempos.R6.next_at).toBe(tempos.d.next_at)
+    expect(tempos.R6.is_cover(utc)).toBe(true)
+    expect(tempos.R6.is_cover(tempos.d.last_at - 1)).toBe(false)
+    expect(tempos.LM27.last_at).toBe(tempos.d.last_at)
+    expect(tempos.LM27.next_at).toBe(tempos.d.next_at)
+    expect(tempos.LM27.is_cover(utc)).toBe(true)
   })
 
   test('閏月をまたぐback', () => {
@@ -599,7 +609,7 @@ describe('平気法 calculate', () => {
   test('年干支(a)は元号を跨いでも初期値定義と自己無矛盾(now_idxではなくraw_now_idxで計算する)', () => {
     // 平気法/定気法の calendar() epoch(いずれも 0 = 1970年1月1日)における
     // 年干支は、初期値文字列自体に手動で書かれている(己酉/己酉)。以前は
-    // a/b/c/f の計算に u.now_idx(元号調整後、元号ごとに1へリセットされる
+    // yC60/yC12/yC10/yC9 の計算に u.now_idx(元号調整後、元号ごとに1へリセットされる
     // 相対年)を使っていたため、元号テーブルを持つ暦(平気法/定気法)でだけ
     // epoch 自身の年干支すら再現できていなかった(実測: 平気法が「甲辰」、
     // 定気法が「癸卯」という定義と無関係な値を返していた)。
@@ -737,9 +747,9 @@ describe('平気法', () => {
   test('二十四節季と月相', () => {
     const dst = earth_msecs.map(
       (msec) =>
-        `${g.format(msec, 'yyyy a-A Z-E HH:mm')} ${平気法.format(
+        `${g.format(msec, 'yyyy yC60-dC60 Z-E HH:mm')} ${平気法.format(
           msec,
-          'a-A f-F Z-E Gy年Modd日 Hm ssss秒',
+          'yC60-dC60 yC9-dC9 Z-R6 Gy年Modd日 Hm ssss秒',
         )}`,
     )
     expect(dst).toMatchSnapshot()
@@ -798,13 +808,13 @@ describe('Gregorian', () => {
   // 社日(春社日/秋社日)は「十干『戊』に最も近い日」という独立した定義を
   // 持つ(雑節_from_terms() 内部では、春分/秋分の瞬間の十干日から
   // now_idx = mod(rawNowIdx, 10) で「戊からの経過日数」を求め、
-  // C.slide(stemLength/2 - now_idx - 1) で戊の日へずらすという、
+  // dCS.slide(stemLength/2 - now_idx - 1) で戊の日へずらすという、
   // 一度構築した Tempo の now_idx を書き換えてから slide() する
   // パターンで計算している)。上のスナップショットテストは
   // 「前回の出力と変わっていないか」しか見ておらず、社日の定義
   // (十干「戊」であること、春分/秋分から±5日以内であること)自体は
   // 独立に検証されていなかった。TempoView 移行前の仕様として、
-  // 十干日トークン(C)という別の経路を基準に固定する。
+  // 十干日トークン(dCS)という別の経路を基準に固定する。
   test('社日(春社日/秋社日)は十干「戊」の日を、春分/秋分から±5日以内で指す(平気法/実軌道どちらの経路でも)', () => {
     const dayMsec = g.calc.msec.day
     for (const [cal, resolve雑節] of [
@@ -821,7 +831,7 @@ describe('Gregorian', () => {
         ]) {
           const item = z[key]
           const mid = item.last_at + dayMsec / 2
-          expect(cal.format(mid, 'C')).toBe('戊')
+          expect(cal.format(mid, 'dCS')).toBe('戊')
           const diffDays = Math.round((item.last_at - z[eqKey].last_at) / dayMsec)
           expect(diffDays).toBeGreaterThanOrEqual(-5)
           expect(diffDays).toBeLessThanOrEqual(4)
@@ -859,6 +869,104 @@ describe('Gregorian', () => {
     )
   })
 
+  test('format_parts joins to format() and carries ruby for token parts', () => {
+    const utc = g.parse('2024年3月10日')
+    const str = 'Gy年MM月dd日(E) dC60o dC60r'
+    const parts = g.format_parts(utc, str)
+    const tempos = g.to_tempos(utc)
+    expect(parts.map((part) => part.text).join('')).toBe(g.format(utc, str))
+    expect(g.format_parts_by(utc, str)).toEqual(parts)
+    expect(g.format_parts_by(tempos, str)).toEqual(parts)
+    expect(parts.filter((part) => part.token === '').map((part) => part.text).join('')).toBe('年月日()  ')
+
+    const weekday = parts.find((part) => part.token === 'E')
+    expect(weekday).toMatchObject({ token: 'E', text: '日', ruby: 'にち' })
+
+    const sexagenaryDay = parts.find((part) => part.token === 'dC60o')
+    expect(sexagenaryDay).toMatchObject({ token: 'dC60o', text: '癸酉', ruby: 'みずのとのとり' })
+
+    const sexagenaryDayRuby = parts.find((part) => part.token === 'dC60r')
+    expect(sexagenaryDayRuby).toEqual({ token: 'dC60r', text: 'みずのとのとり' })
+  })
+
+  test('cycle tokens use numeric yC/dC names while legacy a/A aliases stay compatible', () => {
+    const utc = g.parse('2024年3月10日')
+    const legacy = 'a c b A C B'
+    const canonical = 'yC60 yC10 yC12 dC60 dC10 dC12'
+    const legacyRuby = 'ar cr br Ar Cr Br'
+    const canonicalRuby = 'yC60r yC10r yC12r dC60r dC10r dC12r'
+
+    expect(g.format(utc, canonical)).toBe(g.format(utc, legacy))
+    expect(g.format(utc, canonicalRuby)).toBe(g.format(utc, legacyRuby))
+    expect(g.format_parts(utc, 'yC60o yC60r dC60o dC60r')).toEqual([
+      { token: 'yC60o', text: '甲辰', ruby: 'きのえたつ' },
+      { token: '', text: ' ' },
+      { token: 'yC60r', text: 'きのえたつ' },
+      { token: '', text: ' ' },
+      { token: 'dC60o', text: '癸酉', ruby: 'みずのとのとり' },
+      { token: '', text: ' ' },
+      { token: 'dC60r', text: 'みずのとのとり' },
+    ])
+
+    const tempos = g.to_tempos(utc)
+    expect(tempos.yC60).toBe(tempos.yC)
+    expect(tempos.yC10).toBe(tempos.yCS)
+    expect(tempos.yC12).toBe(tempos.yCB)
+    expect(tempos.dC60).toBe(tempos.dC)
+    expect(tempos.dC10).toBe(tempos.dCS)
+    expect(tempos.dC12).toBe(tempos.dCB)
+    expect(tempos.yC).toBe(tempos.a)
+    expect(tempos.yCS).toBe(tempos.c)
+    expect(tempos.yCB).toBe(tempos.b)
+    expect(tempos.dC).toBe(tempos.A)
+    expect(tempos.dCS).toBe(tempos.C)
+    expect(tempos.dCB).toBe(tempos.B)
+
+    const parsed = g.index(g.format(utc, canonical), canonical)
+    expect(parsed.yC60).toBe(tempos.yC60.now_idx)
+    expect(parsed.yC10).toBe(tempos.yC10.now_idx)
+    expect(parsed.yC12).toBe(tempos.yC12.now_idx)
+    expect(parsed.dC60).toBe(tempos.dC60.now_idx)
+    expect(parsed.dC10).toBe(tempos.dC10.now_idx)
+    expect(parsed.dC12).toBe(tempos.dC12.now_idx)
+    expect(parsed.a).toBe(parsed.yC60)
+    expect(parsed.A).toBe(parsed.dC60)
+  })
+
+  test('E follows the calendar week cycle while f/F/V are not aliases', () => {
+    const utc = g.parse('2024年3月10日')
+    const gregorian = g.to_tempos(utc)
+    const romulus = rg.to_tempos(utc)
+    const french = fg.to_tempos(utc)
+
+    expect(gregorian.E).toBe(gregorian.dC7)
+    expect(romulus.E).toBe(romulus.dC8)
+    expect(french.E).toBe(french.dC10)
+
+    expect(gregorian.f).toBeUndefined()
+    expect(gregorian.F).toBeUndefined()
+    expect(gregorian.V).toBeUndefined()
+    expect(g.format(utc, 'f F V')).toBe('f F V')
+  })
+
+  test('notation() is the expression API while algo() remains a compatibility alias', () => {
+    const utc = g.parse('2024年3月10日')
+    const start = ['1970年 Thu-斗 庚戌-辛巳', 'y年 dC7-dC28 yC60-dC60', 0]
+    const notation = g
+      .dup()
+      .calendar(start, [4, 100, 400], [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
+      .notation({ dC7: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']] })
+      .init()
+    const legacy = g
+      .dup()
+      .calendar(start, [4, 100, 400], [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
+      .algo({ dC7: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']] })
+      .init()
+
+    expect(notation.format(utc, 'E')).toBe('Sun')
+    expect(legacy.format(utc, 'E')).toBe(notation.format(utc, 'E'))
+  })
+
   test('parse → fomat cycle', () => {
     const str = 'Gy年MM月dd日(E)H時m分s秒'
     expect(
@@ -885,24 +993,26 @@ describe('Gregorian', () => {
   test('span precise supports week-year and day-of-year hierarchy', () => {
     const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
     const to = g.parse('2025年3月10日 4時5分6秒', 'y年M月d日 H時m分s秒')
-    const custom = g.dup().labels({ w: '週目', A: '日巡り' }).init()
+    const custom = g.dup().labels({ w: '週目', dC60: '日巡り' }).init()
+    const legacy = g.dup().labels({ A: '旧日巡り' }).init()
 
     expect(g.span([from, to], { precise: 'Y' })).toBe('1年後')
     expect(g.span([from, to], { precise: 'w' })).toBe('1年10週後')
     expect(g.span([from, to], { precise: 'D' })).toBe('1年68日後')
     expect(custom.span([from, to], { precise: 'w' })).toBe('1年10週目後')
-    expect(custom.span(g.parse('2024年1月2日'), from, { precise: 'A' })).toBe('1日巡り後')
+    expect(custom.span(g.parse('2024年1月2日'), from, { precise: 'dC60' })).toBe('1日巡り後')
+    expect(legacy.span(g.parse('2024年1月2日'), from, { precise: 'A' })).toBe('1旧日巡り後')
     expect(custom.parse_span('1日巡り後').parts?.[0]).toMatchObject({
-      token: 'A',
+      token: 'dC60',
       unit: 'day',
       value: -1,
       label: '1日巡り',
     })
-    expect(custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label).toBe(
+    expect(custom.format_span({ token: 'dC60', unit: 'day', value: -1, label: '1dC60' }).label).toBe(
       '1日巡り後',
     )
     expect(custom.add(from, '1週目後')).toBe(g.parse('2024年1月8日'))
-    expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token A/)
+    expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token dC60/)
   })
 
   // 上の 'span precise supports week-year and day-of-year hierarchy' は
@@ -969,7 +1079,7 @@ describe('Gregorian', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${g.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
+        })} ${g.format(msec, 'Y-ww-E yC60-dC60 Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -982,10 +1092,11 @@ describe('Gregorian', () => {
     )
   })
 
-  test('phase based solar terms preserve mean calendar and expose astronomical dates', () => {
+  test('phase based solar terms preserve mean calendars and auto-select astronomical dates', () => {
     const utc = g.parse('2020年3月22日')
     const mean = g.雑節(utc)
     const terms = ga.solar_terms(utc)
+    const auto = ga.雑節(utc)
     const phase = ga.雑節_by_phase(utc)
     expect(ga.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
     expect(g.format(mean.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月19日')
@@ -993,18 +1104,19 @@ describe('Gregorian', () => {
       g.format(mean.春分.last_at, 'yyyy年MM月dd日'),
     )
     expect(ga.format(phase.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月22日')
+    expect(ga.format(auto.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月22日')
   })
 
-  test('custom orbital model shifts only opt-in phase based solar terms', () => {
+  test('custom mean orbital model shifts only explicit phase based solar terms', () => {
     const shifted = solarShiftCalendar(to_msec('2d'))
     const utc = g.parse('2020年3月23日')
-    const mean = shifted.雑節(utc)
+    const auto = shifted.雑節(utc)
     const terms = shifted.solar_terms(utc)
     const phase = shifted.雑節_by_phase(utc)
 
     expect(shifted.dic.sunny.epochMsec).toBe(ga.dic.sunny.epochMsec)
     expect(shifted.calc.zero.season).toBe(ga.calc.zero.season)
-    expect(shifted.format(mean.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
+    expect(shifted.format(auto.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
     expect(shifted.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
     expect(shifted.format(phase.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月22日')
   })
@@ -1155,6 +1267,20 @@ describe('エジプト民用暦', () => {
   })
 })
 
+describe('ローマ・ユリウス時法', () => {
+  test('標準表示は不定時の hora と pars minuta を使い、秒を主張しない', () => {
+    const msec = g.parse('2020年3月22日')
+    const julian = j.format(msec)
+    const romulus = rg.format(msec)
+
+    for (const text of [julian, romulus]) {
+      expect(text).toContain('hora')
+      expect(text).toContain('pars minuta')
+      expect(text).not.toContain('秒')
+    }
+  })
+})
+
 describe('コプト暦', () => {
   test('3 mod 4 年を閏年として余日6日を持つ', () => {
     const c = Calendar.コプト暦
@@ -1263,13 +1389,13 @@ describe('木星', () => {
       ].join('\n'),
     ).toEqual(
       [
-        '西暦194年180月07日(木)05時 乙丑丑乙',
-        '西暦172年35月23日(月)09時 癸卯卯癸',
-        '西暦168年01月39日(木)00時 己亥亥己',
-        '西暦167年255月01日(水)05時 戊戌戌戊',
-        '西暦167年248月03日(金)09時 戊戌戌戊',
-        '西暦165年80月20日(月)08時 丙申申丙',
-        '西暦141年68月35日(木)05時 壬申申壬',
+        '西暦194年180月07日(火)05時 乙丑丑乙',
+        '西暦172年35月23日(日)09時 癸卯卯癸',
+        '西暦168年01月39日(月)00時 己亥亥己',
+        '西暦167年255月01日(月)05時 戊戌戌戊',
+        '西暦167年248月03日(月)09時 戊戌戌戊',
+        '西暦165年80月20日(火)08時 丙申申丙',
+        '西暦141年68月35日(日)05時 壬申申壬',
       ].join('\n'),
     )
   })
@@ -1325,7 +1451,7 @@ describe('フランス革命歴', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${fg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
+        })} ${fg.format(msec, 'Y-ww-E yC60-dC60 Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
   })
@@ -1365,7 +1491,7 @@ describe('ロムルス歴', () => {
       (msec) =>
         `${format(msec, 'yyyy-MM-dd', { locale })} ${format(msec, 'Y-ww-EEE', {
           locale,
-        })} ${rg.format(msec, 'Y-ww-E a-A Z\tGyyyy/MM/dd HH:mm:ss J')}`,
+        })} ${rg.format(msec, 'Y-ww-E yC60-dC60 Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
   })

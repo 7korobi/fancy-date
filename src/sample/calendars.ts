@@ -28,6 +28,9 @@ import {
   バビロニア月名かな,
   ロムルス月ラベルラテン語,
   ロムルス月ラベルラテン語かな,
+  ローマ時法時,
+  ローマ時法時かな,
+  ローマ時法分,
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
@@ -60,31 +63,45 @@ import {
 // ---  -  I  L -OP R TUVWX -
 // --- efghijkl no qr t v   z
 
-const g = new FancyDate()
+const commonNotation: Parameters<FancyDate['notation']>[0] = {
+  M: [12],
+  H: [24],
+  m: [60],
+  s: [60],
+
+  N: [月相, 月相かな],
+
+  dC7: [七曜, 七曜かな],
+  dC28: [二十八宿, 二十八宿かな],
+  Z: [二十四節季, 二十四節季かな],
+
+  yC60: [60],
+  dC60: [60],
+  dC12: [十二支, 十二支かな],
+  dC10: [十干, 十干かな],
+}
+
+function baseCalendar() {
+  return new FancyDate().notation(commonNotation)
+}
+
+const romanTemporalNotation: Parameters<FancyDate['notation']>[0] = {
+  H: [ローマ時法時, ローマ時法時かな, ' hora'],
+  m: [ローマ時法分, null, ' pars minuta'],
+}
+
+function gregorianBase() {
+  return baseCalendar()
+    .era('西暦', '紀元前')
+    .calendar(
+      ['1970年 木-斗 庚戌-辛巳', 'y年 dC7-dC28 yC60-dC60', 0],
+      [4, 100, 400],
+      [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+    )
+}
+
+const g = gregorianBase()
   .spot(...London)
-  .era('西暦', '紀元前')
-  .calendar(
-    ['1970年 木-斗 庚戌-辛巳', 'y年 E-V a-A', 0],
-    [4, 100, 400],
-    [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
-  )
-  .algo({
-    M: [12],
-    H: [24],
-    m: [60],
-    s: [60],
-
-    N: [月相, 月相かな],
-
-    E: [七曜, 七曜かな],
-    V: [二十八宿, 二十八宿かな],
-    Z: [二十四節季, 二十四節季かな],
-
-    a: [60],
-    A: [60],
-    B: [十二支, 十二支かな],
-    C: [十干, 十干かな],
-  })
   .init()
 
 const UTC = g
@@ -103,7 +120,7 @@ const GregorianAstronomical = g
  *
  * Gregorian は東京固定(spot(...東京))のため、そのまま使うと東京以外の
  * タイムゾーンでは「今日」「今週」の区切りがズレる。Gregorian は
- * daily('Sunny')(日の出・日の入りに基づく不定時法)を使っていないため
+ * division({ H: 'solar' })(日の出・日の入りに基づく不定時法)を使っていないため
  * 緯度・経度には依存せず、タイムゾーンだけ差し替えれば動的に「現地版」を
  * 作れる(dup().spot(...) は fancy-date が「同じ暦を別地点/別タイムゾーンで
  * 複製する」ために元々用意している機構)。
@@ -113,11 +130,12 @@ const GregorianAstronomical = g
  */
 const LocalGregorian = Gregorian.dup().spot(月, 0, 0, localTimezoneDeg()).init()
 
-const Julian = g
-  .dup()
+const Julian = baseCalendar()
+  .lang('y年M月d日', 'Gy年M月d日(dC7) Ho mo')
   .spot(...Romus)
+  .era('西暦', '紀元前')
   .calendar(
-    ['1582/10/5(金) 壬午-甲戌', 'y/M/d(E) a-A', g.parse('1582年10月15日')!],
+    ['1582/10/5(金) 壬午-甲戌', 'y/M/d(dC7) yC60-dC60', g.parse('1582年10月15日')!],
     [4],
     [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
   )
@@ -127,30 +145,32 @@ const Julian = g
   // 普及後)であり、ユリウス暦そのものが使われていた期間の大半は不定時法と
   // 組み合わさっていたと考えるのが史実に近い。ローマ(北緯42度)は極域ガード
   // (66.5度)の対象外。
-  .daily('Sunny')
+  .division({ H: 'solar' })
+  // H は昼夜12分割の horae temporariae として表し、m はその不定時に
+  // ぶら下がる pars minuta として表示する。秒・ミリ秒は計算精度としては
+  // 残るが、ローマ暦サンプルの標準表示からは外す。
+  .notation(romanTemporalNotation)
   .init()
 
-const アマンタ = g
-  .dup()
+const アマンタ = baseCalendar()
   .spot(...Madurai)
   .era('サカ歴', '紀元前')
-  .calendar(['1891-09-08(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(E) a-A f-F', 0])
-  .daily('Rise')
-  .algo({
-    f: [九星, 九星かな],
-    F: [九星rev, 九星かなrev],
+  .calendar(['1891-09-08(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
+  .division({ H: 'solar' })
+  .notation({
+    yC9: [九星, 九星かな],
+    dC9: [九星rev, 九星かなrev],
   })
   .init()
 
-const プールニマンタ = g
-  .dup()
+const プールニマンタ = baseCalendar()
   .spot(...Jaypore)
   .era('サカ歴', '紀元前')
-  .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(E) a-A f-F', 0])
-  .daily('Rise')
-  .algo({
-    f: [九星, 九星かな],
-    F: [九星rev, 九星かなrev],
+  .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
+  .division({ H: 'solar' })
+  .notation({
+    yC9: [九星, 九星かな],
+    dC9: [九星rev, 九星かなrev],
   })
   .init()
 
@@ -163,25 +183,24 @@ const プールニマンタ = g
 const 和暦日付漢字 = Array.from({ length: 30 }, (_, i) => jpn.漢字.parse(i + 1))
 const 和暦日付ふりがな = Array.from({ length: 30 }, (_, i) => old_jpn.rubys.語尾('か').parse(i + 1))
 
-const 平気法 = g
-  .dup()
-  .lang('Gy年Mod日', 'Gy年Mod日(E)Homo')
+const 平気法 = baseCalendar()
+  .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
   .spot(...東京)
   .era('皇紀', '紀元前', 北朝元号)
-  // 日干支(A)がグレゴリオ暦(実測で2020年1月22日=甲子という既知の事実と
+  // 日干支(dC)がグレゴリオ暦(実測で2020年1月22日=甲子という既知の事実と
   // 一致することを確認済み)に対して常に+6(60日周期、anchor の日付
   // "7日"の0始まり index と一致)ずれていた。真因は anchor 側ではなく
-  // `def_zero()` 側にあった: E/F/C/B/A/V の各日次巡回トークンのゼロ点を
+  // `def_zero()` 側にあった: R6/dC9/dC10/dC12/dC60/LM27 の各日次ラベルのゼロ点を
   // 「既に-idx.d日ぶんシフト済みの `day`」を起点に計算していたため、
   // d(暦日)自身のシフト分が二重に効いていた(修正はfancy-date.tsのdef_zero()、
-  // development-notes.md参照)。真因を修正したので、anchor の A は
+  // development-notes.md参照)。真因を修正したので、anchor の dC は
   // 本来の(2629年12月7日の実際の日干支である)辛巳に戻す。
-  .calendar(['2629年12月7日 赤口-昴 己酉-辛巳 九紫火-七赤金', 'y年M月d日 E-V a-A f-F', 0])
-  .daily('Sunny')
+  .calendar(['2629年12月7日 赤口-昴 己酉-辛巳 九紫火-七赤金', 'y年M月d日 R6-LM27 yC60-dC60 yC9-dC9', 0])
+  .division({ H: 'solar' })
   .numeral_label(jpn.漢字, jpn.rubys)
-  .algo({
-    E: [六曜, 六曜かな],
-    V: [二十七宿, 二十七宿かな],
+  .notation({
+    R6: [六曜, 六曜かな],
+    LM27: [二十七宿, 二十七宿かな],
     M: [和風月名, 和風月名かな],
     d: [和暦日付漢字, 和暦日付ふりがな, '日'],
     H: [時鐘, 時鐘かな, '刻'],
@@ -193,33 +212,32 @@ const 平気法 = g
     s: [3600],
     S: [1000],
 
-    f: [九星, 九星かな],
-    F: [九星rev, 九星かなrev],
+    yC9: [九星, 九星かな],
+    dC9: [九星rev, 九星かなrev],
   })
   .init()
 
-const 定気法 = g
-  .dup()
-  .lang('Gy年Mod日', 'Gy年Mod日(E)Homo')
+const 定気法 = baseCalendar()
+  .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
   .spot(...天文東京)
   .era('皇紀', '紀元前', 北朝元号)
-  // 年干支(a)が平気法の同一起点(皇紀2629年=西暦1969年)と1年ずれていた
+  // 年干支(yC)が平気法の同一起点(皇紀2629年=西暦1969年)と1年ずれていた
   // (戊申=1968年の干支。1969年の正しい年干支は己酉で、平気法側の
   // 起点値と一致する)。同じ皇紀年を起点にしている以上、年干支は暦の
   // 計算方式(定気法/平気法)に依存しない実年の事実なので揃うはずであり、
   // 誤って戊申になっていたのはサンプルの初期値定義側の誤り(実測:
   // 2024年3月10日時点で定気法だけ年干支が1年分過去にずれていた)。
-  // 日干支(A)も同様にグレゴリオ暦(2020年1月22日=甲子の既知の事実と一致
+  // 日干支(dC)も同様にグレゴリオ暦(2020年1月22日=甲子の既知の事実と一致
   // 済み)に対して常に+23(60日周期、anchor の日付"24日"の0始まりindexと
   // 一致)ずれていたが、これも真因は `def_zero()` 側(平気法のコメント
-  // 参照)。真因を修正したので、anchor の A は本来の(2629年11月24日の
+  // 参照)。真因を修正したので、anchor の dC は本来の(2629年11月24日の
   // 実際の日干支である)辛巳に戻す。
-  .calendar(['2629年11月24日 仏滅-房 己酉-辛巳 一白水-七赤金', 'y年M月d日 E-V a-A f-F', 0])
-  .daily('Sunny')
+  .calendar(['2629年11月24日 仏滅-房 己酉-辛巳 一白水-七赤金', 'y年M月d日 R6-LM27 yC60-dC60 yC9-dC9', 0])
+  .division({ H: 'solar' })
   .numeral_label(jpn.漢字, jpn.rubys)
-  .algo({
-    E: [六曜, 六曜かな],
-    V: [二十七宿, 二十七宿かな],
+  .notation({
+    R6: [六曜, 六曜かな],
+    LM27: [二十七宿, 二十七宿かな],
     M: [和風月名, 和風月名かな],
     d: [和暦日付漢字, 和暦日付ふりがな, '日'],
     H: [時鐘, 時鐘かな, '刻'],
@@ -231,26 +249,25 @@ const 定気法 = g
     s: [3600],
     S: [1000],
 
-    f: [九星, 九星かな],
-    F: [九星rev, 九星かなrev],
+    yC9: [九星, 九星かな],
+    dC9: [九星rev, 九星かなrev],
   })
   .init()
 
-const Romulus = g
-  .dup()
+const Romulus = baseCalendar()
   // M(サフィックスなし)は常に数値のまま(def_to_label() 参照)なので、
   // 暦外ラベルを反映するには Mo(list 参照あり)を明示的に使う書式に
   // する必要がある。既定の 'Gy年M月d日...' のような「M+リテラル月」
   // の組み合わせのままだと、Mo に変えても暦外の位置で「暦外月1日」の
   // ような不自然な表示になるため、月を表す助字自体を書式から外す。
   // parse は他の暦(平気法/定気法等)と同様、format より要素を絞った
-  // 最小形にする(曜日(E)や干支(a-A)は表示専用の付加情報であり、
+  // 最小形にする(曜日(dC7)や干支(yC60-dC60)は表示専用の付加情報であり、
   // parse 側にまで同じ要素を含めると、その通りの文字列でなければ
   // parse できなくなり format() の出力と噛み合わなくなる)。
-  .lang('y年Mo d日', 'Gy年Mo d日(E)H時m分s秒')
+  .lang('y年Mo d日', 'Gy年Mo d日(dC8) Ho mo')
   .spot(...Romus)
   .era('ロムルス暦', '紀元前')
-  .calendar(['754年1月16日(H) 辛酉-己亥', 'y年M月d日(E) a-A', g.parse('1年3月22日')!], null, [
+  .calendar(['754年1月16日(H) 辛酉-己亥', 'y年M月d日(dC8) yC60-dC60', g.parse('1年3月22日')!], null, [
     31,
     30,
     31,
@@ -263,7 +280,7 @@ const Romulus = g
     30,
     null,
   ])
-  .algo({
+  .notation({
     // 11番目(month_divs の null が担う可変長月、約60日)は暦月ではなく
     // 冬籠もりのための暦外期間(10月の後に置かれるのは正しい配置)。
     // 伝統的なロムルス暦の月名(ラテン語、Martius〜December)を割り当て、
@@ -273,11 +290,12 @@ const Romulus = g
     // 差し替える)。上の .lang() で Mo(list 参照あり)を使う書式に
     // しているため、通常の月はラテン語名、11番目は「暦外」になる。
     M: [ロムルス月ラベルラテン語, ロムルス月ラベルラテン語かな],
-    E: [[...'ABCDEFGH'], null] as const,
+    dC8: [[...'ABCDEFGH'], null] as const,
+    ...romanTemporalNotation,
   })
   // Julian と同じ理由(horae temporariae、development-notes.md 参照)で
   // ロムルス暦の時代のローマも不定時法だった。
-  .daily('Sunny')
+  .division({ H: 'solar' })
   .init()
 
 // バビロニア暦: 太陰太陽暦(12ヶ月+閏月、当初は観測ベースで2〜3年毎に
@@ -288,37 +306,40 @@ const Romulus = g
 // 位置づけ(development-notes.md 参照)。暦法自体は平気法と同じ mean モデル
 // (東京と同様 月 を衛星に使う Babylon を spot に採用)。
 //
-// 【既知の制約】実際のバビロニア暦・イスラム暦は1日が日没始まりだが、
-// 今回は実装していない(通常の真夜中起点)。当初「anchor の時刻成分を
-// 18時にすれば日没相当にずらせる」という近似を試みたが、実装・検証の
-// 結果これは機能しないと判明した: def_zero() は d(暦日)トークンの
-// ゼロ点を「H(時)のゼロ点(anchorのH値を差し引いて求める、必然的に
-// 真夜中に一致する)」から日単位でしか移動できず、anchor に書いた時刻
-// 成分は単に「その暦日の中の何時何分か」を較正するだけで、暦日の境界
-// 自体は動かせない(実測で確認済み)。真に日没起点の暦日境界を実装
-// するには、日ごとに実際の日没時刻(daily('Sunny')が使うのと同種の
-// 天文計算)を境界として使う新しい仕組みが要り、今回のスコープを超える
-// ため見送った(development-notes.md 参照)。
+// 実際のバビロニア暦・イスラム暦は1日が日没始まり。これは2つの仕組みで
+// 再現する(development-notes.md 参照)。
+// - dusk('Sunny')(RealSunsetDayTempoRule): 季節で変動する実際の日没
+//   時刻そのものを暦日境界にする。division({ H: 'solar' })(不定時法)と表裏一体
+//   なので、季節で伸縮する不定時法のカスプ側で使う。
+// - dayBoundary(offsetHours): 固定オフセットで暦日境界(d/N の構築規則)
+//   だけをずらす。季節に依存しない等時法のベール側で使う。
+// (当初「anchor の時刻成分を18時にすれば日没相当にずらせる」という
+// 近似を試みたが機能しないと判明した経緯、および dayBoundary() が
+// def_zero() 全体ではなく d/N の構築規則だけに作用する理由は
+// dayBoundary() 自身の doc コメント参照。)
 //
 // 時刻は二重体系だったため、別の暦として分ける(development-notes.md
-// 参照): カスプ(季節で伸縮する不定時法、daily('Sunny')で表現)と
-// ベール(2時間ぶんの等時法、1日=12ベール、H:[12]で表現)。
-const バビロニア暦カスプ = g
-  .dup()
-  .lang('y年M月d日', 'y年M月d日(E) H時m分s秒')
+// 参照): カスプ(季節で伸縮する不定時法、division({ H: 'solar' })+dusk('Sunny')で
+// 表現)とベール(2時間ぶんの等時法、1日=12ベール、H:[12]+dayBoundary(18)
+// で表現)。
+const バビロニア暦カスプ = baseCalendar()
+  .lang('y年M月d日', 'y年M月d日(dC7) H時m分s秒')
   .spot(...Babylon)
   .era('バビロニア紀元', '紀元前')
   .calendar(['1年1月1日', 'y年M月d日', 0])
-  .daily('Sunny')
-  .algo({
+  .division({ H: 'solar' })
+  .dusk('Sunny')
+  .notation({
     M: [バビロニア月名, バビロニア月名かな],
   })
   .init()
 
 const バビロニア暦ベール = バビロニア暦カスプ
   .dup()
-  .daily(false)
-  .algo({
+  .division({ H: false })
+  .dusk(false)
+  .dayBoundary(18)
+  .notation({
     H: [12],
   })
   .init()
@@ -327,46 +348,44 @@ const バビロニア暦ベール = バビロニア暦カスプ
 // 変えているため(development-notes.md 参照)、2つの別名で分ける。
 // どちらも日付構造はユリウス暦(ルーミー暦相当の簡略化、史実のルーミー暦
 // 独自の月名・紀年法までは再現していない)を流用し、時刻体系だけを
-// 変える。バビロニア暦と同じ理由(既知の制約、上記コメント参照)で
-// 日没起点の暦日境界は実装していない(通常の真夜中起点)。
+// 変える。バビロニア暦と同じ理由(上記コメント参照)で dusk()/
+// dayBoundary() を使い分ける。
 //
 // オスマン季節時法: 初期イスラム世界に広く見られた季節時法の伝統
-// (昼夜それぞれ12不等分)。daily('Sunny')と同じ機構で再現できる。
+// (昼夜それぞれ12不等分)。division({ H: 'solar' })+dusk('Sunny')で再現できる。
 const オスマン季節時法 = Julian.dup()
   .spot(...Istanbul)
   .era('ヒジュラ紀元', '紀元前')
-  .daily('Sunny')
+  .division({ H: 'solar' })
+  .dusk('Sunny')
   .init()
 
 // アラトゥルカ: 機械式時計普及後、alafranga(西洋式、真夜中起点)と
-// 1926年の共和国暦改革まで併存した、より狭義の「alaturka」。史実では
-// 1時間の長さ自体は等時法のまま日付・時刻の起点だけ日没にリセット
-// されるが、上記の制約により起点は真夜中のままで、等時法である点のみ
-// 再現している。
-const アラトゥルカ = オスマン季節時法.dup().daily(false).init()
+// 1926年の共和国暦改革まで併存した、より狭義の「alaturka」。史実通り、
+// 1時間の長さは等時法のまま日付・時刻の起点だけ日没にリセットする
+// (dayBoundary(18))。
+const アラトゥルカ = オスマン季節時法.dup().division({ H: false }).dusk(false).dayBoundary(18).init()
 
 // Gregorianは太陽暦なので、衛星未定義でもよい
-const MarsGregorian = g
-  .dup()
+const MarsGregorian = baseCalendar()
   .spot(火星, 35, 0, 0)
   .era('西暦', '紀元前')
   .calendar(
-    ['1年(火) 壬子-辛巳', 'y年(E) a-A', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
+    ['1年(火) 壬子-辛巳', 'y年(dC7) yC60-dC60', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
     [1, 7, 70],
   )
-  .algo({
+  .notation({
     M: [20],
   })
   .init()
 
-const Jupiter = g
-  .dup()
+const Jupiter = baseCalendar()
   .spot(カリスト, 35, 0, 0)
   .era('西暦', '紀元前')
   .calendar(
-    ['1年(火) 壬子-辛巳', 'y年(E) a-A', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
+    ['1年(火) 壬子-辛巳', 'y年(dC7) yC60-dC60', g.parse('0年4月1日')!], // 春分が３月くらいになるよう、恣意的に決めました。
   )
-  .algo({
+  .notation({
     H: [10],
     M: [260],
     N: [40],
@@ -374,16 +393,15 @@ const Jupiter = g
   })
   .init()
 
-const フランス革命暦 = g
-  .dup()
+const フランス革命暦 = baseCalendar()
   .spot(...Paris)
   .era('革命暦', '紀元前')
   .calendar(
-    ['1年1月1日 1曜 壬子-癸酉', 'y年M月d日 E曜 a-A', g.parse('1792年9月22日')!],
+    ['1年1月1日 1曜 壬子-癸酉', 'y年M月d日 dC10曜 yC60-dC60', g.parse('1792年9月22日')!],
     [4, 100, 400],
     [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
   )
-  .algo({
+  .notation({
     M: [
       [
         '葡萄月',
@@ -420,7 +438,7 @@ const フランス革命暦 = g
     m: [100],
     s: [100],
 
-    E: [10],
+    dC10: [10],
   })
   .init()
 
@@ -428,8 +446,7 @@ const マヤ暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] 
 const マヤ長期暦13バクトゥン = 13 * 144000
 const マヤ長期暦基準日 = g.parse('2012年12月21日')!
 
-const Maya = g
-  .dup()
+const Maya = baseCalendar()
   .lang('Gy年Mod日', 'Mo do')
   .spot(マヤ暦地球, 0, 0, 0)
   .era('', '')
@@ -454,7 +471,7 @@ const Maya = g
     20,
     null,
   ])
-  .algo({
+  .notation({
     M: [マヤハアブ, null],
     d: [マヤハアブ日, null],
   })
@@ -493,11 +510,10 @@ export function mayaHaab(utc: number) {
   return `${day} ${name}`
 }
 
-const Beat = g
-  .dup()
+const Beat = gregorianBase()
   .spot(...zürich)
   .era('@', '紀元前')
-  .algo({
+  .notation({
     H: [1000],
     m: [100],
   })
@@ -505,8 +521,7 @@ const Beat = g
 
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
 const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
-const エジプト民用暦 = g
-  .dup()
+const エジプト民用暦 = baseCalendar()
   .spot(エジプト民用暦地球, Cairo[1], Cairo[2], Cairo[3])
   .era('ナボナサル紀元', '紀元前')
   .calendar(
@@ -514,13 +529,12 @@ const エジプト民用暦 = g
     [],
     [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
   )
-  .algo({
+  .notation({
     M: [エジプト月名, null],
   })
   .init()
 
-const コプト暦 = g
-  .dup()
+const コプト暦 = baseCalendar()
   .spot(...Alexandria)
   .era('コプト暦', '紀元前')
   .calendar(
@@ -529,7 +543,7 @@ const コプト暦 = g
     [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
     3,
   )
-  .algo({
+  .notation({
     M: [コプト月名, null],
   })
   .init()

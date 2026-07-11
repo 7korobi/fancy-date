@@ -1,1 +1,1 @@
-export { MarsSolarOrbital, type MarsSolarOrbitalOptions } from './mars-solar'
+export { MarsSolarOrbital, type MarsSolarOrbitalOptions } from './mars-solar';

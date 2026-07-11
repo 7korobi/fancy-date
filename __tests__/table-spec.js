@@ -16,17 +16,17 @@ const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
 
 const calendars = [
-  [utc, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [g, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [fg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [j, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [rg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [平気法, 'J Z aA yyyy年MM月dd日(E) Homo ssss:S G'],
-  [am, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [pm, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [b, 'J Z a-A yyyy年MM月dd日(E) @H.m'],
-  [mg, 'J Z a-A yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [jg, 'J Z a-A yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
+  [utc, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [g, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [fg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [j, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [rg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [平気法, 'J Z yC60dC60 yyyy年MM月dd日(R6) Homo ssss:S G'],
+  [am, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [pm, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @H.m'],
+  [mg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
+  [jg, 'J Z yC60-dC60 yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
 ]
 
 describe('テーブル', () => {

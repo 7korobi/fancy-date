@@ -44,12 +44,75 @@ g.format(utc, 'yyyy年MM月dd日')
 
 一部 token は `o` と `r` の suffix を持つ。
 
-| suffix | 意味                                 |
-| ------ | ------------------------------------ |
-| `o`    | 暦の表示名を使う。例: `Mo`, `Ao`     |
-| `r`    | 暦の読み・ルビを使う。例: `Mr`, `Ar` |
+| suffix | 意味 |
+| --- | --- |
+| `o` | 暦の表示名を使う。例: `Mo`, `dC60o` |
+| `r` | 暦の読み・ルビを使う。例: `Mr`, `dC60r` |
 
-`algo()` で表示名や読みが定義されていない場合は、数値表示に戻る。
+`notation()` で表示名や読みが定義されていない場合は、数値表示に戻る。`algo()` は互換 alias として残している。
+
+HTML の `<ruby>` を組み立てる用途では、文字列化済みの `format()` ではなく
+`format_parts()` を使うと token 境界と ruby を同時に取得できる。
+
+### `format_parts()` の仕様
+
+```ts
+format_parts(utc: DateLike, format?: string): FormatPart[]
+format_parts_by(utc: DateLike, format?: string): FormatPart[]
+
+type FormatPart = {
+  token: string
+  text: string
+  ruby?: string
+}
+```
+
+入力は `format(utc, fmt)` と同じ `DateLike` と format 文字列。`format` を省略した場合は
+`this.dic.format` を使う。`DateLike` にはすでに解決済みの `Tempos` も含まれるため、
+`format_parts_by()` は内部で `to_tempos_input()` して、数値・文字列・`Tempos` のいずれも受け取る。
+
+戻り値は `{ token, text, ruby? }[]` で、各要素は format token またはリテラル片を表す。
+
+- `token`: 元の token 文字列。リテラル片は空文字 `''`。
+- `text`: その part が出力する文字列。`parts.map((p) => p.text).join('') === format(utc, fmt)`。
+- `ruby`: token に読みが定義されている場合の読み。`r` suffix token は `text` 自体が読みなので `ruby` は付かない。
+
+つまり `format_parts()` は `format()` の構造化版であり、文字列としての出力は必ず
+`text` の連結で再現できる。リテラル文字(`年`, `/`, 空白, 括弧など)も順序を保った
+part として返るが、`token` は `''` になる。
+
+`ruby` は「この token の本文に添える読み」がある場合だけ入る。`dC60r` や `Er` のような
+`r` suffix は、読みそのものを表示する token なので、`{ token: 'dC60r', text: '...' }` となり
+`ruby` は付かない。
+
+```ts
+g.format_parts(utc, 'Gy年MM月dd日(E) dC60o dC60r')
+// [
+//   { token: 'G', text: '西暦' },
+//   { token: 'yyyy', text: '2024' },
+//   { token: '', text: '年' },
+//   ...,
+//   { token: 'E', text: '日', ruby: 'にち' },
+//   ...,
+//   { token: 'dC60o', text: '癸酉', ruby: 'みずのとのとり' },
+//   { token: '', text: ' ' },
+//   { token: 'dC60r', text: 'みずのとのとり' }
+// ]
+```
+
+HTML では次のように使える。
+
+```svelte
+{#each calendar.format_parts(utc, 'Gy年MM月dd日(E) dC60o') as part}
+  {#if part.ruby}
+    <ruby>{part.text}<rt>{part.ruby}</rt></ruby>
+  {:else}
+    {part.text}
+  {/if}
+{/each}
+```
+
+周期系 token は `yC<number>` / `dC<number>` を正本にする。たとえば `yC60` は年干支、`dC60` は日干支、`dC7` は七曜。旧 token `a/c/b/A/C/B` や `yC/yCS/yCB/dC/dCS/dCB` も互換 alias として使える。
 
 ### 年・元号
 
@@ -91,23 +154,28 @@ Calendar.Julian.format(nabonassar, 'y年M月d日')
 
 循環 token は干支・曜日・宿のような周期位相を表す。`span({ precise })` では「循環上で何ステップ離れているか」を返す。実際の日付加算としては曖昧なので、`add()` / `sub()` では使わない。
 
-| token | 意味       | 周期の例               | find step 推定 | span precise   |
-| ----- | ---------- | ---------------------- | -------------- | -------------- |
-| `a`   | 年干支     | 60年周期               | `y`            | 循環差: 年干支 |
-| `b`   | 年支       | 12年周期               | `y`            | 循環差: 年支   |
-| `c`   | 年干       | 10年周期               | `y`            | 循環差: 年干   |
-| `f`   | 年九星など | 暦ごとの年循環         | `y`            | 循環差: 年九星 |
-| `A`   | 日干支     | 60日周期               | `d`            | 循環差: 日干支 |
-| `B`   | 日支       | 12日周期               | `d`            | 循環差: 日支   |
-| `C`   | 日干       | 10日周期               | `d`            | 循環差: 日干   |
-| `E`   | 曜日       | 7日周期など            | `d`            | 循環差: 曜日   |
-| `F`   | 日九星など | 暦ごとの日循環         | `d`            | 循環差: 日九星 |
-| `V`   | 宿         | 二十七宿・二十八宿など | `d`            | 循環差: 宿     |
+| token | 意味 | 周期の例 | find step 推定 | span precise |
+| --- | --- | --- | --- | --- |
+| `yC60` | 年干支 | 60年周期 | `y` | 循環差: 年干支 |
+| `yC12` | 年支 | 12年周期 | `y` | 循環差: 年支 |
+| `yC10` | 年干 | 10年周期 | `y` | 循環差: 年干 |
+| `yC9` | 年九星など | 9年周期 | `y` | 循環差: 年九星 |
+| `dC60` | 日干支 | 60日周期 | `d` | 循環差: 日干支 |
+| `dC12` | 日支 | 12日周期 | `d` | 循環差: 日支 |
+| `dC10` | 日干 | 10日周期 | `d` | 循環差: 日干 |
+| `dC7` | 曜日 | 7日周期 | `d` | 循環差: 曜日 |
+| `dC9` | 日九星など | 9日周期 | `d` | 循環差: 日九星 |
+| `dC28` | 日不断の宿 | 二十八宿など | `d` | 循環差: 宿 |
 
-`A` / `a` は `C+B` / `c+b` から組み立てられる。つまり `B/b` が支、`C/c` が干。
+token 方針では、`dC<number>` を日不断 cycle、`yC<number>` を年不断 cycle の正本とする。既存の `yC/yCS/yCB/dC/dCS/dCB` は、それぞれ `yC60/yC10/yC12/dC60/dC10/dC12` の文化的 alias として残す。`E` は一般的な weekday token として、暦ごとの週相当 cycle (`dC7` / `dC8` / `dC10`) を指す。旧 `f` / `F` / `V` は廃止し、それぞれ必要に応じて `yC9` / `dC9` / `dC28` または `LM27` を使う。六曜は不断でも lunar mansion でもない旧暦月日由来の暦注なので、固有 token `R6` を使う。
+
+これらの周期・暦注 token は format/find の表示・検索条件として使える。一方、通常の parse では日時座標の決定に使わない。干支などの周期 token から候補日時を推定する用途は、parse ではなく将来の find/候補探索 API 拡張で扱う。
+
+`dC` / `yC` は `dCS+dCB` / `yCS+yCB` から組み立てられる。旧 `a/c/b/A/C/B` は
+それぞれ `yC/yCS/yCB/dC/dCS/dCB` の互換 alias。
 
 ```ts
-g.find([g.parse('2020年1月1日'), g.parse('2020年3月1日')], [{ Ao: '甲子' }])
+g.find([g.parse('2020年1月1日'), g.parse('2020年3月1日')], [{ dC60o: '甲子' }])
 // 甲子日を探す
 ```
 
@@ -158,7 +226,7 @@ g.span([from, to], { precise: 'w' })
 循環 token の `precise` は単独の周期差になる。
 
 ```ts
-g.span([from, to], { precise: 'A' })
+g.span([from, to], { precise: 'dC' })
 // 例: '14日干支後'
 ```
 
@@ -175,19 +243,19 @@ g.add(from, '1年2ヶ月9日4時間5分後')
 
 ## parse_span / format_span / labels
 
-`parse_span(text)` は現在の暦の `labels()` と `algo(..., relatives)` を使って相対表現を読む。`format_span(span, direction?)` は `SpanLike` を現在の暦の表記へ整える。
+`parse_span(text)` は現在の暦の `labels()` と `notation(..., relatives)` を使って相対表現を読む。`format_span(span, direction?)` は `SpanLike` を現在の暦の表記へ整える。
 
 ```ts
-const custom = g.dup().labels({ w: '週目', A: '日巡り' }).init()
+const custom = g.dup().labels({ w: '週目', dC: '日巡り' }).init()
 
 custom.parse_span('1日巡り後')
 // { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
 
-custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label
+custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'
 ```
 
-`labels()` は fallback の単位表記を差し替える。`algo()` の第3要素に relatives がある場合は、そちらが優先される。
+`labels()` は fallback の単位表記を差し替える。`notation()` の第3要素に relatives がある場合は、そちらが優先される。
 
 `前` / `後` を省略した表現(例: `'1年2ヶ月'`)は `後` として解釈される。`parse_span('1年2ヶ月')` と `parse_span('1年2ヶ月後')` は同じ結果になる。
 
@@ -198,7 +266,7 @@ custom.format_span({ token: 'A', unit: 'day', value: -1, label: '1A' }).label
 ```ts
 const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
 
-g.find(between, [{ Ao: '甲子' }]).map((utc) => g.format(utc, 'yyyy年MM月dd日 Ao'))
+g.find(between, [{ dC60o: '甲子' }]).map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))
 // ['2020年01月22日 甲子']
 ```
 
@@ -219,10 +287,10 @@ g.find([g.parse('2020年3月1日'), g.parse('2020年3月2日')], [{ H: '12' }], 
 結果の並びは `order` で制御する。`1` が昇順、`-1` が降順。`limit` で件数を制限できる。無制限の範囲を使う場合は `limit` が必須になる。昇順では `from`、降順では `to` が探索開始点になるため、その側は有限値にする。
 
 ```ts
-g.find([g.parse('2020年1月23日'), Infinity], [{ Ao: '甲子' }], { limit: 1 })
+g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }], { limit: 1 })
 // 次の甲子日
 
-g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
+g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
   order: -1,
   limit: 1,
 })
@@ -231,13 +299,13 @@ g.find([-Infinity, g.parse('2020年3月1日')], [{ Ao: '甲子' }], {
 
 推定規則の概要:
 
-| 条件 token                    | 推定 step  |
-| ----------------------------- | ---------- |
-| `note`, `A/B/C/E/F/V/d/D/w/J` | `d`        |
-| `M/N/Q`                       | `M`        |
-| `Z`                           | `Z`        |
-| `Zz`                          | `Zz`       |
-| `y/Y/a/b/c/f`                 | `y`        |
-| `H/m/s/S`                     | 同じ token |
+| 条件 token | 推定 step |
+| --- | --- |
+| `note`, `dC<number>/R6/LM27/E/d/D/w/J` | `d` |
+| `M/N/Q` | `M` |
+| `Z` | `Z` |
+| `Zz` | `Zz` |
+| `y/Y/yC<number>` | `y` |
+| `H/m/s/S` | 同じ token |
 
 `note` は現状では日単位で走査する。将来、`note` の辞書から天文現象や節句を直接解釈する場合は、内部でより適した探索方法を選べる。

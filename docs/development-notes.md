@@ -1,75 +1,105 @@
 # 開発メモ
 
-fancy-date の開発者向けの検討メモ・調査結果・実装ログ。エンドユーザー向けの使い方は [README](../README.md)、詳しい数詞ライブラリの設計案は [numeral-design.md](numeral-design.md) を参照。
+fancy-date の開発者向け検討メモ・調査結果・実装ログ。エンドユーザー向けの使い方は [README](../README.md)、数詞ライブラリの詳しい設計案は [numeral-design.md](numeral-design.md) を参照。
 
-## 今後の検討メモ
+## 今後の検討テーマ
 
-- Span: span の各 part を暦 token として内部化し、不断 token の受け入れ、span 同士の演算、parse/format の分離を検討する。同じ unit/token を複数持たないなら、配列ではなく Record 形式に寄せる余地もある。
-- 数値表現(調査結果 → 設計案に集約): `number.ts` に `DIC`/`Numeral` 基盤(`jpn`(漢字/大字/rubys)、`old_jpn`(みっか/はつか等の古い日本語数え方)、`english`、`roman`、`angle`)は既に実装済みだが、`sample/calendars.ts` にはこれを使うサンプル暦が1つもなく、`old_jpn` の目玉である助数詞依存の不規則形(3日→みっか等)も `format_number()` の全呼び出し箇所で appendix 引数が渡されておらず構造的に到達不能、というのが出発点だった。ここから (a) 数詞バリエーション切り替えの是非、(b) appendix 配線の方式、多言語(CLDR/スラブ語/アラビア語/スワヒリ語/日本語/韓国語)の数詞一致(agreement)体系の横断調査、(c) 完全往復保証、`つくも`(99)デッドコードの発見、ロケール登録簿の設計まで、複数ラウンドにわたり検討を重ねた。**詳細な設計案は [docs/numeral-design.md](numeral-design.md) にまとめた**(要点: appendix は呼び出し時引数ではなく構築時に一度だけ確定する方式へ変更し、`DIC` に `.語尾(tail)` という日本語専用の公開ファクトリを追加する——他言語は各々の文法用語で独自の屈折ファクトリを持ってよく、共有インターフェースの契約には含めない。あわせて完全往復保証・`つくも`修正・日本語5パターンの整理・英語/ローマ数字/韓国語の追加方針・ロケール登録簿のフォーマットを設計済み)。(a) の「数詞体系・暦法・地域をまとめたものが暦」という整理に基づくバリエーション切り替え自体は、ロケール登録簿の設計でカタログ側は解決したが、`.spot()`(地域)側のバリエーション切り替えは未解決のまま残っている。
-  - Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.unicode.org/index/cldr-spec/plural-rules) / [UTS #35 Numbers](https://www.unicode.org/reports/tr35/dev/tr35-numbers.html) / [Russian numerals - Wikipedia](https://en.wikipedia.org/wiki/Russian_numerals) / [Polish numerals - Wikipedia](https://en.wikipedia.org/wiki/Polish_numerals) / [Arabic grammar - Wikipedia](https://en.wikipedia.org/wiki/Arabic_grammar) / [No Gender Polarity in Arabic Numeral Phrases (Linguistic Inquiry)](https://direct.mit.edu/ling/article/52/3/441/97424/No-Gender-Polarity-in-Arabic-Numeral-Phrases) / [Swahili grammar - Wikipedia](https://en.wikipedia.org/wiki/Swahili_grammar) / [Japanese counter word - Wikipedia](https://en.wikipedia.org/wiki/Japanese_counter_word) / [Tone sandhi - Wikipedia](https://en.wikipedia.org/wiki/Tone_sandhi) / [Korean numerals - Wikipedia](https://en.wikipedia.org/wiki/Korean_numerals)
-- ruby タグ構築に適した format API(調査結果・設計): 読み仮名(ルビ)表現は HTML の `<ruby>` タグでの表示のためにあると言ってよいが、現行の `format()`/`format_by()` は複数トークンをすべて1本のフラット文字列へ `.join('')` してしまい、トークン境界の情報が失われる。実際に svelte-tick-timer の `/fancy` ページは、`'Eo Er'` のようにラベル用/読み用トークンをペアで並べ空白区切りにした format 文字列を組み、`.format(utc, fmt).split(/\s/)` した結果を暦16個ぶん固定位置で分割代入し、テンプレート側で `<ruby data-ruby={Er}>{Eo}<rt>{Er}</rt></ruby>` を手作業で組み立てている。format 文字列の並び・分割代入・テンプレートの3箇所を常に同じ順序に保つ必要があり、トークンを増減するたびに3箇所同時に直す必要がある、という指摘の通りの脆さがある。`Eo`/`Er` は同じ `Indexer` の同じ値を読んでいるだけなので、これは解決可能。追加候補として以下2メソッドを設計した(いずれも既存 `format()`/`format_by()` の戻り値・シグネチャは変更しない加算のみの変更):
-  - `format_ruby(utc, token)`: 基底文字1つ(例 `'E'`)を渡すと、その場で `{ label, ruby? }` を返す。ラベル・読みが同一 `Indexer` から同時に取れることを利用した単発 API。
-  - `format_parts(utc, fmt)`: 通常の format 文字列(`o`/`r` 接尾辞混在・リテラル文字混在可)を渡すと、トークン順を保った `{ token, text, ruby? }[]` を返す。素の基底トークン(`'E'` 単体)が来た時点でラベルと読みを1エントリにまとめて返し、リテラル文字(`'年'`等)は `token: ''` の別エントリとして素通しする。既存の `'Eo Er'` ペア形式を渡しても壊れない(冗長になるだけで動く)ため、消費側は移行を強制されず、新規に書くなら `'E'` 単体で済む。これにより svelte-tick-timer 側は `{#each c.format_parts(...) as part}` の1ループへ置き換えられ、format 文字列・分割代入・テンプレートの三重管理から解放される見込み(未実装)。appendix 配線とは独立に設計できる(`format_parts` は `to_ruby`/`to_value` の結果をそのまま使うだけなので、appendix 配線が済めばその修正を自動的に引き継ぐ)。
-- 漢数字表現の文化的バリエーション(歴史調査・整理): 数詞のバリエーション切り替えに向けて、日本の漢数字表記が実際にどう歴史的・文脈的に変化するかを調査した。識別した変異軸のうち、暦(日付)表示に関連するもの/しないものを整理する。
-  - **関連度が高く、実装候補**: (1) 位取り表記 vs 桁列挙表記——和暦の日付は「十三日」のように位取りで畳むが、西暦4桁年は「二〇二四年」のように桁を独立に読み下し位取りしない(住所・番号の「三〇二号室」と同種の桁列挙)。現行 `jpn.漢字` は位取り式の `DIC` クラスしかなく、西暦年を素通しすると不自然な「二千二十四年」になりうる。位取りロジックの `DIC._calc()` を再利用できないため、`english`/`roman` と同様に `DIC` を継承しない桁ごとの薄い `Numeral` 実装(例: `jpn.桁読み`)を別途用意するのが妥当、というのが最優先の実装候補。(2) 廿・卅・卌(合字)の扱い——現行 `jpn.漢字` の音便は20/30/40だけを常時廿/丗/卌に変換する「選択の余地がない決め打ち」になっている。「廿日→はつか」は現役の暦語彙(廿は人名用漢字として現存)だが、卅・卌は日付という文脈でも事実上絶滅している。合字を使わない対抗ポジション(音便なしの `jpn.漢字` 相当)を並べて用意する程度は低コストで価値があるが、逆方向(合字をもっと積極的に使う拡張)は「合字使用が体系的規則だったという証拠は無い」ことが調査で判明しているため見送るべき。
-  - **調査したが日付表示には無関係(レッドヘリング)と判断**: 大字(壱弐参…)は大宝律令701年公式令の簿帳規定に始まり現在も戸籍法施行規則31条・公証人法37条・商業登記規則・日銀券表記等に残るが、一次資料を確認した限り**日付そのものを大字で書く歴史的・現代的用例は無く**、金銭・法的数量の慣習に限定される。命数法の万進/万万進/上数の境界問題(塵劫記1627年初版は極まで十進・以降万進の混在、1631/1634年版で統一)や、仏教由来超大数(恒河沙・阿僧祇・那由他・不可思議・無量大数)の絶対値が経典ごとに異なる問題(華厳経≈10^31.1、倶舎論≈10⁵⁹、算学啓蒙1299年=10¹⁰⁴、塵劫記1634年版=現代標準10⁵⁶)は数学史的に興味深いが、暦の年数(4〜5桁)では万・億以上の桁に到達しないため無関係。「四」の忌避(982年小右記が最古の忌避例、1522年祇園会御見物御成記に「与の重」の実例)は部屋番号・階数等のラベル序数に限定される慣習で、日付の「四日(よっか)」自体は忌避対象ではないと明記されている(ドキュメントに注記する価値はある)。地域方言による漢数字表記の系統的バリエーションは、調査した限り裏付けとなる一次資料が見つからず、追加軸としては採用できない。
-  - Sources: [大字(数字) - Wikipedia](<https://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AD%97_(%E6%95%B0%E5%AD%97)>) / [廿 - Wiktionary](https://ja.wiktionary.org/wiki/%E5%BB%BF) / [塵劫記 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%A1%B5%E5%8A%AB%E8%A8%98) / [阿僧祇 - Wikipedia](https://ja.wikipedia.org/wiki/%E9%98%BF%E5%83%A7%E7%A5%87) / [京(数) - Wikipedia](<https://ja.wikipedia.org/wiki/%E4%BA%AC_(%E6%95%B0)>) / [四の字 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%9B%9B%E3%81%AE%E5%AD%97) / [縦書きの数字の書き方](https://everydaygoodthing.com/1460.html)
-- token 拡張: 不断 token を span に受け入れ、`precise` に不断を指定できるようにする。世紀・千年紀・マヤ長期暦のような年上位単位は、元号ではなく `G` token との関係も検討する。
-- 天文モデル: 地球以外の天体向けに `src/nasa` の高精度モデルを追加し、楕円軌道、彗星、多星系の暦を検討する。
-- 歴史的時刻表現: 定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。
-- 暦の拡張: 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
-- 暦外期間: ロムルス暦のように暦月だけで1年を表現し尽くさない暦は他に類例が見当たらず、`month_divs` の `null` 要素 + `Indexer.list` への `null` 混在で表現した今回の対応(暦外期間ラベル)をこれ以上汎用化する必要は薄いと思われる。
-- 日干支(A)の epoch 自己不整合(調査結果、大部分を修正): `calendar()` の epoch(第3引数、通常 0)を `format()` した結果が、多くの暦(Julian/Romulus/平気法/定気法/アマンタ等)で初期値文字列の日付そのものと一致しない問題を調査したところ、原因は2つの独立したバグの合成だった。
-  - **真因A(修正済み)**: `def_zero()` が E/F/C/B/A/V(六曜・九星・十干・十二支・日干支・宿)の各日次巡回トークンのゼロ点を、既に `-idx.d`(d=暦日自身のanchor値)日ぶんシフト済みの `day` を起点に計算していたため、`d` 自身のシフト分が二重に効いていた(該当トークンの zero 点が本来より `idx.d` 日ぶん先に進んでいた)。`hour`(anchor実日の日付境界、dのシフトを含まない)を起点にするよう修正した。この修正により、Julian の anchor `'1582/10/5(金)...'` が示す「1582年10月5日は金曜日」(グレゴリオ暦改暦前日、史実として検証可能)や、`同時性`テストで同一UTC瞬間を指す複数の暦が同じ日干支に一致することを確認した。平気法・定気法は当初この真因Aを「anchor の日干支の値をズラす」形で誤って回避していた(実装済みの下地13番参照)ため、修正に合わせて anchor を辛巳(2629年12月7日/11月24日いずれも本来の日干支)へ戻し、2020年1月22日=甲子という既知の事実との一致を再確認した。
-  - **真因B(未修正、設計上の論点として保留)**: `y`(年)トークンは実在の元号テーブルを持つ暦では常に元号相対の年数(例: 令和6年)にera調整される。しかし `calendar()` の anchor 文字列に書く年数(例: 平気法の「2629年」=皇紀の絶対年)は era 調整前の生の値として較正されるため、`format(anchor_epoch, 'y...')` はanchor自身の「2629年」ではなく era 調整後の値(実測: ちょうど西暦1969年=昭和44年に相当する「44年」)を返す——ただしこれは「anchor自身の epoch を実際に format() したときの年」としては正しい値(昭和44年は史実として西暦1969年と一致する)であり、真因Aのような明確な二重計算ではなく、「anchor の年表記は絶対年(皇紀)、format() の y は元号相対」という**表記規約の不一致**に近い。修正するには「anchor の年をどちらの規約として較正するか」という設計判断が要る。
-- 極域現象での不定時法(`SolarDayHourTempoRule`)の扱い(調査結果、修正済み): 不定時法(バビロニア/ギリシャ/ローマ起源、中世後期に定時法へ置き換わった)を極域で採用した実例は調査した限り見当たらなかった。極域の先住民の時間認識も「昼をN等分する」という発想自体を持たず、サーミ人は生態(トナカイ等)基準の8季節暦(季節の境界は日付ではなく感覚的なもの)、イヌイットは極夜明け最初の日の出を年始とする13朔望月の太陰暦(月名は動物の生態等に基づき地域ごとに異なる)を用いる。現代の南極観測基地群も統一タイムゾーンを持たず補給元国の標準時に合わせており(例: マクマード基地はニュージーランド時間)、理由は「南極点では経線が収束し太陽基準の時刻が意味をなさなくなる」ため。**不定時法を極域に「正しく拡張する」自然な答えは無いと考えてよく**、`daily('Sunny')`(不定時法)使用時、`.init()` 時点で緯度が極圏(概ね北緯/南緯66.5度)以遠なら例外を投げるよう実装した(実装済みの下地21番参照)。ただし66.5度ちょうどが唯一の閾値ではなく、その手前でも夏至/冬至付近で1時(とき)が極端に短くなる退化ケースは残るため、閾値は「これより先は確実に不可能」という下限として扱っている。
-- ロムルス暦・ユリウス暦を不定時法化(調査結果、実装済み): ローマの市民生活は共和政期からユリウス暦採用後の帝政期まで一貫して不定時法(horae temporariae、日の出・日の入りを基準に昼夜をそれぞれ12等分)であり、civil に定時法へ移行するのは中世後期(14〜15世紀、機械式時計の普及後)——つまりロムルス暦・ユリウス暦という「日付の数え方」に対し、当時使われていた「時刻の数え方」は不定時法であるべきなのに、既存サンプルは既定の等時法(24時間均等割)になっていた。両暦に `.daily('Sunny')` を追加して修正した(ローマは北緯42度で極域ガードの対象外)。実装中、`daily('Sunny')` 追加後に一部の既存テスト(`太陽の動き`、`同時性 春分` 等)で日の出・日の入りの表示時刻が変化して見えたが、`solor()`(日の出/日の入りの実際の msec 値を返す天文計算)の出力そのものは `is_solor` の値に関わらず完全に同一であることをトレースで確認済み——変化していたのは同じ瞬間を `format(msec, 'HH:mm')` で読み上げる際の「等時法表示か不定時法表示か」という**表示規約だけ**であり、天文計算に回帰は無い。中世ヨーロッパ(ユリウス暦の時代)では天文学者が早くから等時法(1時間=60分=60秒)を認識しつつ市民生活は不定時法のままという二重体系が長く続き、過渡期の天文時計には両方式を同じ文字盤に表示するものもあった。日本の和暦も、西洋機械時計の技術自体は室町末期(16世紀半ば)に伝来していたが不定時法表示に改造され続け、幕末〜明治初期(1873年の正式切替まで)に定時法・不定時法どちらにも対応する和洋折衷の時計(割駒式文字盤)が作られる形で短い併用期間があった。
-  - Sources: [Unequal hours - Wikipedia](https://en.wikipedia.org/wiki/Unequal_hours) / [不定時法の説明 - THE SEIKO MUSEUM GINZA](https://museum.seiko.co.jp/knowledge/relation_16/) / [和時計 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%92%8C%E6%99%82%E8%A8%88)
-- バビロニア暦・不定時法、オスマン帝国alaturka時間のサンプル化(調査結果、実装済み): バビロニアは太陰太陽暦(12ヶ月+閏月、当初は観測ベースで2〜3年毎に不規則な閏月挿入、前499年頃から19年235ヶ月周期(メトン周期相当、ギリシャのメトンより先行)で規則化)で、**1日は日没始まり**(現行の平気法/定気法とは日付境界の基準が異なる)。時刻は二重体系で、天文用の bēru(ベール、2時間の等時法、季節不変)と市民生活用の kaspu(季節で伸縮する不定時法)が共存していた——**両者は別の暦として実装した**(1つの暦に混在させない)。オスマン帝国の"alaturka"は歴史的に意味が変遷しており、(a) 初期イスラム世界に広く見られた季節時法の伝統(昼夜それぞれ12不等分、`daily('Sunny')` と同じ機構で再現)と、(b) 機械式時計普及後・1926年の共和国暦改革まで alafranga(西洋式、真夜中起点)と併存した、より狭義の「等時法だが日没を0時とする」方式の2つを指しうるため、**「オスマン季節時法」(a)と「アラトゥルカ」(b)の2つの別名で分けて実装した**。
-  - **実装した**: `Calendar.バビロニア暦カスプ`/`バビロニア暦ベール`(平気法と同じ mean モデル、月名はバビロニア月名(ニサンヌ〜アダル)、年数の較正は MarsGregorian/Jupiter と同様の illustrative な値)、`Calendar.オスマン季節時法`/`アラトゥルカ`(日付構造はユリウス暦を流用、ルーミー暦独自の月名・紀年法までは再現していない)。
-  - **既知の制約(実装できなかった)**: 1日の日没起点の暦日境界は実装していない(通常の真夜中起点のまま)。当初「`.calendar()` の anchor 文字列の時刻成分を18時にすれば日没相当にずらせる」という近似を試みたが、実装・検証の結果これは機能しないと判明した——`def_zero()` は d(暦日)トークンのゼロ点を「H(時)のゼロ点(anchor の H 値を差し引いて求める計算上、必然的に真夜中に一致する)」から日単位でしか移動できず、anchor に書いた時刻成分は「その暦日の中の何時何分か」を較正するだけで、暦日の境界自体は動かせないため(実測で確認済み)。加えて、この近似は bēru(H:[12])のように H.length を変える派生暦では anchor の時刻成分が範囲外(24分割前提の「18時」が12分割では無効)になる別の不具合も併発していた。真に日没起点の暦日境界を実装するには、日ごとの実際の日没時刻(`daily('Sunny')` が使うのと同種の天文計算)を境界として使う新しい仕組みが要り、今回のスコープを超えるため見送った。
-  - Sources: [Danna (Mesopotamian) - Wikipedia](<https://en.wikipedia.org/wiki/Danna_(Mesopotamian)>) / [Hour - Wikipedia (Babylonian hours)](https://en.wikipedia.org/wiki/Babylonian_hours) / [Equinoctial hours - Wikipedia](https://en.wikipedia.org/wiki/Equinoctial_hours) / [Babylonian calendar - Wikipedia](https://en.wikipedia.org/wiki/Babylonian_calendar) / [Witnesses of time: How Ottoman Empire measured time - Türkiye Today](https://www.turkiyetoday.com/culture/witnesses-of-time-how-the-ottoman-empire-measured-regulated-and-lived-time-3212480) / [Our Time: On the Durability of the Alaturka Hour System in the Late Ottoman Empire](https://www.academia.edu/10068187/_Our_Time_On_the_Durability_of_the_Alaturka_Hour_System_in_the_Late_Ottoman_Empire_International_Journal_of_Turkish_Studies_16_2010_47_69)
-- 先住民の極域暦の計算機的表現(調査結果、将来実装候補): 上記調査で見つかった2つの実例は、いずれも既存の仕組みを拡張すれば表現できる可能性がある。
-  - イヌイットの13朔望月暦: 年始が「極夜明け最初の日の出」であり、これは今回追加した `has_sunrise`(false→trueへの遷移)そのもの。既存の `find()` は format 済み文字列条件でしか探索できないため、`has_sunrise`/`is_up_all_day` のような `solor()`/`lunar()` の生の判定結果を条件にできる探索 API が必要になりそうだ。月自体は朔望月ベースで、既存の 定気法/平気法 の閏月挿入(`ObservedLunisolarMonthRule` 等)と同系統の仕組みで扱えるはずだが、挿入トリガーが「太陽の運行」ではなく「極夜期間中の朔望月には名前がない(great darkness月)」という別条件になる。月名が地域ごとに異なる点は既存の `.labels()`/`.algo()` で対応できる範囲。
-  - サーミの8季節暦: 季節境界が天文学的に厳密でなく生態/感覚に基づく(「昼が戻るのは日付ではなく感覚」という一次資料の表現通り)ため、既存の暦モデル(年/月/日の階層構造)にそのまま乗せるのは無理がある。二十四節気と同種の「太陽黄経ベースの8分割」で近似することはできるが、それは実際の文化的運用を単純化した近似である、と明記した上で実装する必要がある。
+### format / token / span
 
-Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [Sámi Eight-Season Calendar](https://www.outlooktraveller.com/experiences/in-the-arctic-time-moves-differently-inside-the-s%C3%A1mi-eight-season-calendar) / [Inuit astronomy](https://en.wikipedia.org/wiki/Inuit_astronomy) / [Time in Antarctica](https://grokipedia.com/page/Time_in_Antarctica)
+- 実装済み: `SpanPart` は `token` を持つ。`parse_span()` と `format_span()` は分離済みで、`parse_span()` は現在の `labels()` / `notation(..., relatives)` から文字列を `SpanPart[]` へ戻し、`format_span()` は同じ parts を現在のラベル設定で再表示できる。`Precision = CorePrecision | Token` なので、`precise` には不断 token も指定できる。`format_parts()` / `format_parts_by()` も実装済みで、HTML ruby 用に `{ token, text, ruby? }[]` を返す。
+- 部分実装: 不断 token の span は「循環上の差分」として parse/format/find できるが、`add()`/`sub()` では意図的に例外にしている。暦上の実日付移動として解釈できるのは `y/M/d/H/m/s/S` と `Y/w/D` の階層 token だけ。不断 token の加算を許すなら、「次の甲子日」なのか「周期差だけを足す」のか、別の探索 semantics が必要。
+- 残課題: span 同士の演算は未実装。`SpanPart[]` は現状の正本だが、同じ unit/token を複数持たない前提を強めるなら Record 形式に寄せる余地がある。
+- 採用済み token 命名: `dC<number>` は「日不断の number-cycle」、`yC<number>` は「年不断の number-cycle」を表す正本 token とする。干支系は `dC60/dC10/dC12`・`yC60/yC10/yC12` が正本で、既存の `dC/dCS/dCB`・`yC/yCS/yCB` と `A/C/B/a/c/b` は文化的 alias として残す。ルビは `dC60r` / `dC10r` / `dC12r` / `yC60r` など数値付き token に付く。同じ multi-character token registry で `Ha`=午前午後、`da`=paksha のような派生 token も扱える。
+- 周期・暦注 token 方針: 九星は `yC9`=年九星、`dC9`=日九星。`E` は一般的な weekday token として、暦ごとの週相当 cycle (`dC7` / `dC8` / `dC10`) を指す。二十八宿のような日不断の宿は `dC28`。六曜は天文現象や lunar mansion ではなく旧暦月日から決まる暦注なので、固有 token `R6`(rokuyo 6)にする。二十七宿は lunar mansion ではあるが日不断ではなく旧暦月日由来なので `LM27` とし、`dC28` と分ける。旧 `f/F/V` alias は廃止し、それぞれ `yC9` / `dC9` / `dC28` または `LM27` を明示する。これらは format/find 表示・検索条件には使うが、通常 parse では日時座標の決定に使わない。干支などの周期 token から候補日時を推定する用途は、parse ではなく将来の find/候補探索 API 拡張で扱う。
+- 今後の制約: multi-character token 追加時も、`format_parts()` の `{ token, text, ruby? }` 契約と「`text` 連結が `format()` と一致する」性質を維持する。
 
-- `Calendar` 初期化の遅延化(調査結果): `import { Calendar } from 'fancy-date'` するだけで `src/sample/calendars.ts` の17個の `FancyDate` インスタンスが即座に構築される。実際に Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因であり、消費側(svelte-tick-timer)では `export const ssr = false` で対症療法済みだが、fancy-date 本体側での恒久対応を検討した。調査の結果、**コストの正体は「暦を何個構築するか」ではなく「モジュール評価そのもの」**だと分かった: `.init()`(`def_regex`/`def_to_idx`/`def_table`等)は正規表現構築や固定長ループによるテーブル構築のみで、天文学的な三角関数計算やイテレーティブな zero 点探索は一切含まれない(そうした本当に重い計算は `to_tempos()`/`lunisolar()` 等、実際の parse/format 呼び出し時まで正しく遅延されている)。支配的コストは `sample/eras.ts` の253件の `元号` 配列や `naoj`(VSOP87/Meeus係数)の巨大なリテラル配列など、**import された時点でパース・アロケーションされる静的データ**であり、これは `Calendar.Maya` しか使わない利用者でも `astro.ts` 経由で `../naoj`/`../nasa` を巻き込んで全額支払う形になっている。検討した3方式:
-  - Proxy による遅延ゲッター(`Calendar.X` に初回アクセスした時だけ `.dup().init()` する): 17回の `.init()`・16回の `.dup()`(`cloneValue`)を避けられるが、これは判明した中で最小のコストバケットにしか効かない。しかも同期 API(`Calendar.Gregorian.format()` をそのまま呼べる)を保ったまま `astro.ts`/`eras.ts` の import 自体まで遅延しようとすると、動的 `import()` は本質的に非同期になり両立しない。
-  - サブパス分割(`fancy-date/calendars/core` 等への re-export 分割): 現行の `tsc` のみ・CJS のみのビルド(すでにファイル単位でコンパイルされている)と機械的に両立する本物の改善だが、**現行の `Calendar.X` という集約アクセスパターンを使い続ける限り恩恵はゼロ**(集約オブジェクトを提供する限り結局全部 import される)。恩恵を得るには消費側がサブパス import へ移行する非互換な変更が要る。さらに17暦中16暦が共有の `g` を `.dup()` の起点にしているため、どのサブパスを選んでも `g` + `eras.ts` + `locale.ts` の評価コストは避けられない。
-  - `FancyDate` 内部(`init()`/`def_zero()` 等)自体の遅延化: 対象が存在しないという結論になった。`init()` 配下はすべて閉形式の算術か小さい固定長ループで、後回しにできるほど重い処理がそもそも無い。`ensure_number_map()`(DIC の数詞逆引きマップ構築)はすでに遅延化済みで、かつどのサンプル暦も `.numeral()` を呼ばないため現状トリガーすらされていない。**このアプローチは見送るべき**という評価で一致した。
-  - 単独の決定打はなく、実際に効果があるのはサブパス分割(非互換な移行を要する)。Proxy 方式は補完的だが最小のコストバケットにしか効かない。加えて、svelte-tick-timer の `/fancy` ページ自体が17暦全部を意図的に同時表示するデモであるため、暦単位の遅延化をしても「結局全部使う」用途では恩恵がなく、そのケースへの正しい対処は既に実施済みの `export const ssr = false` のままで良い。**将来、1〜数暦だけを使う利用者が現れた場合**に向けた実装候補として記録し、今回は着手しない。
+### 数詞・ロケール
 
-## 実装済みの下地
+- `number.ts` には `DIC`/`Numeral` 基盤(`jpn`, `old_jpn`, `english`, `roman`, `angle`)が実装済み。appendix は呼び出し時引数ではなく構築時に一度だけ確定する方式へ変更し、`DIC` に `.語尾(tail)` という日本語専用の公開ファクトリを追加する設計は [numeral-design.md](numeral-design.md) に集約済み。
+- 「数詞体系・暦法・地域をまとめたものが暦」という整理に基づくバリエーション切り替えは、ロケール登録簿の設計でカタログ側は解決したが、`.spot()`(地域)側のバリエーション切り替えは未解決。
+- 日本語漢数字の文化的バリエーションでは、位取り表記 vs 桁列挙表記が実装候補。和暦の日付は「十三日」のように位取りで畳むが、西暦4桁年は「二〇二四年」のように桁列挙が自然な文脈がある。`jpn.漢字` は位取り式なので、`english`/`roman` と同様に `DIC` を継承しない桁ごとの薄い `Numeral` 実装(例: `jpn.桁読み`)を別途用意する余地がある。
+- 廿・卅・卌(合字)は、合字を使わない対抗ポジション(音便なしの `jpn.漢字` 相当)を並べる価値がある。一方、合字をさらに積極的に使う拡張は、体系的規則だった裏付けが薄いため見送るべき。
+- 調査したが日付表示には無関係と判断したもの: 大字(壱弐参…)は金銭・法的数量の慣習に限定され、日付そのものを大字で書く歴史的・現代的用例は見つからなかった。命数法の万進/万万進/上数、仏教由来超大数、四の字忌避、地域方言による漢数字表記も、暦日付表示の実装軸としては採用しない。
 
-1. `sample.ts` を `src/sample/` に分割する。
-2. Span の parser/formatter を内部的に分離する。
-3. Span に次回表示変化時刻・timeout を持たせる(`with_span_anchor()` が `next_at`/`timeout` を設定、`Tempo.timeout`/`Tempo.sleep()` も同様に「最も近い変化まで待つ」を実装済み。`svelte-tick-timer` のデモは実際にこの `Tempo.sleep(minutes)` を使ってポーリングではなく最小 timeout まで待つ形になっている。表示更新が頻繁に見えるのは、同時表示している16暦の中で Beat(インターネット時間)の「分」相当の境界が実測で約0.4秒ごとに来ており、複数暦をまとめて1つの sleep で待つ設計上、最短の暦に律速されるため。これは設計通りの挙動でありバグではない)。
-4. `perf:*` 系の性能測定スクリプトを追加する。今回の入力検証強化(NaN/Infinity ガード追加)後に `bun run perf:core` を実行し、parse/format/to_tempos/span/add-sub/太陰太陽暦/天文現象のいずれも既存水準(数万〜数十万 ops/sec)から劣化していないことを確認済み。
-5. 暦ごとの数値辞書を使った format 出力に対応する。
-6. 暦ごとの数値辞書を使った parse 入力に対応する。
-7. `precise` に不断 token を指定できるようにし、SpanPart に token を持たせる。
-8. 非 `precise` の span も固定時間ではなく暦の秒・分・時・日境界に基づいて判定する。
-9. `src/nasa` を追加し、Mars の太陽季節モデルを試験的に導入する。
-10. 地域暦の足場として、ナボナサル紀元を anchor にした365日固定のエジプト民用暦を追加する。
-11. `calendar()` に閏年 offset を追加し、Alexandria 地点のコプト暦を追加する。
-12. `labels()` と `parse_span()` / `format_span()` を追加し、span の表記を暦ごとに調整できるようにする。
-13. 干支のサンプル初期値の誤り: 定気法の年干支(a)起点値が「戊申」(1968年の干支)になっており、平気法と同じ起点年(皇紀2629年=西暦1969年)の正しい年干支「己酉」と1年ずれていた(実測: 2024年3月10日時点でグレゴリオ暦・平気法が「甲辰」なのに定気法だけ「癸卯」)。加えて日干支(A)の起点値も平気法・定気法とも「辛巳」になっており、グレゴリオ暦(2020年1月22日=甲子という既知の事実と一致確認済み)に対して常に平気法+6日・定気法+23日(いずれも60日周期)ずれていた。年干支・日干支ともに暦の計算方式に依存しない実日/実年の事実であるべきなので、平気法は「己酉-乙亥」、定気法は「己酉-戊午」に修正し、実日付でグレゴリオ暦と一致することを確認した。この修正は十干(`C`)・十二支(`B`)の zero も連動して動かす(`algo()` が `C.zero = B.zero = A.zero` と共有しているため)ため、社日・初午などその暦日を参照する雑節/節句の該当日もあわせて数日ずれて正しい位置に移動した(既存スナップショットを更新済み)。**(その後の追記)** この時点での「乙亥」「戊午」への変更は、実は `def_zero()` 側の別の真因(22番参照、日次巡回トークンのゼロ点が `d` 自身のシフト分を二重に差し引いていたバグ)を anchor 側で結果的に打ち消していただけだった。22番でその真因を修正した際、anchor の日干支は両暦とも本来の値である「辛巳」に戻している。年干支(a)の「己酉」修正自体(1年ズレの是正)はこの二重シフトバグとは無関係な、独立した別のバグ修正であり、そのまま維持している。
-14. NaN 許容設計の型安全化: `LunarObservation`/`SolarObservation` に `has_sunrise`/`has_moonrise`/`has_transit`/`has_moonset` の各フラグを追加し、対応する数値フィールドが NaN になりうる理由を型定義に JSDoc で明記した。`number | undefined` 化も検討したが、日の出/日の入を直接算術に使う `SolarDayHourTempoRule`(不定時法)など内部の非 null 前提コードへの影響範囲が大きく、リスクに見合わないため見送った。
-15. 入力値検証の横展開: `format`/`add`/`sub`/`span` は既存の `to_tempos()`/`span_between()` 経由のガードで NaN/Infinity を検出できることを確認した。`find()`(non-anchor 側の端点が NaN のとき limit 指定時に無言で空配列を返す抜け道があった)、`solor()`/`lunar()`/`noon()`(NaN を渡しても例外にならず一部フィールドだけ NaN の中途半端なオブジェクトを返していた。デフォルト引数の式が本体より先に評価されるため本体先頭のガードでは間に合わず、仮引数化して対応)を修正した。
-16. 極域現象(終日昇らない/沈まない)の表現力: `SolarObservation`/`LunarObservation` に `is_up_all_day` を追加した。南中高度(その暦日で天体が最も高く昇る瞬間の高度)の符号から判定しており、`has_sunrise`(または `has_moonrise`/`has_moonset` の両方)が false のときに白夜相当(true)か極夜相当(false)かを区別できる。北緯78度(スヴァールバル諸島相当)での夏至/冬至で実際に区別できることをテストで確認済み。mean モデル経路(`phenomena/solar.ts`)にも同じ公式(90°-|緯度-赤緯|)で南中高度を補った(この経路にはこれまで南中高度自体が実装されておらず、`SolarObservation` 型との不整合が型チェックされずに見過ごされていた)。
-17. デバッグ教訓(追記): 今回の干支調査では、暦システム自身の自己無矛盾チェック(「anchor を format() したら anchor の値に戻るか」)だけでは不十分で、**独立に検証可能な実世界の事実**(「2020年1月22日は甲子の日である」「皇紀2629年は西暦1969年で己酉の年である」等)に照らして複数の実日付・実年で暦間の値を突き合わせる方が、真の誤りと「暦の計算方式による正当な差異」を見分けるのに有効だった。また、値のズレが複数の実測点で完全に一定のオフセットになっている場合は、探索アルゴリズムのバグではなく初期値・zero 点のような加法的な較正定数の誤りである可能性が高い、という判断材料も得られた。逆に、既存のテストが「これは既知の別課題として検証対象から外す」と明記している箇所を安易に一緒くたに直そうとすると、無関係な不具合(今回で言えば timezone 起因の epoch 自己不整合)を誤って自分の変更のせいだと早合点しかねない。両者を独立に検証してから結論を出すべき。
-18. SpanLike 文法拡張: `前` / `後` を省略した表現(例: `'1年2ヶ月'`)を `後` として解釈するようにした。`parse_span_parts()` が前/後 の接尾辞を必須としていたのを、見つからない場合は本文全体をそのまま解釈しつつ方向を `後` にフォールバックする形に変更。`add()`/`sub()`/`format_span()` など `SpanLike` を受け取る経路すべてに自動的に効く。
-19. mean モデル経路の SolarObservation 補完(続き): `hasSolarEvents` を持たない簡易(mean)太陽モデル経由の `solor()` に `日の出方位`/`日の入方位` を追加した。既存の `方向`(=日の出方位の値)を日の入側は真北基準で反転(`2π - 方向`)して求める。`cos(時角)` が偶関数であるため日の出側の式では日の入との判別ができないが、精密モデル(`EarthSolarOrbital`)の実測値と比較して分点付近で最大0.25°程度(赤緯を1日一定とみなす近似の範囲内)しか乖離しないことを確認済み。
-20. english 数詞の衝突回避: `english.lower`/`english.title` の `regex` が `[A-Za-z]+(?:[- ][A-Za-z]+)*` で任意の英字列を無条件に飲み込んでおり、同じ format 文字列内の元号名・曜日名等の他の英字トークンと衝突しうる不具合を修正した。数詞語彙(`ENGLISH_ONES`/`ENGLISH_TENS`/`hundred`/`thousand`)だけに一致する正規表現に差し替え、`seventeen` が `seven` の接頭辞を含む等の理由で語彙を長さ降順に `|` 連結する形にした(先頭文字のみ大小両対応、`englishize()`/title 版のいずれも先頭大文字化しか行わないため)。
-21. `export *` の tslib バンドル非互換性を修正: `src/index.ts`・`src/sample.ts`・`src/sample/index.ts`・`src/naoj.ts`・`src/naoj/index.ts`・`src/nasa/index.ts`・`src/fancy-date.ts`(内部で `export * from './orbital-model'` を1箇所使用)の計7箇所すべての `export *` を明示的な named export(`export { A, B, ... } from './xxx'`、型は `export type { ... }`)に置き換えた。書き換え後にエクスポートされる値の集合が変更前後で完全一致すること(165件の named export、過不足ゼロ)を実行時に突き合わせて確認し、さらに esbuild で実際に bundle した上で `Calendar`/`Tempo`/`to_msec` が `undefined` にならないこと(元の不具合の再現条件そのもの)を確認した。
-22. `def_zero()` の日次巡回トークン二重シフトバグを修正: E(六曜等)/F(九星)/C(十干)/B(十二支)/A(日干支)/V(宿)の各ゼロ点が、`d`(暦日)自身のシフト分だけ既に引かれた `day`(`hour - idx.d*msec.day`)を起点に、さらに各トークン自身の idx ぶんも引く形になっており、`d` のシフトが二重に効いていた。d のシフトを含まない `hour` を起点にするよう修正した。この結果、Julian の anchor `'1582/10/5(金)...'` が示す「1582年10月5日は金曜日」という史実や、`同時性`テストで同一UTC瞬間を指す複数の暦の日干支が一致することを確認した。平気法・定気法はこのバグを anchor の日干支の値を手動でズラす(13番)ことで結果的に迂回していたため、真因を修正した上で anchor を本来の辛巳(2629年12月7日/11月24日いずれも実際の日干支)へ戻し、2020年1月22日=甲子という既知の事実との一致を再確認した(この修正で Julian/Romulus/アマンタ/プールニマンタ等の日次巡回トークンのスナップショットも連動して更新されている)。
-23. 定気法(観測太陰太陽暦モデル)の `.parse()` 年逆算バグを修正: `parse_by()` の年逆算式(`zero + y*msec.year` を `calc.eras[G][2]` 経由の元号相対年で解決)は、平気法のような mean モデルでは `calc.zero.season` 相対の連続 index を前提にしていたが、定気法のような実軌道(観測太陰太陽暦)モデルでは `calc.eras[G][2]` がグレゴリオ暦の西暦年そのものになる(`to_tempos()` 側の `ObservedLunisolarYearRule` の仕様)ため数値体系が食い違い、`定気法.parse('令和6年3月10日', 'Gy年M月d日')` が「貞治3年3月9日」(660年ズレ)になっていた。観測太陰太陽暦モデルの場合は、元号自身が実際に開始した msec(`calc.eras[G][1]`、計算方式に依存しない事実)を起点に、実際の `lunisolar()` 探索(37ヶ月窓の朔・節気探索)で目標のグレゴリオ暦年へ収束させるよう分岐を追加した(収束は通常1回、念のため上限3回)。修正後は年・月が正しく解決される(令和6年3月10日→令和6年3月9日等、日レベルで1日程度のズレが残る。これは月内日を平均朔望月ベースの近似式で決めている既存の設計によるもので、年が660年ズレる主要因とは別の、より小さな既知の限界として development-notes.md に記録した)。
-24. 極域での不定時法(`daily('Sunny')`)を construction 時点で例外化: `.init()` の冒頭で `this.dic.is_solor && 66.5 <= Math.abs(this.dic.geo[0])` を検査し、極圏以遠の緯度で不定時法を構築しようとした場合に例外を投げるようにした。`.spot()`/`.daily()` の呼び出し順に依存しないこと、既存の平気法・定気法(緯度約35.7度)には影響しないことをテストで確認済み。
-25. ロムルス暦・ユリウス暦を不定時法化: 両暦に `.daily('Sunny')` を追加した。`solor()`(日の出/日の入りの実際の msec 値)自体は `is_solor` に関わらず同一であることをトレースで確認済みで、変化するのは `format(msec,'HH:mm')` 等での表示規約(等時法読みか不定時法読みか)だけであり天文計算への回帰は無い。既存スナップショット(`太陽の動き`/`同時性 春分`/`ロムルス歴 dic`/`ロムルス歴 二十四節季と月相`)は表示規約の変化を反映して更新した。
-26. バビロニア暦(カスプ/ベール)・オスマン帝国の時刻制度(季節時法/アラトゥルカ)を追加: `src/sample/astro.ts` に `Babylon`/`Istanbul` の SPOT、`src/sample/locale.ts` にバビロニア月名(ニサンヌ〜アダル)を追加し、`src/sample/calendars.ts` に4つのサンプル暦を追加した。バビロニア暦は平気法と同じ mean モデルの太陰太陽暦(月構造・月名を共有し、時刻体系だけがカスプ=不定時法/ベール=1日12等分の等時法で異なる)。オスマン帝国の2暦はユリウス暦の日付構造を流用し、季節時法=不定時法/アラトゥルカ=等時法で分けた。1日の日没起点(既知の制約、development-notes.md参照)は実装していない。`__tests__/babylon-ottoman-spec.js` で往復・月名・時刻体系・極域ガード非抵触を検証済み。
+Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.unicode.org/index/cldr-spec/plural-rules) / [UTS #35 Numbers](https://www.unicode.org/reports/tr35/dev/tr35-numbers.html) / [Russian numerals - Wikipedia](https://en.wikipedia.org/wiki/Russian_numerals) / [Polish numerals - Wikipedia](https://en.wikipedia.org/wiki/Polish_numerals) / [Arabic grammar - Wikipedia](https://en.wikipedia.org/wiki/Arabic_grammar) / [No Gender Polarity in Arabic Numeral Phrases (Linguistic Inquiry)](https://direct.mit.edu/ling/article/52/3/441/97424/No-Gender-Polarity-in-Arabic-Numeral-Phrases) / [Swahili grammar - Wikipedia](https://en.wikipedia.org/wiki/Swahili_grammar) / [Japanese counter word - Wikipedia](https://ja.wikipedia.org/wiki/Japanese_counter_word) / [Tone sandhi - Wikipedia](https://ja.wikipedia.org/wiki/Tone_sandhi) / [Korean numerals - Wikipedia](https://en.wikipedia.org/wiki/Korean_numerals) / [大字(数字) - Wikipedia](<https://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AD%97_(%E6%95%B0%E5%AD%97)>) / [廿 - Wiktionary](https://ja.wiktionary.org/wiki/%E5%BB%BF) / [塵劫記 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%A1%B5%E5%8A%AB%E8%A8%98) / [阿僧祇 - Wikipedia](https://ja.wikipedia.org/wiki/%E9%98%BF%E5%83%A7%E7%A5%87) / [京(数) - Wikipedia](<https://ja.wikipedia.org/wiki/%E4%BA%AC_(%E6%95%B0)>) / [四の字 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%9B%9B%E3%81%AE%E5%AD%97) / [縦書きの数字の書き方](https://everydaygoodthing.com/1460.html)
 
-## 直近の実装順
+### 暦法・天文モデルの拡張
 
-1. エチオピア暦など、コプト暦と同系統の地域暦を検討する。
+- インド系暦を本格対応する場合、日の出始まりの civil day 自体は `SolarEventDayTempoRule(..., 'sunrise')` で表現できる。ただしヒンドゥー暦・パンチャーンガの実務では「日の出時点で存在する tithi をその日の日付/祭日に割り当てる」層が本体になる。必要な追加要素は、(1) tithi(月太陽離角12度ごとの30分割)・paksha(白分/黒分)・nakshatra/yoga/karana 等の位相トークン、(2) 日の出時点での tithi 採用、欠日(kshaya tithi)・重日(adhika/repeated tithi)の扱い、(3) amanta/purnimanta の月名方式、adhika masa/kshaya masa の月規則、(4) 太陽入宮(sankranti)による sidereal solar month と ayanamsha/黄道基準の選択、(5) 地域・宗派・祭日ごとの「前日/翌日採用」「日の出前後の持続条件」などの判定 DSL。単に `dawn()` を追加するだけでは不十分で、月相日を civil day へ投影する専用 rule/assignment 層が必要。
+- 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
+- 歴史的時刻表現として、定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。ローマ・ユリウス暦サンプルでは、H を horae temporariae、m を pars minuta として表示し、秒・ミリ秒は標準表示から外した。秒は内部精度としては残すが、古代/中世以前の生活時刻語彙として一般化しない。
+- 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。今後は楕円軌道、彗星、多星系の暦を検討する。
+- 暦外期間は、ロムルス暦のように暦月だけで1年を表現し尽くさない暦は他に類例が見当たらず、`month_divs` の `null` 要素 + `Indexer.list` への `null` 混在で表現した対応をこれ以上汎用化する必要は薄いと思われる。
+
+### 性能・パッケージ構成
+
+- `Calendar` 初期化の遅延化を検討した。`import { Calendar } from 'fancy-date'` だけで `src/sample/calendars.ts` の17個の `FancyDate` インスタンスが即座に構築され、Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因になった。
+- 調査の結果、コストの正体は「暦を何個構築するか」ではなく「モジュール評価そのもの」。`.init()` 配下は正規表現構築や固定長ループ中心で、天文学的な反復計算は `to_tempos()`/`lunisolar()` まで遅延されている。支配的コストは `sample/eras.ts` の元号配列や `naoj`/`nasa` の巨大な静的データ。
+- Proxy による遅延ゲッターは `.init()`/`.dup()` コストしか避けられず効果が小さい。同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しい。
+- サブパス分割(`fancy-date/calendars/core` 等)は実効性があるが、現行の `Calendar.X` 集約アクセスを使い続ける限り恩恵はゼロ。消費側がサブパス import へ移行する非互換な変更が要る。将来、1〜数暦だけを使う利用者が現れた場合の候補として保留する。
+- svelte-tick-timer の `/fancy` ページは17暦全部を意図的に同時表示するデモなので、暦単位の遅延化をしても結局全部使う。その用途への対処は `export const ssr = false` のままでよい。
+
+## 既知課題
+
+- `MeanLunisolarMonthRule` の年末閏月バグ: 閏月が年末に来る場合、`now_idx = mod(season.now_idx, termCount) >> 1` が0に巻き戻り、`parse_by()` の閏月シード式(月始め付近を想定)と噛み合わず round-trip が約1年ズレる。平気法でも再現し、40年間で8回程度。バビロニア暦カスプ/ベールでは `.notation({H:[12]})` による H.length の違いで `def_zero()` のタイムゾーン量子化が1時間ズレ、上記と合わさって稀に閏月の有無自体が食い違う(400ヶ月中7回)。`dusk()`/`dayBoundary()` とは無関係な latent bug。修正には `MeanLunisolarMonthRule`/`parse_by()` の閏月シード式の見直しが必要。
+- 元号あり暦の anchor 表記規約: `y` は実在の元号テーブルを持つ暦では元号相対の年数(例: 令和6年)に調整される。一方、`calendar()` の anchor 文字列に書く年数(例: 平気法の「2629年」=皇紀の絶対年)は era 調整前の生値として較正されるため、`format(anchor_epoch, 'y...')` は anchor 自身の絶対年ではなく era 調整後の値を返す。これは明確な二重計算ではなく表記規約の不一致に近い。修正には「anchor の年をどちらの規約として較正するか」という設計判断が要る。
+- `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dusk()` とは違い、月頭の切り詰め区間は既知の例外として残る。
+
+## 実装済み・検証済み
+
+### format / span / token 表記
+
+- `format_parts(utc, fmt)` / `format_parts_by(utc, fmt)` を追加した。戻り値は `{ token, text, ruby? }[]`。`token` は元の format token、リテラル片は `''`、`text` の連結は常に `format()` と一致する。`ruby` は本文 token に添える読みがある場合だけ付け、`dC60r`/`Er` のような `r` suffix token は読みそのものを `text` にするため `ruby` を付けない。`format_parts_by()` が内部で `to_tempos_input()` するため、数値・文字列・解決済み `Tempos` のいずれでも使える。
+- `format()` は内部的に `format_parts_by(...).map((p) => p.text).join('')` へ委譲する形にしたため、文字列出力と parts API の整合性を実装上保証している。旧 `format_by()` の役割は `format()` と `format_parts_by()` が巻き取った。
+- svelte-tick-timer の `/fancy` ページは `format_parts()` ベースへ移行し、空白 split と固定配列分割代入をやめた。`FormatPart` から `{ text, ruby }` を作って `<ruby>{text}<rt>{ruby}</rt></ruby>` に流し込む形になり、format 文字列・分割代入・テンプレートの三重管理を解消した。
+- `labels()` と `parse_span()` / `format_span()` を追加し、span の表記を暦ごとに調整できるようにした。
+- `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
+- 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
+- SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
+
+### 数詞・ロケール
+
+- 暦ごとの数値辞書を使った format/parse 入出力に対応した。
+- `perf:*` 系の性能測定スクリプトを追加した。入力検証強化(NaN/Infinity ガード追加)後に `bun run perf:core` を実行し、parse/format/to_tempos/span/add-sub/太陰太陽暦/天文現象の既存水準から劣化していないことを確認済み。
+- english 数詞の regex が任意の英字列を無条件に飲み込み、元号名・曜日名等と衝突しうる不具合を修正した。数詞語彙だけに一致する正規表現に差し替え、語彙を長さ降順に連結した。
+
+### 天文・観測・入力安全性
+
+- `SolarEventDayTempoRule(..., 'sunrise' | 'sunset')` を追加し、`RealSunsetDayTempoRule` は `sunset` 固定の薄い互換 wrapper にした。日の出/日没境界の差は `solor()` の `日の出`/`日の入` 選択だけに寄せた。
+- `LunarObservation`/`SolarObservation` に `has_sunrise`/`has_moonrise`/`has_transit`/`has_moonset` と `is_up_all_day` を追加した。対応する数値フィールドが NaN になりうる理由を型定義に JSDoc で明記した。`number | undefined` 化は内部影響が大きく見送った。
+- mean モデル経路の `solor()` に南中高度・日の出方位・日の入方位を補った。日の入方位は日の出方位を北基準で反転して求める。精密モデルとの差は分点付近で最大0.25度程度。
+- `format`/`add`/`sub`/`span` は既存の `to_tempos()`/`span_between()` 経由で NaN/Infinity を検出できる。`find()`、`solor()`、`lunar()`、`noon()` にも非有限値ガードを横展開した。
+
+### 暦サンプル・暦日境界
+
+- `sample.ts` を `src/sample/` に分割した。
+- `src/nasa` を追加し、Mars の太陽季節モデルを試験的に導入した。
+- 地域暦の足場として、ナボナサル紀元を anchor にした365日固定のエジプト民用暦を追加した。
+- `calendar()` に閏年 offset を追加し、Alexandria 地点のコプト暦を追加した。
+- ロムルス暦・ユリウス暦は、共和政期からユリウス暦採用後の帝政期まで市民生活が不定時法(horae temporariae、日の出・日の入りを基準に昼夜12等分)だったことに合わせ、`.division({ H: 'solar' })` を追加した。標準表示も `Ho mo` に寄せ、H は `hora prima`〜`hora duodecima` / `hora ... noctis`、m のラベルは不定時の第1細分(`pars minuta`)として扱う。夜はローマ軍制の vigiliae(4夜警)という別の数え方もあるが、現行 `H` は24スロット(夜12+昼12)の temporal-hour 表示に統一する。`solor()` の天文計算自体は `is_solor` に関わらず同一で、変化するのは表示規約のみ。
+- 極域での不定時法は construction 時点で例外化した。`.init()` 冒頭で `this.dic.is_solor && 66.5 <= Math.abs(this.dic.geo[0])` を検査する。66.5度は「これより先は確実に不可能」という下限であり、手前でも夏至/冬至付近の退化ケースは残る。
+- バビロニア暦(カスプ/ベール)・オスマン帝国の時刻制度(季節時法/アラトゥルカ)を追加した。バビロニア暦は平気法と同じ mean モデルの太陰太陽暦を使い、カスプ=不定時法+日没境界、ベール=1日12等分の等時法+固定境界で分けた。オスマン帝国の2暦はユリウス暦の日付構造を流用し、季節時法=不定時法、アラトゥルカ=等時法で分けた。
+- `dayBoundary(offsetHours)` は d/N(月内日)構築規則だけに作用する固定オフセットとして実装した。offsetHours は H.length ではなく day 長から換算する。def_zero の hour→day→month→year 連鎖へ直接入れると、月・年の zero 点まで動いてしまい、時刻体系だけが違う対の暦で日番号が大きく食い違うため避けた。
+- `dusk()` は `SolarEventDayTempoRule('sunset')` で実日没を暦日境界にする。月・年の開始候補も `StartAlignedTempoRule` で「その後に最初に来る実日没」へ丸め上げ、月初/年初直前の短い区間を前月末/前年末として扱う。これにより、月初の `d.succ()` と `add(..., '1日後')` の意味を一致させた。
+- `dusk()` の d/N では、`CachedTempoRule` に `parent.last_at` を cacheKey として渡し、異なる月親で同じ write_at のキャッシュが混ざらないようにした。
+- `find_span_time()` は `month.last_at + dayIndex*msec.day` ではなく `resolve_day_start()` を使うようにした。`dusk()`/`dayBoundary()` 暦で `add()`/`sub()` が1日早い日付を返す実バグを修正した。
+
+Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [不定時法の説明 - THE SEIKO MUSEUM GINZA](https://museum.seiko.co.jp/knowledge/relation_16/) / [和時計 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%92%8C%E6%99%82%E8%A8%88) / [Danna (Mesopotamian) - Wikipedia](<https://en.wikipedia.org/wiki/Danna_(Mesopotamian)>) / [Hour - Wikipedia (Babylonian hours)](https://en.wikipedia.org/wiki/Babylonian_hours) / [Equinoctial hours - Wikipedia](https://en.wikipedia.org/wiki/Equinoctial_hours) / [Babylonian calendar - Wikipedia](https://en.wikipedia.org/wiki/Babylonian_calendar) / [Witnesses of time: How Ottoman Empire measured time - Türkiye Today](https://www.turkiyetoday.com/culture/witnesses-of-time-how-the-ottoman-empire-measured-regulated-and-lived-time-3212480) / [Our Time: On the Durability of the Alaturka Hour System in the Late Ottoman Empire](https://www.academia.edu/10068187/_Our_Time_On_the_Durability_of_the_Alaturka_Hour_System_in_the_Late_Ottoman_Empire_International_Journal_of_Turkish_Studies_16_2010_47_69)
+
+### バグ修正・仕様整理
+
+- 干支のサンプル初期値の誤りを修正した。定気法の年干支(a)起点値が1968年の「戊申」になっていたが、平気法と同じ起点年(皇紀2629年=西暦1969年)の正しい年干支「己酉」に直した。
+- 日干支(A)起点値のズレを調査し、最終的な真因は `def_zero()` の日次巡回トークン二重シフトだった。`dC60/dC12/dC10/E/dC28` などの日次 cycle のゼロ点を、d 自身のシフト分を含まない `hour` 起点で計算するよう修正した。これにより Julian の anchor「1582年10月5日は金曜日」という史実や、同一UTC瞬間を指す複数暦の日干支が一致することを確認した。
+- 定気法(観測太陰太陽暦モデル)の `.parse()` 年逆算バグを修正した。観測モデルでは `ObservedLunisolarYearRule` がグレゴリオ暦年を使うため、平気法の連続 index 前提の `zero + y*msec.year` では約660年ズレていた。元号開始 msec を起点に `lunisolar()` 探索で目標年へ収束させる分岐を追加した。
+- `export *` の tslib バンドル非互換性を修正した。`src/index.ts`・`src/sample.ts`・`src/sample/index.ts`・`src/naoj.ts`・`src/naoj/index.ts`・`src/nasa/index.ts`・`src/fancy-date.ts` の計7箇所で `export *` を明示的な named export に置き換え、esbuild bundle で `Calendar`/`Tempo`/`to_msec` が undefined にならないことを確認した。
+
+## 調査メモ・教訓
+
+- 干支調査では、暦システム自身の自己無矛盾チェック(「anchor を format() したら anchor の値に戻るか」)だけでは不十分だった。2020年1月22日=甲子、皇紀2629年=西暦1969年で己酉など、独立に検証可能な実世界の事実と複数日付で突き合わせる方が、真の誤りと暦法差を分けやすい。
+- 値のズレが複数の実測点で一定の場合、探索アルゴリズムより初期値・zero 点のような加法的較正定数が疑わしい。
+- 既存テストが「既知の別課題として対象外」としている箇所を安易に一緒に直すと、無関係な不具合を自分の変更のせいだと誤診しやすい。独立に検証してから結論を出す。
+- 不定時法を極域へ正しく拡張する自然な答えは見当たらない。極域先住民の時間認識も「昼をN等分する」発想とは別系統で、南極観測基地も補給元国の標準時に合わせる例が多い。
+- 先住民の極域暦の計算機的表現では、イヌイットの13朔望月暦は「極夜明け最初の日の出」を年始にする候補がある。これは `has_sunrise` の false→true 遷移探索に近い。既存 `find()` は format 済み文字列条件しか扱えないため、`has_sunrise`/`is_up_all_day` のような生の太陽・月イベント判定を条件にできる探索 API が必要になりそう。
+- サーミの8季節暦は、生態/感覚に基づく季節境界であり、既存の年/月/日階層にそのまま乗せるのは無理がある。太陽黄経ベースの8分割で近似するなら、文化的運用の単純化であると明記する必要がある。
+
+Sources: [Sámi Eight-Season Calendar](https://www.outlooktraveller.com/experiences/in-the-arctic-time-moves-differently-inside-the-s%C3%A1mi-eight-season-calendar) / [Inuit astronomy](https://en.wikipedia.org/wiki/Inuit_astronomy) / [Time in Antarctica](https://grokipedia.com/page/Time_in_Antarctica)

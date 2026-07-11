@@ -212,27 +212,27 @@ describe('NAOJ lunisolar fixtures', () => {
     const nextDay = Calendar.GregorianAstronomical.parse('2024年3月11日')
     const nextYear = Calendar.GregorianAstronomical.parse('2025年2月28日')
 
-    for (const token of ['A', 'B', 'C', 'E', 'F', 'V']) {
+    for (const token of ['dC60', 'dC12', 'dC10', 'dC9', 'R6', 'LM27']) {
       const span = Calendar.定気法.span_obj(nextDay, base, { precise: token })
       expect(span.parts?.[0]).toMatchObject({ token })
       expect(span.label).toMatch(/(?:前|後)$/)
     }
 
-    for (const token of ['a', 'b', 'c', 'f']) {
+    for (const token of ['yC60', 'yC12', 'yC10', 'yC9']) {
       const span = Calendar.定気法.span_obj(nextYear, base, { precise: token })
       expect(span.parts?.[0]).toMatchObject({ token })
       expect(span.label).toMatch(/(?:前|後)$/)
     }
 
-    expect(Calendar.定気法.span_obj(nextYear, base, { precise: 'a' }).parts?.[0]).toMatchObject({
-      token: 'a',
+    expect(Calendar.定気法.span_obj(nextYear, base, { precise: 'yC60' }).parts?.[0]).toMatchObject({
+      token: 'yC60',
       unit: 'year',
       value: -1,
       label: '1年干支',
     })
 
-    expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'A' }).parts?.[0]).toMatchObject({
-      token: 'A',
+    expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'dC60' }).parts?.[0]).toMatchObject({
+      token: 'dC60',
       unit: 'day',
       value: -1,
       label: '1日干支',

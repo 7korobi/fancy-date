@@ -35,12 +35,22 @@ import {
   ObservedLunisolarMonthRule,
   ObservedLunisolarYearRule,
   OrbitalPhaseTempoRule,
+  SolarEventDayTempoRule,
   SolarDayHourTempoRule,
+  StartAlignedTempoRule,
   SubdivideTempoRule,
   TableTempoRule,
   Tempo,
 } from './tempo'
-import type { SolarDayHourBase, SubdivideBase, TempoBase, TempoLabelLike, TempoLike } from './tempo'
+import type {
+  SolarDayHourBase,
+  SubdivideBase,
+  TempoBase,
+  TempoEnvelope,
+  TempoLabelLike,
+  TempoLike,
+  TempoRule,
+} from './tempo'
 import { to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
@@ -118,8 +128,6 @@ type ALL_DIC =
   | 'J'
   | 'Q'
   | 'Y'
-  | 'b'
-  | 'c'
   | 'd'
   | 'p'
   | 'u'
@@ -127,22 +135,16 @@ type ALL_DIC =
   | 'x'
   | 'y'
 type ALGO_DIC =
-  | 'A'
-  | 'B'
-  | 'C'
   | 'E'
-  | 'F'
   | 'H'
   | 'M'
   | 'N'
   | 'S'
-  | 'V'
   | 'Z'
-  | 'a'
   | 'd'
-  | 'f'
   | 'm'
   | 's'
+  | CycleToken
 
 type ALL_CALC =
   | 'season'
@@ -188,15 +190,72 @@ type ZERO_CALC =
   | 'day'
   | 'jd'
 
-export type TempoDiff = TOKENS<ALL_DIC, number>
-export type TempoIdxs = TOKENS<ALL_DIC, number> & {
+export type TempoDiff = TOKENS<AnyDicToken, number>
+export type TempoIdxs = TOKENS<AnyDicToken, number> & {
   G_is_past?: boolean
   M_is_leap: boolean
 }
 type TempoMonth = {
   is_leap: boolean
 }
-export type Token = ALL_DIC | 'Zz'
+const year_cycle_tokens = [
+  'yC60',
+  'yC12',
+  'yC10',
+  'yC9',
+] as const
+type YearCycleToken = (typeof year_cycle_tokens)[number]
+const day_cycle_tokens = [
+  'dC60',
+  'dC12',
+  'dC10',
+  'dC9',
+  'dC7',
+  'dC8',
+  'dC28',
+] as const
+type DayCycleToken = (typeof day_cycle_tokens)[number]
+const calendar_note_tokens = [
+  'R6',
+  'LM27',
+] as const
+type CalendarNoteToken = (typeof calendar_note_tokens)[number]
+const cycle_tokens = [...year_cycle_tokens, ...day_cycle_tokens, ...calendar_note_tokens] as const
+type CycleToken = (typeof cycle_tokens)[number]
+type WeekCycleToken = Extract<DayCycleToken, 'dC7' | 'dC8' | 'dC10'>
+const year_cycle_zero_keys: Record<YearCycleToken, Extract<ZERO_CALC, 'year60' | 'year12' | 'year10' | 'year_s'>> = {
+  yC60: 'year60',
+  yC12: 'year12',
+  yC10: 'year10',
+  yC9: 'year_s',
+}
+const day_cycle_zero_keys: Record<DayCycleToken, Extract<ZERO_CALC, 'day60' | 'day12' | 'day10' | 'day_9' | 'week' | 'day28'>> = {
+  dC60: 'day60',
+  dC12: 'day12',
+  dC10: 'day10',
+  dC9: 'day_9',
+  dC7: 'week',
+  dC8: 'week',
+  dC28: 'day28',
+}
+const legacy_token_aliases = {
+  yC: 'yC60',
+  yCS: 'yC10',
+  yCB: 'yC12',
+  dC: 'dC60',
+  dCS: 'dC10',
+  dCB: 'dC12',
+  a: 'yC60',
+  c: 'yC10',
+  b: 'yC12',
+  A: 'dC60',
+  C: 'dC10',
+  B: 'dC12',
+  dCLM: 'dC28',
+} as const
+type LegacyTokenAlias = keyof typeof legacy_token_aliases
+type AnyDicToken = ALL_DIC | LegacyTokenAlias
+export type Token = ALL_DIC | 'Zz' | LegacyTokenAlias
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
 export type Precision = CorePrecision | Token
@@ -205,7 +264,7 @@ export type SpanDirection = '前' | '後'
 export type FindOrder = 1 | -1
 /**
  * SteppableTempoKey: Tempos の中で succ()/back() 等の遷移操作を実際に
- * 持つフィールドのキーだけを絞り込んだ型。Y/a/b/c/f/Q は TempoLabelLike
+ * 持つフィールドのキーだけを絞り込んだ型。Y/yC/yCB/yCS/Q は TempoLabelLike
  * (遷移操作を持たない)なのでここに含まれない
  * (find() の options.step を誤って周期ラベル側へ向けるのを型で防ぐ)。
  */
@@ -227,6 +286,14 @@ export type Span = {
   parts?: readonly SpanPart[]
   next_at?: number
   timeout?: number
+}
+export type FormatPart = {
+  /** 元の format token。リテラル片は空文字。例: 'yyyy', 'E', 'dC60o', ''。 */
+  token: string
+  /** この part が `format()` の出力へ寄与する文字列。全 part の text 連結は format() と一致する。 */
+  text: string
+  /** HTML ruby 等で使う読み。`r` suffix token 自体では text が読みになるため設定しない。 */
+  ruby?: string
 }
 export type SpanOptions = {
   precise?: boolean | Precision
@@ -258,12 +325,23 @@ type SpanTarget = {
 }
 export type Tempos = {
   Zz: Tempo<TempoBase>
+  dC60: Tempo<TempoBase>
+  dC12: Tempo<TempoBase>
+  dC10: Tempo<TempoBase>
+  dC9: Tempo<TempoBase>
+  dC7: Tempo<TempoBase>
+  dC8: Tempo<TempoBase>
+  dC28: Tempo<TempoBase>
+  R6: TempoLabelLike
+  LM27: TempoLabelLike
+  dC: Tempo<TempoBase>
+  dCB: Tempo<TempoBase>
+  dCS: Tempo<TempoBase>
   A: Tempo<TempoBase>
   B: Tempo<TempoBase>
   C: Tempo<TempoBase>
   D: Tempo<SubdivideBase>
   E: TempoLike | TempoLabelLike
-  F: Tempo<TempoBase>
   G: TempoLike | TempoLabelLike
   H: TempoLike
   J: Tempo<TempoBase>
@@ -271,14 +349,19 @@ export type Tempos = {
   N: Tempo<SubdivideBase> | undefined
   Q: TempoLabelLike
   S: Tempo<SubdivideBase>
-  V: TempoLike | TempoLabelLike
   Y: TempoLabelLike
   Z: Tempo<TempoBase>
+  yC60: TempoLabelLike
+  yC12: TempoLabelLike
+  yC10: TempoLabelLike
+  yC9: TempoLabelLike
+  yC: TempoLabelLike
+  yCB: TempoLabelLike
+  yCS: TempoLabelLike
   a: TempoLabelLike
   b: TempoLabelLike
   c: TempoLabelLike
   d: Tempo<SubdivideBase>
-  f: TempoLabelLike
   m: Tempo<SubdivideBase>
   p: Tempo<TempoBase> | undefined
   s: Tempo<SubdivideBase>
@@ -291,16 +374,91 @@ type DateLike = number | Tempos | string
 type DateRange = readonly [from: DateLike, to: DateLike]
 
 const core_tokens = 'GHMSdmpsy'
-const main_tokens = 'ABCEFabcfx' + core_tokens
-const sub_tokens = 'DJNQVYZuw'
+const main_tokens = 'Ex' + core_tokens
+const sub_tokens = 'DJNQYZuw'
 const all_tokens = main_tokens + sub_tokens
+const all_dic_tokens = [...all_tokens, ...cycle_tokens] as const
+const legacy_token_chars = Object.keys(legacy_token_aliases)
+  .filter((token) => token.length === 1)
+  .join('')
+const regexp_token_chars = all_tokens + legacy_token_chars
+
+const virtual_format_tokens = ['Ha', 'da'] as const
+const token_word_formats = [
+  ...virtual_format_tokens,
+  ...cycle_tokens.flatMap((token) => [`${token}o`, `${token}r`, token]),
+  ...Object.keys(legacy_token_aliases).flatMap((token) => [`${token}o`, `${token}r`, token]),
+]
+  .sort((a, b) => b.length - a.length)
+  .join('|')
 
 // y(年)は numeral_label()/numeral_label_ruby() 経由で yo/yr サフィックスを
 // 持てるように追加した(FancyDate.def_to_label() 末尾の y 配線を参照)。
 // 既存のフォーマット文字列に "yo"/"yr" という並びのリテラルは無い
 // (確認済み)ため、この拡張は後方互換。
 const reg_token =
-  /([ABCEFHMNQVZabcdfmsy][or]|([ABCDEFGHJMNQSVYZabcdfmpsuwxy])\2*)|''|'(''|[^'])+('|$)|./g
+  new RegExp(`(${token_word_formats}|[EHMNQZdmsy][or]|([${regexp_token_chars}])\\2*)|''|'(''|[^'])+('|$)|.`, 'g')
+
+function is_legacy_token_alias(token: string): token is LegacyTokenAlias {
+  return token in legacy_token_aliases
+}
+
+function is_cycle_token(token: string): token is CycleToken {
+  return (cycle_tokens as readonly string[]).includes(token)
+}
+
+function is_year_cycle_token(token: string): token is YearCycleToken {
+  return (year_cycle_tokens as readonly string[]).includes(token)
+}
+
+function is_day_cycle_token(token: string): token is DayCycleToken {
+  return (day_cycle_tokens as readonly string[]).includes(token)
+}
+
+function is_calendar_note_token(token: string): token is CalendarNoteToken {
+  return (calendar_note_tokens as readonly string[]).includes(token)
+}
+
+function token_base(token: Token): ALL_DIC | 'Zz' {
+  return is_legacy_token_alias(token) ? legacy_token_aliases[token] : token
+}
+
+function define_token_alias<T extends Partial<Record<string, unknown>>>(target: T, alias: string, source: string) {
+  Object.defineProperty(target, alias, {
+    configurable: true,
+    enumerable: false,
+    value: target[source],
+    writable: true,
+  })
+}
+
+function sync_legacy_token_aliases<T extends Partial<Record<AnyDicToken, unknown>>>(target: T) {
+  for (const legacy of Object.keys(legacy_token_aliases) as LegacyTokenAlias[]) {
+    define_token_alias(target, legacy, legacy_token_aliases[legacy])
+  }
+  return target
+}
+
+function format_token_parts(token: string): { top: ALL_DIC | 'Zz'; mode: string; size: number } | null {
+  if (token === 'Zz') return { top: 'Zz', mode: '', size: 1 }
+  const hasSuffix = token.endsWith('o') || token.endsWith('r')
+  const source = hasSuffix ? token.slice(0, -1) : token
+  const suffix = hasSuffix ? token.slice(-1) : ''
+  if (is_cycle_token(source)) {
+    return { top: source, mode: suffix, size: 1 }
+  }
+  if (is_legacy_token_alias(source)) {
+    return { top: legacy_token_aliases[source], mode: suffix, size: 1 }
+  }
+  const [top, mode = ''] = token
+  if (top && is_legacy_token_alias(top)) {
+    return { top: legacy_token_aliases[top], mode, size: token.length }
+  }
+  if (top && all_tokens.includes(top)) {
+    return { top: top as ALL_DIC, mode, size: token.length }
+  }
+  return null
+}
 
 type NUMBER_RANGE = [number, number?]
 type MEASURE = {
@@ -311,18 +469,65 @@ type MEASURE = {
 type FindMatcher = string | RegExp
 export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatcher }
 type FindBetween = DateRange
+const seasonal_note_label_map = Symbol('seasonal_note_label_map')
+type SeasonalNoteLabels = Record<string, string>
+type SeasonalNoteMap = Record<string, { is_cover(at: number): boolean }> & {
+  [seasonal_note_label_map]?: SeasonalNoteLabels
+}
+type DateNoteGroups = Record<string, Record<string, readonly (number | undefined)[]>>
+type NoteProvider = (utc: number, tempos: Tempos) => readonly string[]
+
+const default_zassetsu_note_labels: SeasonalNoteLabels = {
+  春彼岸: '彼岸',
+  秋彼岸: '彼岸',
+  春社日: '社日',
+  秋社日: '社日',
+  春土用: '土用',
+  夏土用: '土用',
+  秋土用: '土用',
+  冬土用: '土用',
+  春節分: '節分',
+  夏節分: '節分',
+  秋節分: '節分',
+  冬節分: '節分',
+}
+
+function with_seasonal_note_labels<T extends SeasonalNoteMap>(notes: T, labels: SeasonalNoteLabels): T {
+  Object.defineProperty(notes, seasonal_note_label_map, {
+    configurable: true,
+    enumerable: false,
+    value: labels,
+  })
+  return notes
+}
 
 const DEFAULT_LABELS: Readonly<SpanLabels> = {
+  yC60: '年干支',
+  yC10: '年干',
+  yC12: '年支',
+  yC9: '年九星',
+  dC60: '日干支',
+  dC10: '日干',
+  dC12: '日支',
+  dC9: '日九星',
+  dC7: '曜日',
+  dC8: '曜日',
+  dC28: '宿',
+  R6: '六曜',
+  LM27: '宿',
+  yC: '年干支',
+  yCS: '年干',
+  yCB: '年支',
+  dC: '日干支',
+  dCS: '日干',
+  dCB: '日支',
   a: '年干支',
   b: '年支',
   c: '年干',
-  f: '年九星',
   A: '日干支',
   B: '日支',
   C: '日干',
   E: '曜日',
-  F: '日九星',
-  V: '宿',
   N: '月相',
   Q: '四半期',
   Z: '節気',
@@ -340,12 +545,12 @@ const DEFAULT_LABELS: Readonly<SpanLabels> = {
   S: 'ミリ秒',
 }
 
-type IIDX = TOKENS<ALL_DIC, Indexer>
+type IIDX = TOKENS<AnyDicToken, Indexer>
 type IDIC = IIDX & {
   parse: string
   format: string
   numeral?: Numeral | null
-  // y(年)のような、algo() の list/rubys(静的配列)が現実的でない
+  // y(年)のような、notation() の list/rubys(静的配列)が現実的でない
   // 無界の数値トークン向けの、'o'/'r' サフィックス(yo/yr)専用の数詞。
   // bare の y が使う numeral とは独立に設定できる(理由は
   // FancyDate.numeral_label() のコメント参照)。
@@ -363,11 +568,16 @@ type IDIC = IIDX & {
   labels: SpanLabels
   start: [string, string, number]
   is_solor: boolean
+  day_offset_hours?: number
+  is_dusk: boolean
+}
+export type DivisionOptions = {
+  H?: false | 'equal' | 'solar'
 }
 
 type ICALC = {
   eras: ERA_WITH_YEAR[]
-  idx: TOKENS<ALL_DIC, number>
+  idx: TOKENS<AnyDicToken, number>
   zero: TOKENS<ZERO_CALC, number>
   msec: TOKENS<MSEC_CALC, number> & { moon?: number }
   range: TOKENS<RANGE_CALC, [number, number]>
@@ -431,38 +641,12 @@ function cloneValue<T>(value: T): T {
   return value
 }
 
-function to_indexs<T>(zero: T): TOKENS<ALL_DIC, T> {
-  let A, a, b, B, c, C, d, D, E, f, F, G, H, J, m, M, N, p, Q, s, S, u, V, w, x, y, Y, Z
-  A =
-    B =
-    C =
-    D =
-    E =
-    F =
-    G =
-    H =
-    J =
-    M =
-    N =
-    Q =
-    S =
-    V =
-    Y =
-    Z =
-    a =
-    b =
-    c =
-    d =
-    f =
-    m =
-    p =
-    s =
-    u =
-    w =
-    x =
-    y =
-      zero
-  return { A, B, C, D, E, F, G, H, J, M, N, Q, S, V, Y, Z, a, b, c, d, f, m, p, s, u, w, x, y }
+function to_indexs<T>(zero: T): TOKENS<AnyDicToken, T> {
+  const data = {} as TOKENS<AnyDicToken, T>
+  for (const key of all_dic_tokens) {
+    data[key] = zero
+  }
+  return sync_legacy_token_aliases(data) as TOKENS<AnyDicToken, T>
 }
 
 const shift_up = function (a, b, size) {
@@ -581,6 +765,8 @@ export class FancyDate {
   // リセットする(暦の再設定に追従する)。
   private _orbital_season_rule?: CachedTempoRule<TempoBase>
   private _solar_hour_rule?: CachedTempoRule<SolarDayHourBase>
+  private _real_sunset_day_rule?: CachedTempoRule<SubdivideBase>
+  private _real_sunset_day_core_rule?: SolarEventDayTempoRule
   // span/add/sub は「離れた2つの日時」を交互に問い合わせる(例:
   // span_obj() は from/to に加えて next_precise_span_at() で to を
   // 再度問い合わせる)。1スロットのキャッシュだと A→B→A の順で
@@ -615,7 +801,10 @@ export class FancyDate {
         msec: {},
         range: {},
       } as any
-      ;[...all_tokens].map((key) => (this.dic[key] = new Indexer([])))
+      for (const key of all_dic_tokens) {
+        this.dic[key] = new Indexer([])
+      }
+      sync_legacy_token_aliases(this.dic)
     }
   }
 
@@ -649,42 +838,101 @@ export class FancyDate {
     return this
   }
 
-  algo(o: Partial<TOKENS<ALGO_DIC, IndexerProps>>) {
+  notation(o: Partial<TOKENS<ALGO_DIC | LegacyTokenAlias, IndexerProps>>) {
+    const normalized = {} as Partial<TOKENS<ALGO_DIC, IndexerProps>>
+    let explicitWeekCycle: WeekCycleToken | undefined
     for (let key in o) {
       const val = o[key]
-      this.dic[key] = new Indexer(val)
+      const canonical = token_base(key as Token) as ALGO_DIC
+      this.dic[canonical] = new Indexer(val)
+      normalized[canonical] = val
+      if (canonical === 'E') {
+        const length = this.dic.E.length
+        if (length === 7 || length === 8 || length === 10) {
+          const weekCycle = `dC${length}` as WeekCycleToken
+          this.dic[weekCycle] = this.dic.E
+          explicitWeekCycle = weekCycle
+        }
+      } else if (canonical === 'dC7' || canonical === 'dC8') {
+        explicitWeekCycle = canonical
+      } else if (canonical === 'dC10' && !('dC12' in o) && !('dCB' in o)) {
+        explicitWeekCycle = canonical
+      }
+    }
+    sync_legacy_token_aliases(this.dic)
+
+    // dC60/dC12/dC10 と yC60/yC12/yC10(日/年の周期ラベル)を構築する。
+    // 旧 API の a/c/b/A/C/B 入力は上で canonical token へ正規化済み。
+    if (normalized.dC10?.[0] instanceof Array && normalized.dC12?.[0] instanceof Array) {
+      this.dic.yC10 = new Indexer(normalized.dC10)
+      this.dic.yC12 = new Indexer(normalized.dC12)
+      this.dic.dC10.zero = this.dic.dC12.zero = this.dic.dC60.zero
+      this.dic.yC10.zero = this.dic.yC12.zero = this.dic.yC60.zero
     }
 
-    // A B C a b c 日の不断、年の不断を構築
-    if (o.C?.[0] instanceof Array && o.B?.[0] instanceof Array) {
-      this.dic.c = new Indexer(o.C)
-      this.dic.b = new Indexer(o.B)
-      this.dic.C.zero = this.dic.B.zero = this.dic.A.zero
-      this.dic.c.zero = this.dic.b.zero = this.dic.a.zero
-    }
-
-    const { A, B, C, a } = this.dic
-    if (C.list && B.list) {
-      A.list = a.list = [...Array(A.length)].map((_, idx) => {
-        const c = C.list[idx % C.length]
-        const b = B.list[idx % B.length]
-        return `${c}${b}`
+    const { dC60, dC12, dC10, yC60 } = this.dic
+    if (dC10.list.length && dC12.list.length) {
+      dC60.list = yC60.list = [...Array(dC60.length)].map((_, idx) => {
+        const stem = dC10.list[idx % dC10.length]
+        const branch = dC12.list[idx % dC12.length]
+        return `${stem}${branch}`
       })
     }
 
-    if (C.rubys && B.rubys) {
-      A.rubys = a.rubys = [...Array(a.length)].map((_, idx) => {
-        const c = C.rubys[idx % C.length]
-        const b = B.rubys[idx % B.length]
-        return `${c.replace(/と$/, 'との')}${b}`
+    if (dC10.rubys.length && dC12.rubys.length) {
+      dC60.rubys = yC60.rubys = [...Array(yC60.length)].map((_, idx) => {
+        const stem = dC10.rubys[idx % dC10.length]
+        const branch = dC12.rubys[idx % dC12.length]
+        return `${stem.replace(/と$/, 'との')}${branch}`
       })
     }
+
+    define_token_alias(this.dic, 'E', explicitWeekCycle ?? this.week_cycle_token())
+    sync_legacy_token_aliases(this.dic)
 
     return this
   }
 
+  algo(o: Partial<TOKENS<ALGO_DIC | LegacyTokenAlias, IndexerProps>>) {
+    return this.notation(o)
+  }
+
+  division(options: DivisionOptions) {
+    if ('H' in options) {
+      const H = options.H
+      this.dic.is_solor = H === 'solar'
+    }
+    return this
+  }
+
   daily(is_solor: string | boolean = false) {
-    this.dic.is_solor = !!is_solor
+    return this.division({ H: is_solor ? 'solar' : false })
+  }
+
+  // 暦日の境界を実時刻の 0 時から offsetHours 時間ずらす(例: 18 なら日没
+  // 頃を境界とみなす暦向け)。あくまで固定オフセットであり、季節で日没
+  // 時刻が変動する暦には向かない(その場合は dusk()/RealSunsetDayTempoRule
+  // 側を使う)。d/N(月内日)の構築規則(day_rule() 参照)にのみ作用し、
+  // def_zero() の hour/day/month/year の連鎖には触れない——そこを直接
+  // ずらすと month/year の zero 点自体が offsetHours ぶん動いてしまい、
+  // 「時刻体系だけが違う」はずの対になる暦(例: オスマン季節時法/
+  // アラトゥルカ)の月内日が1日のうち大半でズレる実バグがあった
+  // (実測: 固定オフセットの月始点が実時法側と18時間ズレたことで、
+  // 1日のうち約75%の時間帯で日番号が食い違っていた)。noon()/solor() の
+  // 日の出没計算も this.dic.day_offset_hours の影響を受けない。
+  dayBoundary(offsetHours = 0) {
+    this.dic.day_offset_hours = offsetHours
+    return this
+  }
+
+  // 実際の(季節で変動する)日没時刻そのものを暦日の境界にする
+  // (RealSunsetDayTempoRule 参照)。dayBoundary() が固定オフセットなのに
+  // 対し、こちらは division({ H: 'solar' }) と表裏一体で、季節時法の暦(バビロニア暦
+  // カスプ、オスマン季節時法)が伝統的に採る「日没に日付が変わる」を
+  // 再現する。division({ H: 'solar' }) と同様、極域(66.5度以遠)では成立しないため
+  // init() で例外にする。
+  dusk(is_real_sunset: string | boolean = false) {
+    this.dic.is_dusk = !!is_real_sunset
     return this
   }
 
@@ -743,7 +991,7 @@ export class FancyDate {
   }
 
   init() {
-    // 不定時法(daily('Sunny'))は日の出・日の入りの間隔を等分するため、
+    // 不定時法(division({ H: 'solar' }))は日の出・日の入りの間隔を等分するため、
     // 極域(概ね北緯/南緯66.5度=極圏以遠)では日の出/日の入りが存在しない
     // 期間が生じ、そもそも成立しない。調査の結果、不定時法を極域に
     // 「正しく拡張する」実例・自然な答えは見当たらなかったため(README/
@@ -751,9 +999,13 @@ export class FancyDate {
     // construction 時点(init())で例外にする。66.5度は「これより先は
     // 確実に不可能」という下限であり、唯一の閾値ではない(手前でも夏至・
     // 冬至付近で退化するケースは残る)。
-    if (this.dic.is_solor && this.dic.geo && 66.5 <= Math.abs(this.dic.geo[0])) {
+    if (
+      (this.dic.is_solor || this.dic.is_dusk) &&
+      this.dic.geo &&
+      66.5 <= Math.abs(this.dic.geo[0])
+    ) {
       throw new Error(
-        `不定時法(daily('Sunny'))は極域(緯度${this.dic.geo[0]}度)では成立しません。極圏(66.5度)以遠では日の出・日の入りが存在しない期間が生じ、昼夜を等分する不定時法の前提が崩れます。`,
+        `不定時法(division({ H: 'solar' }))・日没起点の暦日(dusk())は極域(緯度${this.dic.geo[0]}度)では成立しません。極圏(66.5度)以遠では日の出・日の入りが存在しない期間が生じ、これらの前提が崩れます。`,
       )
     }
 
@@ -761,6 +1013,8 @@ export class FancyDate {
     // (古い設定に基づく envelope/lunisolar 結果を持ち越さないため)。
     this._orbital_season_rule = undefined
     this._solar_hour_rule = undefined
+    this._real_sunset_day_rule = undefined
+    this._real_sunset_day_core_rule = undefined
     this._lunisolar_cache.length = 0
 
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
@@ -880,7 +1134,12 @@ export class FancyDate {
     return 'string' === typeof tgt ? this.index(tgt, str) : cloneValue(tgt)
   }
   format(utc: DateLike, str?: string) {
-    return this.format_by(this.to_tempos_input(utc), str)
+    return this.format_parts_by(utc, str)
+      .map((part) => part.text)
+      .join('')
+  }
+  format_parts(utc: DateLike, str?: string) {
+    return this.format_parts_by(utc, str)
   }
 
   add(utc: DateLike, span: SpanLike) {
@@ -1038,21 +1297,27 @@ export class FancyDate {
       'Y',
       'w',
       'D',
-      'a',
-      'b',
-      'c',
-      'f',
-      'A',
-      'B',
-      'C',
-      'E',
-      'F',
-      'V',
+      ...year_cycle_tokens,
+      ...day_cycle_tokens,
+      ...calendar_note_tokens,
       'N',
       'Q',
       'Z',
       'Zz',
       'u',
+      'yC',
+      'yCB',
+      'yCS',
+      'dC',
+      'dCB',
+      'dCS',
+      'E',
+      'a',
+      'b',
+      'c',
+      'A',
+      'B',
+      'C',
     ].map((token) => [
       token as Token,
       this.span_part_unit(token as Token),
@@ -1239,7 +1504,13 @@ export class FancyDate {
             Math.max(0, Math.floor(month.size / this.calc.msec.day) - 1),
           )
         : target.d
-    const day = this.to_tempos(month.last_at + dayIndex * this.calc.msec.day).d
+    // month.last_at + dayIndex*msec.day という単純な等分割は、d/N の構築規則が
+    // dusk()/dayBoundary() で置き換わっている暦では正しくない(オフセットぶん
+    // ずれる、または実日没は等間隔でない)。resolve_day_start()(parse_by() の
+    // 逆方向解決と同じ仕組み)を再利用する——offset=0 の通常の暦では従来と
+    // 完全に同じ式になるため、既存の挙動は変えない(実測: 4暦とも
+    // add()/sub() が1日早い日付を返す実バグがあったため修正)。
+    const day = this.to_tempos(this.resolve_day_start(month.last_at, dayIndex)).d
     if (target.changedRank <= span_rank('d')) {
       return this.clamp_since(day, target.sourceDaySince)
     }
@@ -1443,7 +1714,7 @@ export class FancyDate {
     let step: SteppableTempoKey = 'y'
     const tokens = format.match(reg_token) ?? []
     for (const token of tokens) {
-      const candidate = this.find_step_for_token(token[0] as Token)
+      const candidate = this.find_step_for_token((format_token_parts(token)?.top ?? token[0]) as Token)
       if (this.find_step_rank(step) < this.find_step_rank(candidate)) {
         step = candidate
       }
@@ -1452,7 +1723,10 @@ export class FancyDate {
   }
 
   private find_step_for_token(token: Token): SteppableTempoKey {
-    switch (token) {
+    const base = token_base(token)
+    if (is_day_cycle_token(base) || is_calendar_note_token(base)) return 'd'
+    if (is_year_cycle_token(base)) return 'y'
+    switch (base) {
       case 'S':
         return 'S'
       case 's':
@@ -1472,12 +1746,6 @@ export class FancyDate {
       case 'd':
       case 'D':
       case 'w':
-      case 'A':
-      case 'B':
-      case 'C':
-      case 'E':
-      case 'F':
-      case 'V':
       case 'J':
         return 'd'
       default:
@@ -1665,8 +1933,9 @@ export class FancyDate {
   }
 
   private token_span_parts(from: number, to: number, token: Token) {
-    const fromTempo = this.to_tempos(from)[token]
-    const toTempo = this.to_tempos(to)[token]
+    const base = token_base(token)
+    const fromTempo = this.to_tempos(from)[base]
+    const toTempo = this.to_tempos(to)[base]
     if (!fromTempo || !toTempo) return []
     const value = toTempo.now_idx - fromTempo.now_idx
     return [
@@ -1680,14 +1949,13 @@ export class FancyDate {
   }
 
   private span_part_unit(token: Token): Unit {
-    switch (token) {
+    const base = token_base(token)
+    if (is_year_cycle_token(base)) return 'year'
+    if (is_day_cycle_token(base) || is_calendar_note_token(base)) return 'day'
+    switch (base) {
       case 'y':
       case 'u':
       case 'Y':
-      case 'a':
-      case 'b':
-      case 'c':
-      case 'f':
         return 'year'
       case 'M':
       case 'N':
@@ -1696,12 +1964,6 @@ export class FancyDate {
       case 'd':
       case 'D':
       case 'w':
-      case 'A':
-      case 'B':
-      case 'C':
-      case 'E':
-      case 'F':
-      case 'V':
         return 'day'
       case 'H':
         return 'hour'
@@ -1719,8 +1981,8 @@ export class FancyDate {
     return this.dic.labels[token] ?? String(token)
   }
 
-  private span_part_label(unit: keyof Tempos, count: number, fallbackUnit: string) {
-    const indexer = this.dic[unit]
+  private span_part_label(token: Token, count: number, fallbackUnit: string) {
+    const indexer = this.dic[token_base(token)]
     const relatives = indexer?.relatives
     if ('string' === typeof relatives) return `${count}${relatives}`
     const label = relatives?.[count]
@@ -1786,11 +2048,11 @@ export class FancyDate {
   }
 
   def_regex() {
-    let A, B, C, D, E, F, G, H, N, Q, S, V, Y, Z
-    let a, b, c, d, f, m, p, s, w, x, y
+    let A, B, C, D, E, G, H, N, Q, S, Y, Z
+    let a, b, c, d, m, p, s, w, x, y
     const number = (fallback?: string) => this.number_pattern(fallback)
     ;(() => {
-      A = B = C = E = F = G = H = N = V = Z = a = b = c = f = m = p = s = strategy
+      A = B = C = E = G = H = N = Z = a = b = c = m = p = s = strategy
       const M = () => `(閏?${number()})`
       const u = () => `(${number('[-\\d]+')})`
       D = Q = S = Y = d = w = y = () => `(${number()})`
@@ -1801,7 +2063,6 @@ export class FancyDate {
         C,
         D,
         E,
-        F,
         G,
         H,
         J,
@@ -1809,14 +2070,12 @@ export class FancyDate {
         N,
         Q,
         S,
-        V,
         Y,
         Z,
         a,
         b,
         c,
         d,
-        f,
         m,
         p,
         s,
@@ -1828,11 +2087,16 @@ export class FancyDate {
       for (const key in object) {
         const func: RegexFactory = object[key]
         const indexer: Indexer = this.dic[key]
+        if (!indexer) continue
         indexer.regex = func(indexer.list)
+      }
+      for (const key of cycle_tokens) {
+        const indexer: Indexer = this.dic[key]
+        indexer.regex = strategy(indexer.list)
       }
     })()
     ;(() => {
-      H = N = Q = V = d = m = s = strategy
+      H = N = Q = d = m = s = strategy
       const M = (list: string[]) => {
         // list に null(ロムルス暦の暦外期間ラベルのように、一部の要素だけ
         // ラベルを持ち残りは数値表示にフォールバックさせる設計、
@@ -1853,16 +2117,21 @@ export class FancyDate {
         return `(閏?${number()})`
       }
 
-      const object = { H, M, N, Q, V, Z, d, m, s }
+      const object = { H, M, N, Q, Z, d, m, s }
 
       for (const key in object) {
         const func: RegexFactory = object[key]
         const indexer: Indexer = this.dic[key]
+        if (!indexer) continue
         indexer.regex_o = func(indexer.list)
+      }
+      for (const key of cycle_tokens) {
+        const indexer: Indexer = this.dic[key]
+        indexer.regex_o = strategy(indexer.list)
       }
     })()
 
-    function strategy(list: string[]) {
+    function strategy(list: readonly string[]) {
       if (list && list.length) {
         if (list.every((s) => 1 === s.length)) {
           return `([${list.join('')}])`
@@ -1876,7 +2145,7 @@ export class FancyDate {
   }
 
   def_to_idx() {
-    let A, a, b, B, c, C, D, d, E, f, F, H, J, m, M, N, p, Q, s, S, u, V, w, x, y, Y, Z
+    let A, a, b, B, c, C, D, d, E, H, J, m, M, N, p, Q, s, S, u, w, x, y, Y, Z
     const numeric = (s: string) => this.parse_number(s)
     const G = function (this: Indexer, s: string): number {
       const idx = this.list?.indexOf(s)
@@ -1903,15 +2172,12 @@ export class FancyDate {
       B =
       C =
       E =
-      F =
       M =
-      V =
       Z =
       a =
       b =
       c =
       d =
-      f =
         function (this: Indexer, s: string): number {
           const idx = this.list?.indexOf(s)
           if (-1 < idx) {
@@ -1938,7 +2204,6 @@ export class FancyDate {
       C,
       D,
       E,
-      F,
       G,
       H,
       J,
@@ -1946,14 +2211,12 @@ export class FancyDate {
       N,
       Q,
       S,
-      V,
       Y,
       Z,
       a,
       b,
       c,
       d,
-      f,
       m,
       p,
       s,
@@ -1965,13 +2228,18 @@ export class FancyDate {
     for (let key in object) {
       const val: IndexFactory = object[key]
       const indexer: Indexer = this.dic[key]
+      if (!indexer) continue
       indexer.to_idx = val
+    }
+    for (const key of cycle_tokens) {
+      const indexer: Indexer = this.dic[key]
+      indexer.to_idx = A
     }
   }
 
   def_to_label() {
-    let A, B, C, E, F, N, Q, S, V, Y, Z
-    let a, b, c, d, f, m, p, s, u, w, x, y
+    let A, B, C, E, N, Q, S, Y, Z
+    let a, b, c, d, m, p, s, u, w, x, y
     const integer = (idx: number): LabelFactory => {
       return (_, val, size: number) => this.format_number(val.now_idx + idx, size)
     }
@@ -2018,14 +2286,13 @@ export class FancyDate {
     let H = (N = m = s = S = Y = u = y = integer(0))
     const D = (Q = d = p = w = integer(1))
     const J = (x = float)
-    A = B = C = E = F = V = Z = a = b = c = f = at(integer(1))
+    A = B = C = E = Z = a = b = c = at(integer(1))
     const object = {
       A,
       B,
       C,
       D,
       E,
-      F,
       G,
       H,
       J,
@@ -2033,14 +2300,12 @@ export class FancyDate {
       N,
       Q,
       S,
-      V,
       Y,
       Z,
       a,
       b,
       c,
       d,
-      f,
       m,
       p,
       s,
@@ -2052,27 +2317,42 @@ export class FancyDate {
     for (const key in object) {
       const val: LabelFactory = object[key]
       const indexer: Indexer = this.dic[key]
+      if (!indexer) continue
       indexer.to_value = val
+    }
+    for (const key of cycle_tokens) {
+      const indexer: Indexer = this.dic[key]
+      indexer.to_value = at(integer(1))
     }
 
     M = month(at(integer(1)))
     H = N = m = s = at(integer(0))
-    A = B = C = E = F = Q = V = Z = a = b = c = d = f = at(integer(1))
-    const object1 = { A, B, C, E, F, H, M, N, Q, V, Z, a, b, c, d, f, m, s }
+    A = B = C = E = Q = Z = a = b = c = d = at(integer(1))
+    const object1 = { A, B, C, E, H, M, N, Q, Z, a, b, c, d, m, s }
     for (const key in object1) {
       const val: LabelFactory = object1[key]
       const indexer: Indexer = this.dic[key]
+      if (!indexer) continue
       indexer.to_label = val
+    }
+    for (const key of cycle_tokens) {
+      const indexer: Indexer = this.dic[key]
+      indexer.to_label = at(integer(1))
     }
 
     const cut = () => ''
     M = month(at(cut))
-    A = B = C = E = F = H = N = Q = V = Z = a = b = c = d = f = m = s = at(cut)
-    const object2 = { A, B, C, E, F, H, M, N, Q, V, Z, a, b, c, d, f, m, s }
+    A = B = C = E = H = N = Q = Z = a = b = c = d = m = s = at(cut)
+    const object2 = { A, B, C, E, H, M, N, Q, Z, a, b, c, d, m, s }
     for (const key in object2) {
       const val: LabelFactory = object2[key]
       const indexer: Indexer = this.dic[key]
+      if (!indexer) continue
       indexer.to_ruby = val
+    }
+    for (const key of cycle_tokens) {
+      const indexer: Indexer = this.dic[key]
+      indexer.to_ruby = at(cut)
     }
 
     // y(年)は object/object1/object2 の対象に含めていない(list/rubys の
@@ -2084,10 +2364,23 @@ export class FancyDate {
     this.dic.y.to_ruby = (_list, val) => this.format_numeral_label_ruby(val.now_idx)
   }
 
+  private week_cycle_token(): WeekCycleToken {
+    const tokens = this.dic.start?.[1]?.match(reg_token) ?? []
+    const choices: WeekCycleToken[] = ['dC8', 'dC10', 'dC7']
+    for (const choice of choices) {
+      if (tokens.some((token) => format_token_parts(token)?.top === choice)) return choice
+    }
+    for (const choice of choices) {
+      if (this.dic.E === this.dic[choice]) return choice
+    }
+    return 'dC7'
+  }
+
   def_calc() {
     const season = sub_define(this.calc.msec.year, this.dic.Z.length)
     const month = daily_measure(this.calc.msec.year / this.dic.M.length, this.calc.msec.day)
-    const week = daily_define(this.dic.E.length * this.calc.msec.day, this.calc.msec.day)
+    const weekCycle = this.week_cycle_token()
+    const week = daily_define(this.dic[weekCycle].length * this.calc.msec.day, this.calc.msec.day)
 
     const hour = sub_define(this.calc.msec.day, this.dic.H.length)
     const minute = sub_define(hour.msec, this.dic.m.length)
@@ -2210,11 +2503,11 @@ export class FancyDate {
     const o = this.index(...this.dic.start)
     o.Z = (this.dic.Z.length * 1) / 8
     const year = (period || 0) * o.p + o.y
-    const year_s = year - o.f
-    const year10 = year - o.c
-    const year12 = year - o.b
-    const year60 = year - o.a
-    Object.assign(this.calc.zero, { year10, year12, year60, year_s })
+    const yearCycleZeros: Partial<Record<ZERO_CALC, number>> = {}
+    for (const token of year_cycle_tokens) {
+      yearCycleZeros[year_cycle_zero_keys[token]] = year - o[token]
+    }
+    Object.assign(this.calc.zero, yearCycleZeros)
     Object.assign(this.calc.idx, o)
   }
 
@@ -2298,7 +2591,7 @@ export class FancyDate {
     const mjd = to_tempo_bare(this.calc.msec.day, day_utc, -3506716800000).last_at //   -40587   * 86400000
 
     // 干支、九星、週
-    // E/F/C/B/A/V はいずれも d(暦日)とは別の、独立した日次巡回トークン
+    // E/dC60/dC12/dC10/dC28 はいずれも d(暦日)とは別の、独立した日次巡回トークン
     // なので、それぞれ自分自身の idx(anchor でのその token の値)だけを
     // 差し引いてゼロ点を求める必要がある。d で既に -idx.d 日ぶんシフト
     // 済みの `day` を起点にすると、d のシフト分が二重に効いてしまい
@@ -2306,12 +2599,13 @@ export class FancyDate {
     // 日ぶんずれた値になっていた)、anchor 自身の epoch を format() した
     // 結果が anchor 文字列と一致しなくなる。d のシフトを含まない `hour`
     // (anchor 実日の日付境界 = H-index 0 の位置)を起点にする。
-    const week = hour + zero_size('E', 'day')
-    const day_9 = hour + zero_size('F', 'day')
-    const day10 = hour + zero_size('C', 'day')
-    const day12 = hour + zero_size('B', 'day')
-    const day60 = hour + zero_size('A', 'day')
-    const day28 = hour + zero_size('V', 'day')
+    const dayCycleZeros: Partial<Record<ZERO_CALC, number>> = {}
+    for (const token of day_cycle_tokens) {
+      const zeroKey = day_cycle_zero_keys[token]
+      if (zeroKey === 'week') continue
+      dayCycleZeros[zeroKey] = hour + zero_size(token, 'day')
+    }
+    const week = hour + zero_size(this.week_cycle_token(), 'day')
     Object.assign(this.calc.zero, {
       period,
       era,
@@ -2324,11 +2618,7 @@ export class FancyDate {
       ld,
       mjd,
       cjd,
-      day_9,
-      day10,
-      day12,
-      day28,
-      day60,
+      ...dayCycleZeros,
     })
   }
 
@@ -2354,11 +2644,11 @@ export class FancyDate {
       leap: gaps.map((i) => parseInt((1 / i) as any)),
       is_legal_solor: is_just(4, this.dic.H.length),
       is_legal_eto:
-        is_just(this.dic.c.length, this.dic.a.length) &&
-        is_just(this.dic.b.length, this.dic.a.length),
+        is_just(this.dic.yCS.length, this.dic.yC.length) &&
+        is_just(this.dic.yCB.length, this.dic.yC.length),
       is_legal_ETO:
-        is_just(this.dic.C.length, this.dic.A.length) &&
-        is_just(this.dic.B.length, this.dic.A.length),
+        is_just(this.dic.dCS.length, this.dic.dC.length) &&
+        is_just(this.dic.dCB.length, this.dic.dC.length),
     }
   }
 
@@ -2485,17 +2775,24 @@ K   = @dic.earthy[2] / 360
   }
 
   雑節(utc: number, { Zz, d } = this.to_tempos(utc)) {
-    return resolve雑節ByMean(Zz, d, this.calc.msec.day, this.calc.zero.day10, this.dic.C.length)
+    if (hasSolarEvents(this.dic.sunny)) return this.雑節_by_phase(utc)
+    return with_seasonal_note_labels(
+      resolve雑節ByMean(Zz, d, this.calc.msec.day, this.calc.zero.day10, this.dic.dCS.length),
+      default_zassetsu_note_labels,
+    )
   }
 
   雑節_by_phase(utc: number) {
-    return resolve雑節ByPhase(
-      this.dic.sunny,
-      this.calc.msec.day,
-      this.calc.zero.day,
-      this.calc.zero.day10,
-      this.dic.C.length,
-      utc,
+    return with_seasonal_note_labels(
+      resolve雑節ByPhase(
+        this.dic.sunny,
+        this.calc.msec.day,
+        this.calc.zero.day,
+        this.calc.zero.day10,
+        this.dic.dCS.length,
+        utc,
+      ),
+      default_zassetsu_note_labels,
     )
   }
 
@@ -2570,34 +2867,108 @@ K   = @dic.earthy[2] / 360
     ))
   }
 
+  /**
+  * d/N(dusk() による日没起点の暦日)で使う SolarEventDayTempoRule('sunset') を
+   * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
+   * 日をまたぐ遷移だけ天文計算(日の入探索)のやり直しが必要になる。
+   * 束探索の起点(仮の civil day)には calc.zero.day(dusk() の有無に
+   * 関わらず常にオフセット無しの実時計基準)を使う。
+   *
+   * この規則インスタンスは d(実際の暦日)と N(mean太陰太陽暦の月相内日、
+   * is_table_leap/is_table_month な暦では d とは無関係の補助トークン)の
+   * 両方から共有されうる。CachedTempoRule の cacheKey に parent.last_at を
+   * 渡し、同じ write_at でも月の親境界が違う場合はキャッシュを共有しない。
+   * 以前は write_at の範囲だけでヒット判定していたため、異なる parent で
+   * 呼ばれるとキャッシュ済みの誤った now_idx を返す実バグがあった。
+   */
+  private real_sunset_day_core_rule(): SolarEventDayTempoRule {
+    return (this._real_sunset_day_core_rule ??= new SolarEventDayTempoRule(
+      this.dic.sunny,
+      this.dic.earthy,
+      this.dic.geo,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.msec.year,
+      this.calc.zero.season,
+      'sunset',
+    ))
+  }
+
+  private real_sunset_day_rule(): CachedTempoRule<SubdivideBase> {
+    return (this._real_sunset_day_rule ??= new CachedTempoRule(
+      this.real_sunset_day_core_rule(),
+      (base) => base.parent.last_at,
+    ))
+  }
+
+  private align_dusk_month_start(rawStart: number): number {
+    return this.real_sunset_day_core_rule().boundary_at_or_after(rawStart)
+  }
+
+  private month_rule<Base extends TempoBase>(rule: TempoRule<Base>): TempoRule<Base> {
+    return this.dic.is_dusk
+      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_dusk_month_start(rawStart))
+      : rule
+  }
+
+  private year_rule<Base extends TempoBase>(rule: TempoRule<Base>): TempoRule<Base> {
+    return this.dic.is_dusk
+      ? new StartAlignedTempoRule(rule, (rawStart) => this.align_dusk_month_start(rawStart))
+      : rule
+  }
+
+  // d/N(月内日)を組み立てる規則を dusk()/dayBoundary() の有無で切り替える。
+  private day_rule(): TempoRule<SubdivideBase> {
+    if (this.dic.is_dusk) return this.real_sunset_day_rule()
+    const offset = this.dic.day_offset_hours
+      ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
+      : 0
+    return new SubdivideTempoRule(this.calc.msec.day, offset)
+  }
+
   note(
     utc: number,
     tempos = this.to_tempos(utc),
     arg1 = this.雑節(utc, tempos),
     arg2 = this.節句(utc, tempos),
   ) {
-    let k
     const list: string[] = []
-    for (k in arg1) {
-      const t = arg1[k]
-      if (t.is_cover(tempos.d.center_at)) {
-        list.push(
-          k
-            .match(/.(彼岸|社日|節分|土用)|(.+)/)
-            .slice(1)
-            .join(''),
-        )
+    for (const provider of this.note_providers(arg1, arg2)) {
+      list.push(...provider(utc, tempos))
+    }
+    return list
+  }
+
+  private note_providers(seasonalNotes: SeasonalNoteMap, dateNoteGroups: DateNoteGroups): NoteProvider[] {
+    return [
+      (_utc, tempos) => this.seasonal_note_labels(seasonalNotes, tempos),
+      (_utc, tempos) => this.date_note_labels(dateNoteGroups, tempos),
+    ]
+  }
+
+  private seasonal_note_labels(notes: SeasonalNoteMap, tempos: Tempos) {
+    const list: string[] = []
+    const labels = notes[seasonal_note_label_map]
+    for (const name in notes) {
+      const note = notes[name]
+      if (note.is_cover(tempos.d.center_at)) {
+        list.push(labels?.[name] ?? name)
       }
     }
-    for (let root in arg2) {
-      const arg3 = arg2[root]
-      for (k in arg3) {
-        const [M, d, B, E] = arg3[k]
+    return list
+  }
+
+  private date_note_labels(groups: DateNoteGroups, tempos: Tempos) {
+    const list: string[] = []
+    for (const root in groups) {
+      const group = groups[root]
+      for (const name in group) {
+        const [M, d, B, E] = group[name]
         if (M && M !== tempos.M.now_idx) continue
         if (d && d !== tempos.d.now_idx) continue
         if (B && B !== tempos.B.now_idx) continue
         if (E && E !== tempos.E.now_idx) continue
-        list.push(k)
+        list.push(name)
       }
     }
     return list
@@ -2668,10 +3039,16 @@ K   = @dic.earthy[2] / 360
         ),
         { write_at: utc },
       ) as Tempo<TempoBase> & TempoMonth
-      N = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
-        write_at: utc,
-        parent: envelope_of(Nn),
-      })
+      // N はこの時点では常に「月相(朔望月内日)」という d とは独立の意味を
+      // 持つ。is_table_leap/is_table_month な暦(M/d は TableTempoRule 系で
+      // 別途構築される)では N はあくまで補助的な月相トークンのままなので
+      // dusk() を適用しない。is_table_leap でも is_table_month でもない
+      // (=最終的に d = N として使われる)場合のみ、N 自身が暦日境界を
+      // 表すため dusk() を適用する。
+      N = Tempo.at(
+        this.is_table_month ? new SubdivideTempoRule(this.calc.msec.day) : this.day_rule(),
+        { write_at: utc, parent: envelope_of(Nn) },
+      )
     }
 
     if (this.is_table_leap) {
@@ -2695,28 +3072,39 @@ K   = @dic.earthy[2] / 360
       // 相当の位置に飛び、find([...],[{y:'2021'}],{step:'y'}) が
       // 該当年を1件も見つけられなかった)。zero を絶対原点
       // (calc.zero.period)に統一することで、この食い違いごと解消する。
-      u = Tempo.at(new TableTempoRule(this.table.msec.year, this.calc.zero.period), {
+      const yearRule = new TableTempoRule(this.table.msec.year, this.calc.zero.period)
+      const rawYear = yearRule.at(utc)
+      // 表形式月の月テーブルは raw 年境界・raw 年長から選ぶ。dusk() で
+      // 公開上の u.last_at/u.next_at を日没へ丸めると u.size は365/366日
+      // ちょうどではなくなるため、ここで u.size をキーにしてはいけない。
+      const yearSize = rawYear.next_at - rawYear.last_at
+      u = Tempo.at(this.year_rule(yearRule), {
         write_at: utc,
       })
-      M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+      M = Tempo.at(this.month_rule(new TableTempoRule(this.table.msec.month[yearSize], rawYear.last_at)), {
         write_at: utc,
       }) as Tempo<TempoBase> & TempoMonth
-      d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
+      d = Tempo.at(this.day_rule(), {
         write_at: utc,
         parent: envelope_of(M),
       })
     } else {
       if (this.is_table_month) {
+        const yearRule = new FloorTempoRule(this.calc.msec.year, this.calc.zero.spring, [
+          { size: this.calc.msec.day, zero: this.calc.zero.day },
+        ])
+        const rawYear = yearRule.at(utc)
+        // 上の is_table_leap 分岐と同じ理由で、月テーブルは補正前の raw 年を
+        // 基準に選ぶ。公開上の u はこの後 year_rule() で日没へ丸める。
+        const yearSize = rawYear.next_at - rawYear.last_at
         u = Tempo.at(
-          new FloorTempoRule(this.calc.msec.year, this.calc.zero.spring, [
-            { size: this.calc.msec.day, zero: this.calc.zero.day },
-          ]),
+          this.year_rule(yearRule),
           { write_at: utc },
         )
-        M = Tempo.at(new TableTempoRule(this.table.msec.month[u.size], u.last_at), {
+        M = Tempo.at(this.month_rule(new TableTempoRule(this.table.msec.month[yearSize], rawYear.last_at)), {
           write_at: utc,
         }) as Tempo<TempoBase> & TempoMonth
-        d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
+        d = Tempo.at(this.day_rule(), {
           write_at: utc,
           parent: envelope_of(M),
         })
@@ -2740,16 +3128,18 @@ K   = @dic.earthy[2] / 360
           // 配線することで、TempoView 経由の succ()/back() が正しく
           // 年境界でリセットされる。
           u = Tempo.at(
-            new EraAdjustedTempoRule(
-              new ObservedLunisolarYearRule((at) => this.lunisolar(at)),
-              this.calc.msec.year,
-              this.table.msec.era,
-              this.calc.zero.era,
-              this.calc.eras,
+            this.year_rule(
+              new EraAdjustedTempoRule(
+                new ObservedLunisolarYearRule((at) => this.lunisolar(at)),
+                this.calc.msec.year,
+                this.table.msec.era,
+                this.calc.zero.era,
+                this.calc.eras,
+              ),
             ),
             { write_at: utc },
           )
-          M = Tempo.at(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec), {
+          M = Tempo.at(this.month_rule(new ObservedLunisolarMonthRule((at) => this.lunisolar(at), moon_msec)), {
             write_at: utc,
           }) as Tempo<TempoBase> & TempoMonth
           // d(月内日)は M の実区間(last_at)からの経過日数として求まる値
@@ -2761,7 +3151,7 @@ K   = @dic.earthy[2] / 360
           // 使えない値になっていた。last_at 自体は正しかったため find()/
           // to_table() には実害がなかったが、succ() の戻り値を直接使う
           // 呼び出し元には正しくない値を返していた)。
-          d = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
+          d = Tempo.at(this.day_rule(), {
             write_at: utc,
             parent: envelope_of(M),
           })
@@ -2770,24 +3160,47 @@ K   = @dic.earthy[2] / 360
           throw new Error('Lunar month calculation requires a satellite orbital period.')
         } else {
           u = Tempo.at(
-            new EraAdjustedTempoRule(
-              new FloorTempoRule(
+            this.year_rule(
+              new EraAdjustedTempoRule(
+                new FloorTempoRule(
+                  this.calc.msec.year,
+                  this.calc.zero.season + this.calc.msec.season,
+                  [
+                    { size: moon_msec, zero: this.calc.zero.moon },
+                    { size: this.calc.msec.day, zero: this.calc.zero.day },
+                  ],
+                ),
                 this.calc.msec.year,
-                this.calc.zero.season + this.calc.msec.season,
-                [
-                  { size: moon_msec, zero: this.calc.zero.moon },
-                  { size: this.calc.msec.day, zero: this.calc.zero.day },
-                ],
+                this.table.msec.era,
+                this.calc.zero.era,
+                this.calc.eras,
               ),
-              this.calc.msec.year,
-              this.table.msec.era,
-              this.calc.zero.era,
-              this.calc.eras,
             ),
             { write_at: utc },
           )
-          M = Nn
-          d = N
+          if (this.dic.is_dusk) {
+            M = Tempo.at(
+              this.month_rule(
+                new MeanLunisolarMonthRule(
+                  moon_msec,
+                  this.calc.zero.moon,
+                  this.calc.msec.day,
+                  this.calc.zero.day,
+                  this.dic.Z.length,
+                  resolve_season,
+                ),
+              ),
+              { write_at: utc },
+            ) as Tempo<TempoBase> & TempoMonth
+            d = Tempo.at(this.day_rule(), {
+              write_at: utc,
+              parent: envelope_of(M),
+            })
+            N = d
+          } else {
+            M = Nn
+            d = N
+          }
         }
       }
     }
@@ -2849,7 +3262,7 @@ K   = @dic.earthy[2] / 360
     const x = this.dic.x.tempo
 
     // u はここまでで確定している(era 調整含む)ので、以降 u の実区間を
-    // 参照する箇所(D/Y/a/b/c/f)はすべてこの envelope を使い回す。
+    // 参照する箇所(D/Y/yC60/yC12/yC10/yC9)はすべてこの envelope を使い回す。
     const uEnvelope = envelope_of(u)
 
     // 年初来番号
@@ -2860,6 +3273,8 @@ K   = @dic.earthy[2] / 360
       write_at: utc,
       parent: envelope_of(w0),
     })
+    // D(年初来日数)は d(月内日)とは別の関心事(年内の通し日数)なので、
+    // dusk()/dayBoundary() の対象にしない(常に実時計 0 時起点のまま)。
     const D = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
       write_at: utc,
       parent: uEnvelope,
@@ -2883,80 +3298,58 @@ K   = @dic.earthy[2] / 360
     // 「甲辰」になっていた)。u.raw_now_idx(元号非依存の絶対年、元号を
     // 持たない暦では now_idx と同じ)を使うことで、元号の有無に関わらず
     // 初期値定義と自己無矛盾になる。
-    const a = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year60, this.dic.a.length))
-    const b = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year12, this.dic.b.length))
-    const c = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year10, this.dic.c.length))
-    const f = cyclic_label(uEnvelope, mod(u.raw_now_idx - this.calc.zero.year_s, this.dic.f.length))
+    const yearCycles = {} as Record<YearCycleToken, TempoLabelLike>
+    for (const token of year_cycle_tokens) {
+      const zero = this.calc.zero[year_cycle_zero_keys[token]]
+      yearCycles[token] = cyclic_label(uEnvelope, mod(u.raw_now_idx - zero, this.dic[token].length))
+    }
+    const { yC60, yC12, yC10, yC9 } = yearCycles
 
     // 月不断(四半期は月をまたぐため、区間は M(現在の月)のものをそのまま使う。
     // 四半期全体の境界ではない点に注意)
     const Q = cyclic_label(envelope_of(M), Math.floor((4 * M.now_idx) / this.dic.M.length))
 
     // 日不断(固定 zero からの周期を length で割った余りをラベルにする)
-    const A = Tempo.at(
-      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day60, this.dic.A.length),
-      {
+    const dayCycles = {} as Record<DayCycleToken, Tempo<TempoBase>>
+    for (const token of day_cycle_tokens) {
+      const zero = this.calc.zero[day_cycle_zero_keys[token]]
+      dayCycles[token] = Tempo.at(new CyclicDayTempoRule(this.calc.msec.day, zero, this.dic[token].length), {
         write_at: utc,
-      },
-    )
-    const B = Tempo.at(
-      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day12, this.dic.B.length),
-      {
-        write_at: utc,
-      },
-    )
-    const C = Tempo.at(
-      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day10, this.dic.C.length),
-      {
-        write_at: utc,
-      },
-    )
-    const F = Tempo.at(
-      new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day_9, this.dic.F.length),
-      {
-        write_at: utc,
-      },
-    )
-
-    let E: TempoLike | TempoLabelLike
-    let V: TempoLike | TempoLabelLike
-    if (this.is_table_leap) {
-      // 旧暦では、週は月初にリセットする。
-      E = Tempo.at(
-        new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.week, this.dic.E.length),
-        {
-          write_at: utc,
-        },
-      )
-      V = Tempo.at(
-        new CyclicDayTempoRule(this.calc.msec.day, this.calc.zero.day28, this.dic.V.length),
-        {
-          write_at: utc,
-        },
-      )
-    } else {
-      // 月/日の位置から直接導く番号であり、固定 zero からの日周期(A/B/C/F や
-      // is_table_leap の E/V)とは別の意味付けなので、CyclicDayTempoRule
-      // (TempoView) には載せない。この now_idx は日周期の連番ではなく
-      // 月/日から都度導く値であり、succ()/back() を正確に実装できない
-      // (resolve_orbital_season の Z / mean-lunisolar の Nn と同じ理由)。
-      // 実区間は今日(d)そのものなので、d の envelope をそのまま使う。
-      const dEnvelope = envelope_of(d)
-      E = cyclic_label(dEnvelope, mod(M.now_idx + d.now_idx, this.dic.E.length))
-      V = cyclic_label(
-        dEnvelope,
-        mod([11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx, this.dic.V.length),
-      )
+      })
     }
+    const { dC60, dC12, dC10, dC9, dC7, dC8, dC28 } = dayCycles
+
+    // R6/LM27 は旧暦月日から導く暦注であり、日不断 cycle ではない。
+    // 実区間は今日(d)そのものなので、d の envelope を使う。
+    const dEnvelope = envelope_of(d)
+    const R6 = cyclic_label(dEnvelope, this.dic.R6.length ? mod(M.now_idx + d.now_idx, this.dic.R6.length) : 0)
+    const LM27 = cyclic_label(
+      dEnvelope,
+      this.dic.LM27.length
+        ? mod([11, 13, 15, 17, 19, 21, 24, 0, 2, 4, 7, 9][M.now_idx] + d.now_idx, this.dic.LM27.length)
+        : 0,
+    )
+    const E = { dC7, dC8, dC10 }[this.week_cycle_token()]
 
     return {
       Zz,
-      A,
-      B,
-      C,
+      dC60,
+      dC12,
+      dC10,
+      dC9,
+      dC7,
+      dC8,
+      dC28,
+      R6,
+      LM27,
+      dC: dC60,
+      dCB: dC12,
+      dCS: dC10,
+      A: dC60,
+      B: dC12,
+      C: dC10,
       D,
       E,
-      F,
       G,
       H,
       J,
@@ -2964,14 +3357,19 @@ K   = @dic.earthy[2] / 360
       N,
       Q,
       S,
-      V,
       Y,
       Z,
-      a,
-      b,
-      c,
+      yC60,
+      yC12,
+      yC10,
+      yC9,
+      yC: yC60,
+      yCB: yC12,
+      yCS: yC10,
+      a: yC60,
+      b: yC12,
+      c: yC10,
       d,
-      f,
       m,
       p,
       s,
@@ -2987,11 +3385,19 @@ K   = @dic.earthy[2] / 360
     const items = tgt.match(reg)
     if (!items) throw new Error(`invalid match ${tgt} ${reg}`)
 
+    let dayPeriod: number | undefined
     const iterable = items.slice(1)
     for (let p = 0; p < iterable.length; p++) {
       let s = iterable[p]
       const token = tokens[p]
-      const [top] = token
+      if (token === 'Ha') {
+        dayPeriod = s === '午後' ? 1 : 0
+        continue
+      }
+      if (token === 'da') continue
+      const parts = format_token_parts(token)
+      if (!parts) continue
+      const { top } = parts
       const dic = this.dic[top]
       if (dic) {
         if ('M' === top && '閏' === s[0]) {
@@ -3004,6 +3410,10 @@ K   = @dic.earthy[2] / 360
         data[top] = dic.to_idx(s)
       }
     }
+    if (dayPeriod != null) {
+      const half = this.dic.H.length / 2
+      data.H = mod(data.H, half) + dayPeriod * half
+    }
     return data
   }
 
@@ -3012,10 +3422,10 @@ K   = @dic.earthy[2] / 360
     const data = this.get_dic(src, tokens, this.regex(tokens))
 
     if (data.G_is_past) {
-      if (tokens.some((token) => 'y' === token[0])) {
+      if (tokens.some((token) => format_token_parts(token)?.top === 'y')) {
         data.y = 1 - data.y
       }
-      if (tokens.some((token) => 'Y' === token[0])) {
+      if (tokens.some((token) => format_token_parts(token)?.top === 'Y')) {
         data.Y = 1 - data.Y
       }
       delete data.G_is_past
@@ -3025,10 +3435,16 @@ K   = @dic.earthy[2] / 360
       data.p = Math.floor(data.y / this.dic.p.length)
       data.y = data.y - data.p * this.dic.p.length
     }
-    data.c = mod(data.a, this.dic.c.length)
-    data.b = mod(data.a, this.dic.b.length)
-    data.C = mod(data.A, this.dic.C.length)
-    data.B = mod(data.A, this.dic.B.length)
+    const parsedTokens = new Set(tokens.map((token) => format_token_parts(token)?.top))
+    if (parsedTokens.has('yC60')) {
+      data.yC10 = mod(data.yC60, this.dic.yC10.length)
+      data.yC12 = mod(data.yC60, this.dic.yC12.length)
+    }
+    if (parsedTokens.has('dC60')) {
+      data.dC10 = mod(data.dC60, this.dic.dC10.length)
+      data.dC12 = mod(data.dC60, this.dic.dC12.length)
+    }
+    sync_legacy_token_aliases(data)
     return data
   }
 
@@ -3036,14 +3452,28 @@ K   = @dic.earthy[2] / 360
     const reg = ['^']
     const escape_regex = (value: string) => value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
     tokens.forEach((token) => {
-      const [top, mode] = token
+      if (token === 'Ha') {
+        reg.push('(午前|午後)')
+        return
+      }
+      if (token === 'da') {
+        reg.push('(白分|黒分)')
+        return
+      }
+      const parts = format_token_parts(token)
+      if (!parts) {
+        reg.push(`(${token.replace(/([\[\]().*?])/g, '\\$1')})`)
+        return
+      }
+      const { top, mode } = parts
       const dic = this.dic[top]
       if (dic) {
-        if (('y' === top || 'Y' === top) && !'or'.includes(mode)) {
+        const isLabelMode = mode === 'o' || mode === 'r'
+        if (('y' === top || 'Y' === top) && !isLabelMode) {
           const past = this.dic.G.list[0]
           const prefix = past ? `(?:${escape_regex(past)}|-)?` : '-?'
           reg.push(`(${prefix}${this.number_pattern()})`)
-        } else if ('or'.includes(mode)) {
+        } else if (isLabelMode) {
           reg.push(dic.regex_o)
         } else {
           reg.push(dic.regex)
@@ -3100,6 +3530,7 @@ K   = @dic.earthy[2] / 360
     let { M_is_leap, G, p, y, M, d, H, m, s, S, J, D, Y, Z, N, Q, u, w } = data
 
     let utc = H * this.calc.msec.hour + m * this.calc.msec.minute + s * this.calc.msec.second + S
+    const time_of_day = utc
 
     if (J) {
       return this.calc.zero.jd + J * this.calc.msec.day + utc
@@ -3139,7 +3570,11 @@ K   = @dic.earthy[2] / 360
       ;[p, y] = shift_up(p, y, this.dic.p.length)
     }
 
-    utc += Z * this.calc.msec.season + d * this.calc.msec.day
+    // d(月内日)の寄与は、is_dusk(dusk())な暦では単純な d*msec.day では
+    // 求まらない(月始点からの束探索が要る、下記 resolve_day_start() 参照)。
+    // 月始点は year/month section を経ないと確定しないため、d の加算は
+    // それらの後まで遅延する。
+    utc += Z * this.calc.msec.season
     const moon_msec = this.calc.msec.moon
     if (this.dic.moony && moon_msec != null) {
       utc += N * moon_msec
@@ -3220,10 +3655,113 @@ K   = @dic.earthy[2] / 360
       ]).at(M_utc).last_at
       utc += last_at - base
     }
-    return utc
+
+    // ここまでの utc は「月の開始 + Z/N の寄与 + 時刻部分」。d(月内日)の
+    // 寄与は月の開始が確定した今ここで加算する(dusk() の束探索は月開始を
+    // 起点にする必要があるため)。
+    const month_start = utc - time_of_day
+    return this.resolve_day_start(month_start, d) + time_of_day
   }
 
-  format_by(tempos: Tempos, str = this.dic.format) {
+  /**
+   * parse_by()/find_span_time() 用: 月内日 d の寄与を月の開始(month_start)
+   * に加算し、対象の暦日の開始時刻を返す。to_tempos() 側の day_rule() と
+   * 対になる逆方向の解決——dusk() な暦は d*msec.day という単純な等分割
+   * ではないため(実際の日没時刻は日ごとにわずかに変動する)、
+  * SolarEventDayTempoRule('sunset') と同じ束探索で解決する。dayBoundary() は
+   * 固定オフセットなので、加算するだけで閉じた式になる。
+   *
+   * dusk() 側は「d*msec.day の中央」を初期推測にした束探索だが、月始点
+   * (month_start)と実際の日没日グリッドの位相は一般に揃っていない
+   * (実測: 月始点直後の最初の実日没境界が month_start+0.74日ぶん先に
+   * ずれて始まっていた)。この位相ズレを見込まずに単発の推測だけで
+   * 決め打つと、d が大きくなるほどではなく最初の1日目からすでに
+   * 隣の日境界を誤って掴むことがある(実測: 日付境界がちょうど推測点の
+   * 前後で1日分ずれ、parse('...3日',...) が format() で「2日」に化けた)。
+  * SolarEventDayTempoRule.at() 自身が返す now_idx(month_start からの
+   * floor 経過日数)と目標 d の差分ぶん推測を補正し再解決する、既存の
+   * 元号年収束ループ(このメソッドの少し上、観測太陰太陽暦の年逆算)と
+   * 同じ「差分フィードバックで少数回のうちに収束させる」方式にする
+   * (実測: 通常1回、念のため上限3回)。
+   *
+   * real_sunset_day_rule()(D: TempoEnvelope キャッシュ付き、to_tempos() の
+   * d/N と共有)ではなく、ここだけの使い捨てインスタンスを直接構築する。
+   * このメソッドは呼び出しごとに違う month_start(=parent)を渡すため、
+  * かつてはキャッシュを共有すると CachedTempoRule が別の呼び出しの
+  * parent を誤って使い回す実バグが
+   * あった(実測: add()/sub() を同じ暦インスタンスで連続して呼ぶと、
+   * 後の呼び出しが前の呼び出しの月始点を引き継いで誤った日付を返した)。
+   * 呼び出し頻度は parse()/add()/sub() 1回あたり高々数回で、天文計算
+   * キャッシュの再利用による恩恵より正しさを優先する。
+   */
+  private resolve_day_start(month_start: number, d: number): number {
+    if (!this.dic.is_dusk) {
+      const offset = this.dic.day_offset_hours
+        ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
+        : 0
+      return month_start + offset + d * this.calc.msec.day
+    }
+    const rule = new SolarEventDayTempoRule(
+      this.dic.sunny,
+      this.dic.earthy,
+      this.dic.geo,
+      this.calc.msec.day,
+      this.calc.zero.day,
+      this.calc.msec.year,
+      this.calc.zero.season,
+      'sunset',
+    )
+    const parent: TempoEnvelope = {
+      zero: month_start,
+      now_idx: 0,
+      last_at: month_start,
+      next_at: month_start + this.calc.msec.day,
+    }
+    // d>=0 は、月開始候補そのものではなく、その後に最初に来る日没境界を
+    // 1日目の始点にする。バビロニア暦の月初は「朔の瞬間」ではなく、
+    // 初見の細い月を確認した夕方の日没後に始まるため、月開始候補から
+    // 最初の日没までの短い区間を新月1日目として露出しない。
+    // d<0(前の月へ跨って戻る意図的な問い合わせ、find_span_time() 参照)の
+    // 場合は guess を常に month_start より前に留める。SolarEventDayTempoRule
+    // は now_idx=0 の区間を base.parent.last_at(= month_start)以上に
+    // 補正するため(同クラスのdocコメント参照)、d<0 のとき補正後の guess が
+    // month_start 以上に振れると now_idx が 0 に飛び、次のループでまた
+    // 大きく前へ戻る補正がかかって d に永遠に到達できず発散する実バグが
+    // あった(実測: d=-1 が -2 と 0 の間を無限に往復し、収束せず月始点を
+    // 返し続けた)。
+    const clampGuess = (g: number) => (d < 0 ? Math.min(g, month_start - 1) : g)
+    const firstDayStart = d < 0 ? month_start : this.align_dusk_month_start(month_start)
+    if (d === 0) return firstDayStart
+    let guess = clampGuess(
+      d < 0
+        ? month_start + (d + 0.5) * this.calc.msec.day
+        : firstDayStart + (d + 0.5) * this.calc.msec.day,
+    )
+    let resolved = rule.at(guess, { write_at: guess, parent })
+    for (let i = 0; i < 3 && resolved.now_idx !== d; i++) {
+      guess = clampGuess(guess + (d - resolved.now_idx) * this.calc.msec.day)
+      resolved = rule.at(guess, { write_at: guess, parent })
+    }
+    // SolarEventDayTempoRule.at() 自身が now_idx=0 の際に last_at を
+    // base.parent.last_at(= month_start)以上に補正済み(同クラスの
+    // doc コメント参照)なので、resolved.last_at は常に month_start
+    // 以上になる——呼び出し元が to_tempos() で再解決しても前の月に
+    // 化けない。
+    return resolved.last_at
+  }
+
+  private half_label(now_idx: number, length: number, labels: readonly [string, string]) {
+    const side = mod(Math.floor((now_idx * 2) / length), 2)
+    return labels[side]
+  }
+
+  private paksha_label(tempos: Tempos) {
+    if (!tempos.N) return ''
+    return this.half_label(tempos.N.now_idx, this.dic.N.length || 30, ['白分', '黒分'])
+  }
+
+  format_parts_by(utc: DateLike, str = this.dic.format): FormatPart[] {
+    const tempos = this.to_tempos_input(utc)
     const tokens = str.match(reg_token)!
     const has_era = tokens.some((token) => 'G' === token[0])
     const past = this.dic.G.list[0]
@@ -3233,48 +3771,54 @@ K   = @dic.earthy[2] / 360
       }
       return this.format_number(year, size)
     }
-    return tokens
-      .map((token) => {
-        const [top, mode] = token
-        const val = tempos[top]
-        if (val) {
-          const dic = this.dic[top]
+    return tokens.map((token) => {
+      if (token === 'Ha') {
+        return { token, text: this.half_label(tempos.H.now_idx, this.dic.H.length, ['午前', '午後']) }
+      }
+      if (token === 'da') {
+        return { token, text: this.paksha_label(tempos) }
+      }
+      const parts = format_token_parts(token)
+      if (!parts) return { token: '', text: token }
+      const { top, mode, size } = parts
+      const val = tempos[top]
+      if (!val) return { token: '', text: token }
 
-          switch (mode) {
-            case 'r':
-              return dic.to_ruby(dic.rubys, val, token.length)
-            case 'o':
-              return dic.to_label(dic.list, val, token.length)
-            default:
-              if ('y' === top && !has_era && past && tempos.G?.label === past) {
-                return signed_year(1 - val.now_idx, token.length)
-              }
-              if ('Y' === top) {
-                if (has_era && val.now_idx < 1) {
-                  return this.format_number(1 - val.now_idx, token.length)
-                }
-                if (!has_era) {
-                  return signed_year(val.now_idx, token.length)
-                }
-              }
-              return dic.to_value(dic.list, val, token.length)
+      const dic = this.dic[top]
+      const ruby = dic.to_ruby(dic.rubys, val, size)
+      const withRuby = (text: string): FormatPart => (ruby ? { token, text, ruby } : { token, text })
+
+      switch (mode) {
+        case 'r':
+          return { token, text: ruby }
+        case 'o':
+          return withRuby(dic.to_label(dic.list, val, size))
+        default:
+          if ('y' === top && !has_era && past && tempos.G?.label === past) {
+            return { token, text: signed_year(1 - val.now_idx, size) }
           }
-        } else {
-          return token
-        }
-      })
-      .join('')
+          if ('Y' === top) {
+            if (has_era && val.now_idx < 1) {
+              return { token, text: this.format_number(1 - val.now_idx, size) }
+            }
+            if (!has_era) {
+              return { token, text: signed_year(val.now_idx, size) }
+            }
+          }
+          return withRuby(dic.to_value(dic.list, val, size))
+      }
+    })
   }
 
   tree() {
-    const { y, M, d, H, m, s, A, B, C, E, F, V, a, b, c, f } = this.dic
+    const { y, M, d, H, m, s, dC60, dC12, dC10, E, dC9, dC28, yC60, yC12, yC10, yC9 } = this.dic
     const yyyy = [
-      [a, b, c, f, y],
-      ['ao ar', 'bo br', 'co cr', 'fo fr', 'Gy'],
+      [yC60, yC12, yC10, yC9, y],
+      ['yC60o yC60r', 'yC12o yC12r', 'yC10o yC10r', 'yC9o yC9r', 'Gy'],
     ]
     const eeee = [
-      [A, B, C, E, F, V],
-      ['Ao Ar', 'Bo Br', 'Co Cr', 'Fo Fr', 'Vo Vr'],
+      [dC60, dC12, dC10, E, dC9, dC28],
+      ['dC60o dC60r', 'dC12o dC12r', 'dC10o dC10r', 'Eo Er', 'dC9o dC9r', 'dC28o dC28r'],
     ]
     return [yyyy, M, d, eeee, H, m, s]
   }

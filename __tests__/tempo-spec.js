@@ -13,6 +13,8 @@ const {
   MeanLunarPhaseTempoRule,
   MeanLunisolarMonthRule,
   SolarDayHourTempoRule,
+  SolarEventDayTempoRule,
+  RealSunsetDayTempoRule,
   OrbitalPhaseTempoRule,
   ObservedLunisolarMonthRule,
   ObservedLunisolarYearRule,
@@ -471,8 +473,7 @@ describe('tempo', () => {
   })
 
   describe('CyclicDayTempoRule', () => {
-    // 既存 to_tempos() の「日不断」トークン(干支日 A/十二直 B/十干日 C/
-    // 曜日 E/宿 V 等)が
+    // 既存 to_tempos() の「日不断」トークン(dC60/dC12/dC10/dC7/dC28 等)が
     // `const A = to_tempo_bare(dayMsec, zero, utc); A.now_idx = mod(A.now_idx, length)`
     // のように、いったん生の now_idx を作ってから mod で包み直しているのと
     // 同じ計算になることを確認する。
@@ -615,7 +616,7 @@ describe('tempo', () => {
   })
 
   describe('SolarDayHourTempoRule', () => {
-    // 平気法は .daily('Sunny') で不定時法(dic.is_solor)。実際の calc/dic 定数を使う。
+    // 平気法は .division({ H: 'solar' }) で不定時法(dic.is_solor)。実際の calc/dic 定数を使う。
     const g = Calendar.平気法
     const { sunny, earthy, geo } = g.dic
     const dayMsec = g.calc.msec.day
@@ -688,6 +689,63 @@ describe('tempo', () => {
         envelope = rule.slide(envelope, amount, base)
         expect(envelope).toEqual(envelopeOf(tempo))
       }
+    })
+  })
+
+  describe('SolarEventDayTempoRule', () => {
+    const g = Calendar.平気法
+    const { sunny, earthy, geo } = g.dic
+    const dayMsec = g.calc.msec.day
+    const dayZero = g.calc.zero.day
+    const yearMsec = g.calc.msec.year
+    const seasonZero = g.calc.zero.season
+    const sunriseRule = new SolarEventDayTempoRule(
+      sunny,
+      earthy,
+      geo,
+      dayMsec,
+      dayZero,
+      yearMsec,
+      seasonZero,
+      'sunrise',
+    )
+    const sunsetRule = new SolarEventDayTempoRule(
+      sunny,
+      earthy,
+      geo,
+      dayMsec,
+      dayZero,
+      yearMsec,
+      seasonZero,
+      'sunset',
+    )
+    const legacySunsetRule = new RealSunsetDayTempoRule(
+      sunny,
+      earthy,
+      geo,
+      dayMsec,
+      dayZero,
+      yearMsec,
+      seasonZero,
+    )
+
+    test('sunset mode matches the legacy RealSunsetDayTempoRule wrapper', () => {
+      const parent = envelopeOf(to_tempo_bare(dayMsec * 30, dayZero, Date.UTC(2024, 5, 1)))
+      for (const write_at of [Date.UTC(2024, 5, 1), Date.UTC(2024, 5, 1, 18), Date.UTC(2024, 5, 2)]) {
+        const base = { write_at, parent }
+        expect(sunsetRule.at(write_at, base)).toEqual(legacySunsetRule.at(write_at, base))
+      }
+    })
+
+    test('sunrise mode uses the actual sunrise as the day boundary', () => {
+      const civil = to_tempo_bare(dayMsec, dayZero, Date.UTC(2024, 5, 21))
+      const parent = envelopeOf(to_tempo_bare(dayMsec * 30, civil.last_at, civil.last_at + 1))
+      const sunrise = g.solor(civil.center_at).日の出
+      const before = sunrise - 1000
+      const after = sunrise + 1000
+      expect(sunriseRule.boundary_at_or_after(before)).toBe(sunrise)
+      expect(sunriseRule.at(before, { write_at: before, parent }).next_at).toBe(sunrise)
+      expect(sunriseRule.at(after, { write_at: after, parent }).last_at).toBe(sunrise)
     })
   })
 

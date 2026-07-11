@@ -67,12 +67,13 @@ export interface TempoRule<Base = TempoBase> {
  * CachedTempoRule: 他の TempoRule をラップし、直近に解決した envelope を
  * 再利用するデコレータ。
  *
- * at(write_at, base) は、直近の envelope がまだ write_at を覆っている
- * (last_at <= write_at < next_at)場合はそれをそのまま返し、覆っていない
- * 場合だけ元の rule.at() を呼んで解決し直す。実軌道の位相探索
- * (OrbitalPhaseTempoRule)や観測太陰太陽暦の探索など、天体計算を伴う
- * 重い規則を、同じ季節/同じ月のように近接した write_at で繰り返し
- * 問い合わせる場面(to_table() の日次走査など)で効果を発揮する。
+ * at(write_at, base) は、直近の envelope がまだ write_at を覆っており
+ * (last_at <= write_at < next_at)、かつ任意の cacheKey(base) も一致する
+ * 場合はそれをそのまま返し、それ以外だけ元の rule.at() を呼んで
+ * 解決し直す。実軌道の位相探索(OrbitalPhaseTempoRule)や観測太陰太陽暦の
+ * 探索など、天体計算を伴う重い規則を、同じ季節/同じ月のように近接した
+ * write_at で繰り返し問い合わせる場面(to_table() の日次走査など)で
+ * 効果を発揮する。
  *
  * 規則インスタンス自体が呼び出しのたびに new され直すのでは、直近の
  * 解決結果を保持する場所がなくキャッシュが効かない。このデコレータで
@@ -87,14 +88,25 @@ export interface TempoRule<Base = TempoBase> {
  */
 export class CachedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
   private cached?: TempoEnvelope
+  private cachedKey?: unknown
 
-  constructor(private readonly rule: TempoRule<Base>) {}
+  constructor(
+    private readonly rule: TempoRule<Base>,
+    private readonly cacheKey?: (base: Base) => unknown,
+  ) {}
 
   at(write_at: number, base: Base): TempoEnvelope {
     const cached = this.cached
-    if (cached && cached.last_at <= write_at && write_at < cached.next_at) {
+    const key = this.cacheKey?.(base)
+    if (
+      cached &&
+      (this.cacheKey == null || Object.is(key, this.cachedKey)) &&
+      cached.last_at <= write_at &&
+      write_at < cached.next_at
+    ) {
       return cached
     }
+    this.cachedKey = key
     return (this.cached = this.rule.at(write_at, base))
   }
 
@@ -285,12 +297,57 @@ export type SubdivideBase = TempoBase & {
  * (年が変われば year.last_at が変わり、季節の起点もそれに追従するため)。
  * 一度 envelope が解決された後の slide() は、zero が envelope 側に
  * 保持されるため FixedTempoRule と全く同じ式になる。
+ *
+ * offset(既定0)は、親の last_at からさらに一定量ずらした点を zero に
+ * する(FancyDate.dayBoundary() が d/N の分割起点を実時計 0 時から
+ * offsetHours 時間ずらすのに使う)。親自体(月/年などの zero 点)には
+ * 触れず、この規則が刻む区間の位相だけを動かす——offset を親側
+ * (例: def_zero() の day 自体)に注入すると、month/year など他のすべての
+ * 下流トークンまで同じ量ずれてしまう(実測: オスマン季節時法/アラトゥルカの
+ * ような「時刻体系だけが違う」はずの対で、月の zero 点が18時間ズレたことで
+ * 1日のうち大半の時間帯で日番号が食い違う実バグがあった)。
+ *
+ * offset>0 の場合、親の last_at 直後(offset 未満)の区間は now_idx が
+ * 負(-1)になりうる(親の last_at が offset ぶんずれた区間境界より前に
+ * 来るため)。負の now_idx は「月内0日目より前」という表現不能な値で、
+ * format() が不正な日番号を出す・その値を parse() し直すと別の月に
+ * 化けるという実バグがあった(実測: dayBoundary(18) を使う暦の全ての月頭で
+ * 発生)。0 に切り詰め、この区間は「その月の1日目」として扱う(既に真の
+ * 1日目(offset 直後の区間)も now_idx=0 になるため、月頭の狭い区間だけ
+ * 2つの実区間が同じ日番号を共有することになるが、負の日番号や誤った月への
+ * 化けよりは実害が小さい——真の暦日境界を月境界にも波及させる全面的な
+ * 再設計は今回のスコープを超えるため見送った)。
+ *
+ * この切り詰めでは now_idx だけでなく last_at も base.parent.last_at まで
+ * 引き上げる(zero も合わせて last_at に更新)。last_at を自然な(親の
+ * last_at より前の)値のまま残すと、この envelope の last_at を直接読む
+ * 呼び出し元(clamp_since() 等)がそこから to_tempos() を再度呼んだ際に、
+ * 「親の last_at より前」という理由だけで前の月に化けて戻ってしまう実バグが
+ * あった(実測: add()/sub() が月境界をまたぐ日送りで前の月の別の日を
+ * 返した)。last_at を親の last_at 以上に保つことで、この envelope が
+ * 表す時刻は常に「対象の月の範囲内」になる。
+ *
+ * ただしこの切り詰めは write_at が親の last_at 以上(=真に「この月の
+ * 範囲内」の問い合わせ)の場合に限る。write_at がそれより前(月を跨いで
+ * 戻ろうとする意図的な問い合わせ)なら切り詰めない
+ * (RealSunsetDayTempoRule.at() の同種のドキュメント参照——この
+ * クラス自身の slide() は zero を直接使う純粋な算術で月を跨ぐため実害は
+ * ないが、Tempo.reset() 等 write_at を直接渡す経路のために同じ条件を
+ * 揃えておく)。
  */
 export class SubdivideTempoRule implements TempoRule<SubdivideBase> {
-  constructor(private readonly size: number) {}
+  constructor(
+    private readonly size: number,
+    private readonly offset = 0,
+  ) {}
 
   at(write_at: number, base: SubdivideBase): TempoEnvelope {
-    return fixed_envelope(this.size, base.parent.last_at, write_at)
+    const envelope = fixed_envelope(this.size, base.parent.last_at + this.offset, write_at)
+    if (envelope.now_idx < 0 && base.parent.last_at <= write_at) {
+      const last_at = base.parent.last_at
+      return { zero: last_at, now_idx: 0, last_at, next_at: envelope.next_at }
+    }
+    return envelope
   }
 
   slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
@@ -830,6 +887,161 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
   }
 }
 
+export type SolarDayBoundaryEvent = 'sunrise' | 'sunset'
+
+/**
+ * SolarEventDayTempoRule: 実際の(季節で変動する)日の出/日没時刻そのものを
+ * 暦日の境界に使う規則。dayBoundary()(固定オフセットで日没相当にずらす
+ * だけ)と違い、solor() が返す日ごとの太陽イベントを直接境界にする。
+ * dusk() は 'sunset' を使い、将来の sunrise/dawn 系の暦日境界は
+ * 'sunrise' を使えば同じ仕組みに乗せられる。
+ *
+ * 循環依存の回避: 「日の出/日没時刻を求めるには対象の暦日(day envelope)
+ * が要る(noon() が day.last_at/center_at を使う)」「暦日境界を求めるには
+ * 太陽イベント時刻が要る」という一見循環した依存に見えるが、noon() の均時差
+ * 相当の補正(南中差分)は write_at(≒季節)のみに依存し、day 自体の
+ * 精度には敏感でない(実測: 通常の真夜中起点の civil day を仮の day として
+ * solor() に渡しても、南中差分のずれは高々分オーダーで太陽イベント時刻への
+ * 影響は無視できる)。そのため civil day(常にオフセット無しの実時計基準、
+ * calc.zero.day)を仮の探索起点にし、その日・前日・翌日いずれかの太陽イベント
+ * 時刻を求める(最大2回の solor() 呼び出し)束探索(bracket search)で
+ * 真の境界を求める。
+ *
+ * now_idx(月内の日番号)は、真の太陽イベント日は日ごとにわずかに伸縮する
+ * (SubdivideTempoRule のような単純な除算では求まらない)ため、月頭
+ * (base.parent.last_at)からの経過時間を平均日長(dayMsec)で割って
+ * floor する(at() 内のコメント参照——round ではない)ことで求める。
+ * 実際の太陽イベント時刻のずれは平均日長に対して十分小さい(高緯度でも夏至/
+ * 冬至付近で数分〜十数分程度)ため、月を通して欠番・重複のない連番になる。
+ */
+export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
+  constructor(
+    private readonly sunny: OrbitalModel,
+    private readonly earthy: RotationModel,
+    private readonly geo: TIMEZONE,
+    private readonly dayMsec: number,
+    private readonly civilDayZero: number,
+    private readonly yearMsec: number,
+    private readonly seasonZero: number,
+    private readonly event: SolarDayBoundaryEvent,
+  ) {}
+
+  private event_of(civilDay: TempoEnvelope): number {
+    const center_at = (civilDay.last_at + civilDay.next_at) / 2
+    const day = new Tempo(
+      civilDay,
+      { write_at: center_at },
+      new FixedTempoRule(this.dayMsec, civilDay.zero),
+    )
+    const solarNoon = noon(
+      this.sunny,
+      this.dayMsec,
+      this.civilDayZero,
+      this.yearMsec,
+      this.seasonZero,
+      center_at,
+      day,
+    )
+    const { 日の出, 日の入 } = solor(
+      this.sunny,
+      this.earthy,
+      this.geo,
+      this.dayMsec,
+      this.civilDayZero,
+      this.yearMsec,
+      this.seasonZero,
+      center_at,
+      2,
+      solarNoon,
+    )
+    return this.event === 'sunrise' ? 日の出 : 日の入
+  }
+
+  boundary_at_or_after(write_at: number): number {
+    const civil = fixed_envelope(this.dayMsec, this.civilDayZero, write_at)
+    const event0 = this.event_of(civil)
+    if (write_at <= event0) return event0
+    return this.event_of(
+      fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1),
+    )
+  }
+
+  at(write_at: number, base: SubdivideBase): TempoEnvelope {
+    const civil = fixed_envelope(this.dayMsec, this.civilDayZero, write_at)
+    const event0 = this.event_of(civil)
+
+    let last_at: number
+    let next_at: number
+    if (write_at < event0) {
+      last_at = this.event_of(
+        fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx - 1),
+      )
+      next_at = event0
+    } else {
+      last_at = event0
+      next_at = this.event_of(
+        fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1),
+      )
+    }
+
+    // floor で求める(round ではない)。SubdivideTempoRule/dayBoundary() の
+    // 兄弟枠組みは fixed_envelope() 経由で floor ベースの now_idx を使う
+    // ため、ここだけ round にすると月始点からの経過が「日境界のちょうど
+    // 中間」より前か後かで恣意的に丸められ、同じ月始点を共有するはずの
+    // 兄弟暦(dayBoundary() 側)と now_idx が恒常的に1ズレる実バグが
+    // あった(実測: バビロニア暦カスプ/ベールで1日のうち約91%の時間帯が
+    // 日番号不一致になっていた——round だと月初の端数日が「0日目」ではなく
+    // 「1日目」に切り上げられ、以後ずっと1ズレたまま平行していた)。
+    //
+    // 月始点(base.parent.last_at)の直後、真の日没境界が来る前の区間は
+    // now_idx が負(-1)になりうる(真の日没が月始点よりわずかに後に
+    // 来るため)。SubdivideTempoRule(dayBoundary())と同じ理由(doc
+    // コメント参照)で 0 に切り詰め、last_at も base.parent.last_at まで
+    // 引き上げる。
+    //
+    // ただしこの切り詰めは write_at が月始点以上(=to_tempos() が直接
+    // 解決している、真に「この月の範囲内」の問い合わせ)の場合に限る。
+    // slide()(succ()/back())が前の月へ跨って戻ろうとする際は、
+    // envelope.last_at より前の write_at を意図的に渡してくる——この場合に
+    // 同じように切り詰めると、月始点より前へは絶対に進めず back() が
+    // 月の1日目に張り付いて動かなくなる実バグがあった(実測:
+    // dusk() な暦で d.back()/sub() を月始めから遡ると、前の月へ進まず
+    // 同じ日に留まり続けた)。write_at < base.parent.last_at のときは
+    // 切り詰めず自然な負の now_idx を返し、呼び出し元が返る last_at を
+    // 元に to_tempos() を再解決すれば前の月が正しく求まる(SubdivideTempoRule
+    // の slide() が envelope.zero を直接使って月を跨ぐのと同じ仕組み)。
+    const rawNowIdx = Math.floor((last_at - base.parent.last_at) / this.dayMsec)
+    if (rawNowIdx < 0 && base.parent.last_at <= write_at) {
+      const clampedLastAt = base.parent.last_at
+      return { zero: clampedLastAt, now_idx: 0, last_at: clampedLastAt, next_at }
+    }
+    return { zero: last_at - rawNowIdx * this.dayMsec, now_idx: rawNowIdx, last_at, next_at }
+  }
+
+  slide(envelope: TempoEnvelope, amount: number, base: SubdivideBase): TempoEnvelope {
+    const midpoint = envelope.last_at + (amount + 0.5) * this.dayMsec
+    return this.at(midpoint, base)
+  }
+}
+
+/**
+ * RealSunsetDayTempoRule: 互換用の薄いラッパー。新規用途では
+ * SolarEventDayTempoRule(..., 'sunset' | 'sunrise') を使う。
+ */
+export class RealSunsetDayTempoRule extends SolarEventDayTempoRule {
+  constructor(
+    sunny: OrbitalModel,
+    earthy: RotationModel,
+    geo: TIMEZONE,
+    dayMsec: number,
+    civilDayZero: number,
+    yearMsec: number,
+    seasonZero: number,
+  ) {
+    super(sunny, earthy, geo, dayMsec, civilDayZero, yearMsec, seasonZero, 'sunset')
+  }
+}
+
 /**
  * OrbitalPhaseTempoRule: 実軌道(実際の黄経など)を基準に、1公転周期を等しい
  * 「角度」で divisions 等分した位相区間を解決する規則。
@@ -961,6 +1173,44 @@ export class ObservedLunisolarMonthRule implements TempoRule<TempoBase> {
   slide(envelope: TempoEnvelope, amount: number): TempoEnvelope {
     const midpoint = envelope.last_at + (amount + 0.5) * this.avgMonthMsec
     return this.at(midpoint)
+  }
+}
+
+/**
+ * StartAlignedTempoRule: 内側の規則が返す区間境界を、別の実境界へ丸めて
+ * 露出する wrapper。月・年などの開始候補を「その後に最初に来る日没」へ
+ * 丸め上げ、親境界と暦日境界を同じ時刻に揃える用途で使う。
+ */
+export class StartAlignedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
+  constructor(
+    private readonly innerRule: TempoRule<Base>,
+    private readonly alignStart: (rawStart: number) => number,
+  ) {}
+
+  private align(raw: TempoEnvelope): TempoEnvelope {
+    return {
+      ...raw,
+      last_at: this.alignStart(raw.last_at),
+      next_at: this.alignStart(raw.next_at),
+    }
+  }
+
+  at(write_at: number, base: Base): TempoEnvelope {
+    let raw = this.innerRule.at(write_at, base)
+    let aligned = this.align(raw)
+    while (write_at < aligned.last_at) {
+      raw = this.innerRule.slide(raw, -1, base)
+      aligned = this.align(raw)
+    }
+    while (aligned.next_at <= write_at) {
+      raw = this.innerRule.slide(raw, 1, base)
+      aligned = this.align(raw)
+    }
+    return aligned
+  }
+
+  slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
+    return this.align(this.innerRule.slide(envelope, amount, base))
   }
 }
 
