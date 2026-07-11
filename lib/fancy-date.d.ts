@@ -93,6 +93,13 @@ export type FormatPart = {
 };
 export type SpanOptions = {
     precise?: boolean | Precision;
+    at?: DateLike;
+};
+export type ParseSpanOptions = {
+    at?: DateLike;
+};
+export type SpanMsecOptions = {
+    at?: DateLike;
 };
 export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[];
 export type Tempos = {
@@ -352,8 +359,9 @@ export declare class FancyDate {
     sub_obj(utc: DateLike, span: SpanLike): Tempos;
     span(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions): string;
     span_obj(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions): Span;
-    parse_span(text: string): Span;
+    parse_span(text: string, options?: ParseSpanOptions): Span;
     format_span(span: SpanLike, direction?: SpanDirection): Span;
+    span_msec(span: SpanLike, options?: SpanMsecOptions): number;
     private add_span;
     private parse_span_parts;
     private disambiguate_span_parts;
@@ -397,6 +405,7 @@ export declare class FancyDate {
     private find_step_rank;
     private span_between;
     private with_span_anchor;
+    private with_span_anchor_at;
     private precise_span;
     private next_precise_span_at;
     private next_span_at;

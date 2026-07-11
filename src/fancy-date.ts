@@ -298,11 +298,23 @@ export type FormatPart = {
 }
 export type SpanOptions = {
   precise?: boolean | Precision
+  at?: DateLike
+}
+export type ParseSpanOptions = {
+  at?: DateLike
+}
+export type SpanMsecOptions = {
+  at?: DateLike
 }
 export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[]
 const span_anchor = Symbol('span_anchor')
+type SpanAnchor = {
+  calendar: FancyDate
+  at?: number
+  msec?: number
+}
 type AnchoredSpan = Span & {
-  [span_anchor]?: readonly [from: number, to: number, calendar: FancyDate]
+  [span_anchor]?: SpanAnchor
 }
 type SpanTarget = {
   u: number
@@ -1290,14 +1302,18 @@ export class FancyDate {
       const spanOptions = this.is_span_options(from) ? from : options
       return this.span_between(this.to_utc(to[1]), this.to_utc(to[0]), spanOptions)
     }
-    if (this.is_span_text(to, from)) return this.parse_span(to)
+    if (this.is_span_text(to, from)) {
+      return this.parse_span(to, this.is_span_options(from) ? from : undefined)
+    }
     const [fromAt, spanOptions] = this.span_args(from, options)
     return this.span_between(this.to_utc(to), fromAt, spanOptions)
   }
 
-  parse_span(text: string): Span {
+  parse_span(text: string, options: ParseSpanOptions = {}): Span {
     const { parts, direction } = this.parse_span_parts(text)
-    return this.format_span_parts(parts, direction)
+    const span = this.format_span_parts(parts, direction)
+    if (options.at != null) this.with_span_anchor_at(this.to_utc(options.at), span)
+    return span
   }
 
   format_span(span: SpanLike, direction?: SpanDirection): Span {
@@ -1307,9 +1323,17 @@ export class FancyDate {
     return this.format_span_parts(parts, spanDirection)
   }
 
+  span_msec(span: SpanLike, options: SpanMsecOptions = {}) {
+    const anchor = 'string' === typeof span ? undefined : (span as AnchoredSpan)[span_anchor]
+    if (anchor?.calendar === this && anchor.msec != null) return anchor.msec
+    const at = options.at != null ? this.to_utc(options.at) : anchor?.calendar === this ? anchor.at : undefined
+    if (at == null) throw new Error('span_msec() requires an anchor time')
+    return this.add(at, span) - at
+  }
+
   private add_span(utc: number, span: SpanLike) {
     const anchor = (span as AnchoredSpan)[span_anchor]
-    if (anchor?.[1] === utc && anchor[2] === this) return anchor[0]
+    if (anchor?.calendar === this && anchor.at === utc && anchor.msec != null) return utc + anchor.msec
     const parts = this.span_parts_of(span)
     const target = this.span_target(utc, parts)
     return this.find_span_time(target, utc)
@@ -1957,13 +1981,21 @@ export class FancyDate {
     )
   }
 
-  private with_span_anchor(from: number, to: number, span: Span, next_at?: number) {
-    if (Number.isFinite(next_at) && to < next_at!) {
+  private with_span_anchor(target: number, at: number, span: Span, next_at?: number) {
+    if (Number.isFinite(next_at) && at < next_at!) {
       span.next_at = next_at
-      span.timeout = next_at! - to
+      span.timeout = next_at! - at
     }
     Object.defineProperty(span, span_anchor, {
-      value: [from, to, this] as const,
+      value: { calendar: this, at, msec: target - at } satisfies SpanAnchor,
+      enumerable: false,
+    })
+    return span
+  }
+
+  private with_span_anchor_at(at: number, span: Span) {
+    Object.defineProperty(span, span_anchor, {
+      value: { calendar: this, at } satisfies SpanAnchor,
       enumerable: false,
     })
     return span
@@ -2168,7 +2200,11 @@ export class FancyDate {
   }
 
   private is_span_text(to: DateLike, from: DateLike | SpanOptions | undefined): to is string {
-    return 'string' === typeof to && from == null && (to === '今' || /(?:前|後)$/.test(to))
+    return (
+      'string' === typeof to &&
+      (from == null || this.is_span_options(from)) &&
+      (to === '今' || /(?:前|後)$/.test(to))
+    )
   }
 
   dup() {

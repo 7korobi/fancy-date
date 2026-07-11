@@ -45,7 +45,7 @@ Calendar.Julian.format(nabonassar, 'y年M月d日')
 
 ### span / add / sub
 
-`span([from, to])` は相対表現を返す。`span_obj()` は `parts`、`next_at`、`timeout` を含むオブジェクトを返す。
+`span([from, to])` は相対表現を返す。`span_obj()` は `parts`、`next_at`、`timeout` を含むオブジェクトを返す。`span_msec()` は anchor 付き span を実ミリ秒へ戻す。
 
 ```ts
 const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
@@ -117,6 +117,10 @@ custom.span([from, to], { precise: 'w' })
 
 custom.parse_span('1日巡り後')
 // { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
+
+const anchored = g.parse_span('1ヶ月後', { at: from })
+g.span_msec(anchored)
+// from から1ヶ月後までの実ミリ秒
 
 custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'

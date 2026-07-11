@@ -339,6 +339,21 @@ describe('Gregorio calculate', () => {
     expect(withMae).not.toEqual(bare)
   })
 
+  test('span anchors preserve at/msec for msec conversion', () => {
+    const from = g.parse('2024年1月31日')
+    const to = g.parse('2024年3月1日')
+    const measured = g.span_obj(to, from)
+
+    expect(g.span_msec(measured)).toBe(to - from)
+    expect(g.add(from, measured)).toBe(to)
+
+    const parsed = g.parse_span('1ヶ月後', { at: from })
+    expect(g.span_msec(parsed)).toBe(g.add(from, parsed) - from)
+    expect(g.span_msec('1ヶ月後', { at: from })).toBe(g.add(from, '1ヶ月後') - from)
+    expect(g.span_msec(g.span_obj('1ヶ月後', { at: from }))).toBe(g.add(from, '1ヶ月後') - from)
+    expect(() => g.span_msec(g.parse_span('1ヶ月後'))).toThrow(/anchor time/)
+  })
+
   test('parse', () => {
     return
     expect([g.format(g.parse('2000年夏至', 'y年Z'))]).toEqual(['123'])

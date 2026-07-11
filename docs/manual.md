@@ -25,8 +25,9 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `format(utc, format?)`                   | UTC ミリ秒や `Tempos` を暦表現へ変換する  |
 | `span([from, to], options?)`             | 範囲の相対表現を文字列で返す              |
 | `span_obj([from, to], options?)`         | 相対表現を `Span` オブジェクトで返す      |
-| `parse_span(text)`                       | 相対表現を `Span` に変換する              |
+| `parse_span(text, options?)`             | 相対表現を `Span` に変換する              |
 | `format_span(span, direction?)`          | `SpanLike` を現在の暦の表記へ整える       |
+| `span_msec(span, options?)`              | anchor 付き span を実ミリ秒へ変換する     |
 | `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
 | `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
 | `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
@@ -243,13 +244,17 @@ g.add(from, '1年2ヶ月9日4時間5分後')
 
 ## parse_span / format_span / labels
 
-`parse_span(text)` は現在の暦の `labels()` と `notation(..., relatives)` を使って相対表現を読む。`format_span(span, direction?)` は `SpanLike` を現在の暦の表記へ整える。
+`parse_span(text, { at? })` は現在の暦の `labels()` と `notation(..., relatives)` を使って相対表現を読む。`at` を渡した場合は、その基準時刻を span の anchor として保持する。`format_span(span, direction?)` は `SpanLike` を現在の暦の表記へ整える。
 
 ```ts
 const custom = g.dup().labels({ w: '週目', dC: '日巡り' }).init()
 
 custom.parse_span('1日巡り後')
 // { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
+
+const parsed = g.parse_span('1ヶ月後', { at: g.parse('2024年1月31日') })
+g.span_msec(parsed)
+// 2024年1月31日から1ヶ月後までの実ミリ秒
 
 custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
 // '1日巡り後'
