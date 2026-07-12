@@ -220,8 +220,12 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(() => g.dup().daily('Sunny').spot(月, 78, 15.6, 15).init()).toThrow(/極域/)
     expect(() => g.dup().spot(月, 78, 15.6, 15).division({ H: 'solar' }).init()).toThrow(/極域/)
     expect(() => g.dup().spot(月, 35.7, 139.7, 135).division({ H: 'solar' }).init()).not.toThrow()
-    expect(g.dup().division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(true)
-    expect(g.dup().division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(false)
+    expect(g.dup().division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(
+      true,
+    )
+    expect(g.dup().division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(
+      false,
+    )
     expect(() => g.dup().spot(月, 78, 15.6, 15).dayStart('sunrise').init()).toThrow(/極域/)
   })
 
@@ -376,7 +380,9 @@ describe('Gregorio calculate', () => {
   test('find day cycle in range', () => {
     const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
     const found = g.find(between, [{ dC60o: '甲子' }])
-    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年01月22日 甲子'])
+    expect(found.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual([
+      '2020年01月22日 甲子',
+    ])
   })
 
   test('find note in range', () => {
@@ -409,13 +415,17 @@ describe('Gregorio calculate', () => {
 
   test('find supports next and prev style unbounded search with limit', () => {
     const next = g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }], { limit: 1 })
-    expect(next.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年03月22日 甲子'])
+    expect(next.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual([
+      '2020年03月22日 甲子',
+    ])
 
     const prev = g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
       order: -1,
       limit: 1,
     })
-    expect(prev.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual(['2020年01月22日 甲子'])
+    expect(prev.map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))).toEqual([
+      '2020年01月22日 甲子',
+    ])
     expect(() => g.find([g.parse('2020年1月23日'), Infinity], [{ dC60o: '甲子' }])).toThrow(
       /unbounded find requires limit/,
     )
@@ -923,7 +933,12 @@ describe('Gregorian', () => {
     expect(parts.map((part) => part.text).join('')).toBe(g.format(utc, str))
     expect(g.format_parts_by(utc, str)).toEqual(parts)
     expect(g.format_parts_by(tempos, str)).toEqual(parts)
-    expect(parts.filter((part) => part.token === '').map((part) => part.text).join('')).toBe('年月日()  ')
+    expect(
+      parts
+        .filter((part) => part.token === '')
+        .map((part) => part.text)
+        .join(''),
+    ).toBe('年月日()  ')
 
     const weekday = parts.find((part) => part.token === 'E')
     expect(weekday).toMatchObject({ token: 'E', text: '日', ruby: 'にち' })
@@ -1015,7 +1030,8 @@ describe('Gregorian', () => {
 
   test('assign() stores token assignment rules separately from notation', () => {
     const utc = g.parse('2024年3月10日')
-    const assignment = (dayStart, context) => (dayStart === 'sunrise' && context.token === 'd' ? 1 : 0)
+    const assignment = (dayStart, context) =>
+      dayStart === 'sunrise' && context.token === 'd' ? 1 : 0
     const calendar = g.dup().dayStart('sunrise').assign({ d: assignment }).init()
     const clone = calendar.dup()
 
@@ -1121,9 +1137,9 @@ describe('Gregorian', () => {
       value: -1,
       label: '1日巡り',
     })
-    expect(custom.format_span({ token: 'dC60', unit: 'day', value: -1, label: '1dC60' }).label).toBe(
-      '1日巡り後',
-    )
+    expect(
+      custom.format_span({ token: 'dC60', unit: 'day', value: -1, label: '1dC60' }).label,
+    ).toBe('1日巡り後')
     expect(custom.add(from, '1週目後')).toBe(g.parse('2024年1月8日'))
     expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token dC60/)
   })
@@ -1339,20 +1355,23 @@ describe('tithi calendar samples', () => {
   test.each([
     ['アマンタティティ', amTithi],
     ['プールニマンタティティ', pmTithi],
-  ])('%s assigns d from tithi at sunrise while preserving civil-day movement', (_name, calendar) => {
-    const utc = g.parse('2024年6月21日')
-    const day = calendar.to_tempos(utc).d
-    const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
-    const next = day.succ()
+  ])(
+    '%s assigns d from tithi at sunrise while preserving civil-day movement',
+    (_name, calendar) => {
+      const utc = g.parse('2024年6月21日')
+      const day = calendar.to_tempos(utc).d
+      const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
+      const next = day.succ()
 
-    expect(calendar.dic.day_start).toBe('sunrise')
-    expect(calendar.dic.assignments.d).toBeDefined()
-    expect(hasSolarEvents(calendar.dic.sunny)).toBe(true)
-    expect(day.now_idx).toBe(expected)
-    expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
-    expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)
-    expect(next.last_at).toBe(day.next_at)
-  })
+      expect(calendar.dic.day_start).toBe('sunrise')
+      expect(calendar.dic.assignments.d).toBeDefined()
+      expect(hasSolarEvents(calendar.dic.sunny)).toBe(true)
+      expect(day.now_idx).toBe(expected)
+      expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
+      expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)
+      expect(next.last_at).toBe(day.next_at)
+    },
+  )
 })
 
 describe('Maya', () => {

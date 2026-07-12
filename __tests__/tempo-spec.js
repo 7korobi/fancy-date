@@ -731,7 +731,11 @@ describe('tempo', () => {
 
     test('sunset mode matches the legacy RealSunsetDayTempoRule wrapper', () => {
       const parent = envelopeOf(to_tempo_bare(dayMsec * 30, dayZero, Date.UTC(2024, 5, 1)))
-      for (const write_at of [Date.UTC(2024, 5, 1), Date.UTC(2024, 5, 1, 18), Date.UTC(2024, 5, 2)]) {
+      for (const write_at of [
+        Date.UTC(2024, 5, 1),
+        Date.UTC(2024, 5, 1, 18),
+        Date.UTC(2024, 5, 2),
+      ]) {
         const base = { write_at, parent }
         expect(sunsetRule.at(write_at, base)).toEqual(legacySunsetRule.at(write_at, base))
       }

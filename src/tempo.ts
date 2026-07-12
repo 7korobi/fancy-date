@@ -969,9 +969,7 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
     const civil = fixed_envelope(this.dayMsec, this.civilDayZero, write_at)
     const event0 = this.event_of(civil)
     if (write_at <= event0) return event0
-    return this.event_of(
-      fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1),
-    )
+    return this.event_of(fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1))
   }
 
   at(write_at: number, base: SubdivideBase): TempoEnvelope {
@@ -1019,7 +1017,11 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
     // 切り詰めず自然な負の now_idx を返し、呼び出し元が返る last_at を
     // 元に to_tempos() を再解決すれば前の月が正しく求まる(SubdivideTempoRule
     // の slide() が envelope.zero を直接使って月を跨ぐのと同じ仕組み)。
-    const parentCivilIdx = fixed_envelope(this.dayMsec, this.civilDayZero, base.parent.last_at).now_idx
+    const parentCivilIdx = fixed_envelope(
+      this.dayMsec,
+      this.civilDayZero,
+      base.parent.last_at,
+    ).now_idx
     const rawNowIdx = lastCivilIdx - parentCivilIdx
     if (rawNowIdx < 0 && base.parent.last_at <= write_at) {
       const clampedLastAt = base.parent.last_at
