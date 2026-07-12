@@ -36,6 +36,9 @@
   ],
   "preferGlobal": true,
   "private": false,
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "test": "bun run compile && bun run format:check && bun run jest",
     "watch": "jest --watchAll --config config/jest.js --rootDir .",
