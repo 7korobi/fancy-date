@@ -1,7 +1,7 @@
 import { mod } from './number'
 import type { OrbitalModel, RotationModel, TIMEZONE } from './orbital-model'
 import type { LunisolarDate } from './phenomena/lunisolar'
-import { noon, solar_phase, solor } from './phenomena/solar'
+import { noon, solar_hour_table, solar_phase, solor } from './phenomena/solar'
 
 /**
  * TempoEnvelope: 再利用可能な「暦区間」情報。
@@ -845,16 +845,7 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
       { write_at },
       new FixedTempoRule(this.dayMsec, dayEnvelope.zero),
     )
-    const solarNoon = noon(
-      this.sunny,
-      this.dayMsec,
-      this.dayZero,
-      this.yearMsec,
-      this.seasonZero,
-      write_at,
-      day,
-    )
-    const { 日の出, 日の入 } = solor(
+    return solar_hour_table(
       this.sunny,
       this.earthy,
       this.geo,
@@ -862,36 +853,10 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
       this.dayZero,
       this.yearMsec,
       this.seasonZero,
+      this.hourLength,
       write_at,
-      4,
-      solarNoon,
+      day,
     )
-    const size = this.hourLength / 4
-    const list: number[] = []
-
-    let next_at = 0
-    let msec = (日の出 - day.last_at) / size
-    for (let idx = 0, end = 1 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = 日の出 - day.last_at
-    msec = (日の入 - 日の出) / (2 * size)
-    for (let idx = 1 * size, end = 3 * size; idx < end; idx++) {
-      next_at += msec
-      list.push(Math.floor(next_at))
-    }
-
-    next_at = day.size
-    msec = (day.next_at - 日の入) / size
-    const tails: number[] = []
-    for (let idx = 3 * size, end = 4 * size; idx < end; idx++) {
-      tails.push(Math.ceil(next_at))
-      next_at -= msec
-    }
-    list.push(...tails.reverse())
-    return list
   }
 }
 

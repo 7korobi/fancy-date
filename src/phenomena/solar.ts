@@ -361,7 +361,7 @@ export function 雑節_by_phase(
   return 雑節_from_terms(dayMsec, day10Zero, stemLength, solar_terms(sunny, dayMsec, dayZero, utc))
 }
 
-export function to_tempo_by_solor(
+export function solar_hour_table(
   sunny: OrbitalModel,
   earthy: RotationModel,
   geo: TIMEZONE,
@@ -414,5 +414,32 @@ export function to_tempo_by_solor(
     next_at -= msec
   }
   list.push(...tails.reverse())
+  return list
+}
+
+export function to_tempo_by_solor(
+  sunny: OrbitalModel,
+  earthy: RotationModel,
+  geo: TIMEZONE,
+  dayMsec: number,
+  dayZero: number,
+  yearMsec: number,
+  seasonZero: number,
+  hourLength: number,
+  utc: number,
+  day: TempoLike,
+) {
+  const list = solar_hour_table(
+    sunny,
+    earthy,
+    geo,
+    dayMsec,
+    dayZero,
+    yearMsec,
+    seasonZero,
+    hourLength,
+    utc,
+    day,
+  )
   return to_tempo_by(list, day.last_at, utc)
 }
