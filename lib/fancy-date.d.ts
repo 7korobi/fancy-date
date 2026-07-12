@@ -269,7 +269,9 @@ export declare class FancyDate {
     private _solar_event_day_rule?;
     private _solar_event_day_core_rule?;
     private readonly _lunisolar_cache;
-    constructor(o?: FancyDate);
+    constructor(base?: FancyDate);
+    constructor(build: (calendar: FancyDate) => FancyDate);
+    constructor(base: FancyDate | undefined, build: (calendar: FancyDate) => FancyDate);
     static lazy(create: () => FancyDate): FancyDate;
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;

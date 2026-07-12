@@ -831,8 +831,8 @@ class Indexer {
 const LUNISOLAR_CACHE_CAPACITY = 16
 
 export class FancyDate {
-  dic: IDIC
-  calc: ICALC
+  dic!: IDIC
+  calc!: ICALC
   is_table_leap!: boolean
   is_table_month!: boolean
   strategy!: string
@@ -874,7 +874,25 @@ export class FancyDate {
   // より広い利用パターンを見込んだ値)。
   private readonly _lunisolar_cache: LunisolarDate[] = []
 
-  constructor(o?: FancyDate) {
+  constructor(base?: FancyDate)
+  constructor(build: (calendar: FancyDate) => FancyDate)
+  constructor(base: FancyDate | undefined, build: (calendar: FancyDate) => FancyDate)
+  constructor(
+    baseOrBuild?: FancyDate | ((calendar: FancyDate) => FancyDate),
+    build?: (calendar: FancyDate) => FancyDate,
+  ) {
+    // new FancyDate(build): ゼロから遅延生成(build は生成直後のインスタンスを受け取る)
+    if ('function' === typeof baseOrBuild) {
+      const create = baseOrBuild
+      return FancyDate.lazy(() => create(new FancyDate()).init())
+    }
+    // new FancyDate(base, build): base を複製してから遅延生成
+    if (build) {
+      const base = baseOrBuild
+      return FancyDate.lazy(() => build(new FancyDate(base)).init())
+    }
+    // new FancyDate() / new FancyDate(base): 即時(新規生成 / 複製)
+    const o = baseOrBuild
     if (o) {
       ;({ dic: this.dic, calc: this.calc } = cloneValue(o))
     } else {
