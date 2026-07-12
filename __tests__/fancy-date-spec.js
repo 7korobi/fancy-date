@@ -313,27 +313,27 @@ describe('Gregorio calculate', () => {
 
   test('add 10/10/10', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.add(msec, '10年10ヶ月10日後'))).toEqual('西暦12年12月12日(水)')
+    expect(g.format(g.add(msec, '10年10ヶ月10日後'))).toEqual('西暦12年12月12日(水) 00:00')
   })
 
   test('add 11/11/11', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.add(msec, '11年11ヶ月11日後'))).toEqual('西暦14年1月13日(月)')
+    expect(g.format(g.add(msec, '11年11ヶ月11日後'))).toEqual('西暦14年1月13日(月) 00:00')
   })
 
   test('sub 1/1/1', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.sub(msec, '1年1ヶ月1日後'))).toEqual('西暦1年1月1日(月)')
+    expect(g.format(g.sub(msec, '1年1ヶ月1日後'))).toEqual('西暦1年1月1日(月) 00:00')
   })
 
   test('sub 5/5/5', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.sub(msec, '5年5ヶ月5日後'))).toEqual('紀元前5年8月28日(水)')
+    expect(g.format(g.sub(msec, '5年5ヶ月5日後'))).toEqual('紀元前5年8月28日(水) 00:00')
   })
 
   test('sub 10y', () => {
     const msec = g.parse('401年1月1日')
-    expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火)')
+    expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火) 00:00')
   })
 
   test('SpanLike text without 前/後 is treated as 後', () => {
@@ -559,10 +559,10 @@ describe('平気法 calculate', () => {
       平気法.format(平気法.sub(ret, '1ヶ月後')),
       平気法.format(平気法.sub(ret, '2ヶ月後')),
     ]).toEqual([
-      '明治9年文月1日(先勝)暁九ツ',
-      '明治9年閏文月1日(先勝)暁九ツ',
-      '明治9年閏文月1日(先勝)暁九ツ',
-      '明治9年水無月1日(赤口)暁九ツ',
+      '明治九年文月一日(先勝)暁九ツ',
+      '明治九年閏文月一日(先勝)暁九ツ',
+      '明治九年閏文月一日(先勝)暁九ツ',
+      '明治九年水無月一日(赤口)暁九ツ',
     ])
   })
 
@@ -595,7 +595,7 @@ describe('平気法 calculate', () => {
     const tgt = '明治9年神無月10日(先勝)暁九ツ'
     const ret = 平気法.parse(tgt)
 
-    expect(平気法.format(ret)).toEqual(tgt)
+    expect(平気法.format(ret)).toEqual('明治九年神無月十日(先勝)暁九ツ')
   })
 
   test('body placement keeps tuple compatibility', () => {
@@ -669,10 +669,10 @@ describe('平気法 calculate', () => {
       平気法.format(平気法.add(msec, '1ヶ月後')),
       平気法.format(平気法.add(msec, '1年後')),
     ]).toEqual([
-      '明治9年神無月10日(先勝)暁九ツ',
-      '明治10年長月10日(赤口)暁九ツ',
-      '明治10年霜月10日(友引)暁九ツ',
-      '明治11年神無月10日(先勝)暁九ツ',
+      '明治九年神無月十日(先勝)暁九ツ',
+      '明治十年長月十日(赤口)暁九ツ',
+      '明治十年霜月十日(友引)暁九ツ',
+      '明治十一年神無月十日(先勝)暁九ツ',
     ])
   })
 
@@ -1086,6 +1086,16 @@ describe('Gregorian', () => {
     expect(next.last_at).toBe(day.next_at)
   })
 
+  test('tithi() calendars do not leak fractional day counts into span()', () => {
+    for (const base of ['2024年3月10日', '2026年7月13日']) {
+      const from = g.parse(base)
+      const to = amTithi.succ(from, '1日後')
+      const label = amTithi.span(to, from, { precise: 'm' })
+
+      expect(label).not.toMatch(/\d+\.\d+日/)
+    }
+  })
+
   test('tithi() marks skipped and repeated tithi without other panchanga elements', () => {
     const collectFlags = (calendar, start, days) => {
       let at = start
@@ -1438,7 +1448,7 @@ describe('ローマ・ユリウス時法', () => {
   test('一般的な標準表示は日付までに留め、秒を既定で主張しない', () => {
     const msec = g.parse('2020年3月22日')
 
-    expect(g.format(msec)).toBe('西暦2020年3月22日(日)')
+    expect(g.format(msec)).toBe('西暦2020年3月22日(日) 00:00')
     for (const calendar of [
       g,
       fg,
@@ -1451,15 +1461,21 @@ describe('ローマ・ユリウス時法', () => {
     }
   })
 
-  test('標準表示は不定時の hora と pars minuta を使い、秒を主張しない', () => {
+  test('ローマ系時法は本文を数字にし、rubyでラテン文字の読みを示す', () => {
     const msec = g.parse('2020年3月22日')
-    const julian = j.format(msec)
-    const romulus = rg.format(msec)
 
-    for (const text of [julian, romulus]) {
-      expect(text).toContain('hora')
-      expect(text).toContain('pars minuta')
+    for (const calendar of [j, rg]) {
+      const text = calendar.format(msec)
+      expect(text).toMatch(/\d{2}:\d{2}$/)
+      expect(text).not.toContain('hora')
+      expect(text).not.toContain('pars minuta')
       expect(text).not.toContain('秒')
+
+      const hour = calendar.format_parts(msec).find((part) => part.token === 'HH')
+      const minute = calendar.format_parts(msec).find((part) => part.token === 'mm')
+      expect(hour).toMatchObject({ ruby: expect.stringMatching(/^[a-z -]+$/) })
+      expect(minute).toMatchObject({ ruby: expect.stringMatching(/^[a-z -]+$/) })
+      expect(calendar.format(msec, 'Hr')).toBe('')
     }
   })
 
@@ -1483,6 +1499,28 @@ describe('ローマ・ユリウス時法', () => {
     expect(b.format(midnightBmt)).toBe('西暦2020年3月22日(日) @000')
     expect(b.format(noonBmt)).toBe('西暦2020年3月22日(日) @500')
     expect(b.format(midnightBmt, '@HHH.mm')).toBe('@000.33')
+  })
+
+  test('サカ歴は標準の数字本文にサンスクリット転写rubyを付ける', () => {
+    const parts = am.format_parts(g.parse('2024年3月10日'), 'Gy年M月d日')
+    expect(parts.find((part) => part.token === 'y')).toMatchObject({
+      text: expect.any(String),
+      ruby: expect.stringContaining('sahasra'),
+    })
+    expect(parts.find((part) => part.token === 'M')).toMatchObject({
+      ruby: expect.stringMatching(/^[a-zāīūṛṝḷḹṃḥṅñṭḍṇśṣ -]+$/),
+    })
+    expect(parts.find((part) => part.token === 'd')).toMatchObject({
+      ruby: expect.stringMatching(/^[a-zāīūṛṝḷḹṃḥṅñṭḍṇśṣ -]+$/),
+    })
+  })
+
+  test('漢数字Gregorianは桁数指定で桁読み、指定なしで通常の漢数字を使う', () => {
+    const c = Calendar.漢数字Gregorian
+    const utc = g.parse('2024年3月7日 5時6分0秒', 'y年M月d日 H時m分s秒')
+
+    expect(c.format(utc, 'y年M月d日 H時m分')).toBe('二千廿四年三月七日 五時六分')
+    expect(c.format(utc, 'yyyy年MM月dd日 HH:mm')).toBe('二〇二四年〇三月〇七日 〇五:〇六')
   })
 })
 

@@ -65,7 +65,7 @@ describe('NAOJ lunisolar fixtures', () => {
     expect(misses).toEqual([])
 
     const utc = Calendar.GregorianAstronomical.parse('2024年3月10日')
-    expect(Calendar.定気法.format(utc, 'Gy年Mod日')).toBe('令和6年如月1日')
+    expect(Calendar.定気法.format(utc, 'Gy年Mod日')).toBe('令和六年如月一日')
   })
 
   test('定気法 relative time distance follows lunisolar boundaries', () => {

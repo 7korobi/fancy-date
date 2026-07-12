@@ -6,6 +6,10 @@ export type Numeral = {
   to_number?(text: string): number | null
 }
 
+export function parseNumeral(numeral: Numeral, num: number, size = 0): string {
+  return (numeral.parse as (num: number, size?: number) => string)(num, size)
+}
+
 const TAIL_REQUIRED_MESSAGE =
   'この数詞辞書は語尾の指定が必須です。.語尾(tail) を通してから使ってください。'
 
@@ -238,10 +242,11 @@ export const arabic: Numeral = {
 function digitwise(items: readonly string[]): Numeral {
   const to_digit = new Map(items.map((ch, idx) => [ch, idx]))
   return {
-    parse(num: number): string {
+    parse(num: number, size = 0): string {
       if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
       return Math.abs(num)
         .toString()
+        .padStart(size, '0')
         .split('')
         .map((d) => items[Number(d)])
         .join('')
@@ -255,6 +260,18 @@ function digitwise(items: readonly string[]): Numeral {
         digits += digit
       }
       return digits ? Number(digits) : null
+    },
+  }
+}
+
+export function sizewise(single: Numeral, multiple: Numeral): Numeral {
+  return {
+    parse(num: number, size = 0): string {
+      return parseNumeral(1 < size ? multiple : single, num, size)
+    },
+    regex: `(?:${multiple.regex ?? ''}|${single.regex ?? ''})`,
+    to_number(text: string): number | null {
+      return multiple.to_number?.(text) ?? single.to_number?.(text) ?? null
     },
   }
 }
@@ -654,6 +671,65 @@ export const roman = {
     regex: '[ivxlcdm]+',
     to_number: roman_to_number,
   },
+}
+
+const SANSKRIT_ONES = [
+  'śūnya',
+  'eka',
+  'dvi',
+  'tri',
+  'catur',
+  'pañca',
+  'ṣaṣ',
+  'sapta',
+  'aṣṭa',
+  'nava',
+  'daśa',
+  'ekādaśa',
+  'dvādaśa',
+  'trayodaśa',
+  'caturdaśa',
+  'pañcadaśa',
+  'ṣoḍaśa',
+  'saptadaśa',
+  'aṣṭādaśa',
+  'navadaśa',
+]
+const SANSKRIT_TENS = [
+  '',
+  '',
+  'viṃśati',
+  'triṃśat',
+  'catvāriṃśat',
+  'pañcāśat',
+  'ṣaṣṭi',
+  'saptati',
+  'aśīti',
+  'navati',
+]
+
+function sanskritize(num: number): string {
+  if (!Number.isFinite(num) || num !== Math.floor(num)) return `${num}`
+  if (num < 0 || 9999 < num) return `${num}`
+  if (num < 20) return SANSKRIT_ONES[num]
+  if (num < 100) {
+    const tail = num % 10
+    return tail
+      ? `${SANSKRIT_ONES[tail]} ${SANSKRIT_TENS[Math.floor(num / 10)]}`
+      : SANSKRIT_TENS[num / 10]
+  }
+  if (num < 1000) {
+    const tail = num % 100
+    const head = `${num < 200 ? '' : `${SANSKRIT_ONES[Math.floor(num / 100)]} `}śata`
+    return tail ? `${head} ${sanskritize(tail)}` : head
+  }
+  const tail = num % 1000
+  const head = `${num < 2000 ? '' : `${sanskritize(Math.floor(num / 1000))} `}sahasra`
+  return tail ? `${head} ${sanskritize(tail)}` : head
+}
+
+export const sanskrit = {
+  latin: { parse: sanskritize } satisfies Numeral,
 }
 
 const _0__59 = [Array(60)].map((_, i) => i).join(' ')

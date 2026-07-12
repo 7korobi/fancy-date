@@ -1,7 +1,7 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { listLocales, getLocale, SCRIPT_REGISTRY } = require('../lib/locale-registry')
-const { jpn, old_jpn, roman } = require('../lib/number')
+const { jpn, old_jpn, roman, sanskrit, sizewise } = require('../lib/number')
 
 describe('ロケール登録簿(発見・カタログ)', () => {
   test('listLocales/getLocaleで登録済みロケールを発見できる', () => {
@@ -20,6 +20,8 @@ describe('ロケール登録簿(発見・カタログ)', () => {
   test('SCRIPT_REGISTRYはロケールに依存しない記法カタログ', () => {
     expect(SCRIPT_REGISTRY.arabic.parse(2024)).toBe('2024')
     expect(SCRIPT_REGISTRY['roman-upper']).toBe(roman.upper)
+    expect(sizewise(jpn.漢字, jpn.桁読み).parse(7, 2)).toBe('〇七')
+    expect(sanskrit.latin.parse(21)).toBe('eka viṃśati')
   })
 })
 

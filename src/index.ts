@@ -218,7 +218,20 @@ export type {
   SolarDayHourBase,
 } from './tempo'
 
-export { DIC, angle, arabic, english, jpn, kor, mod, old_jpn, roman } from './number'
+export {
+  DIC,
+  angle,
+  arabic,
+  english,
+  jpn,
+  kor,
+  mod,
+  old_jpn,
+  parseNumeral,
+  roman,
+  sanskrit,
+  sizewise,
+} from './number'
 export type { Numeral } from './number'
 
 export { LOCALE_REGISTRY, SCRIPT_REGISTRY, getLocale, listLocales } from './locale-registry'

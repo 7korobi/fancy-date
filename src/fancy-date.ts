@@ -1,6 +1,5 @@
+import { mod, parseNumeral, type Numeral } from './number'
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
-import { mod } from './number'
-import type { Numeral } from './number'
 import type {
   LunarApsisKind,
   LunarNodeKind,
@@ -542,6 +541,8 @@ type IDIC = IIDX & {
   parse: string
   format: string
   numeral?: Numeral | null
+  numeral_text?: Numeral | null
+  numeral_ruby?: Numeral | null
   // y(年)のような、notation() の list/rubys(静的配列)が現実的でない
   // 無界の数値トークン向けの、'o'/'r' サフィックス(yo/yr)専用の数詞。
   // bare の y が使う numeral とは独立に設定できる(理由は
@@ -1106,6 +1107,16 @@ export class FancyDate {
     return this
   }
 
+  numeral_text(numeral: Numeral | null = null) {
+    this.dic.numeral_text = numeral
+    return this
+  }
+
+  numeral_ruby(numeral: Numeral | null = null) {
+    this.dic.numeral_ruby = numeral
+    return this
+  }
+
   // y(年)のように list/rubys の静的配列が現実的でない無界の数値トークン
   // 向けに、'o'/'r' サフィックス(yo/yr)専用の数詞を指定する。bare の y
   // (.numeral() / format_number() 経由)とは独立した状態に持つ——
@@ -1120,22 +1131,27 @@ export class FancyDate {
   }
 
   private format_number(value: number, size: number) {
-    const numeral = this.dic.numeral
-    if (numeral) return numeral.parse(value)
+    const numeral = this.dic.numeral_text ?? this.dic.numeral
+    if (numeral) return parseNumeral(numeral, value, size)
     return `${value}`.padStart(size, '0')
+  }
+
+  private format_number_ruby(value: number, size: number) {
+    const numeral = this.dic.numeral_ruby
+    return numeral ? parseNumeral(numeral, value, size) : ''
   }
 
   private format_numeral_label(value: number, size: number) {
     const numeral = this.dic.numeral_label
-    if (numeral) return numeral.parse(value)
+    if (numeral) return parseNumeral(numeral, value, size)
     return `${value}`.padStart(size, '0')
   }
 
-  private format_numeral_label_ruby(value: number) {
+  private format_numeral_label_ruby(value: number, size: number) {
     // 他トークンの 'r' サフィックス(rubys 未設定時)と同じ規約に合わせ、
     // ふりがな用 Numeral が設定されていなければ空文字を返す。
     const numeral = this.dic.numeral_label_ruby
-    return numeral ? numeral.parse(value) : ''
+    return numeral ? parseNumeral(numeral, value, size) : ''
   }
 
   labels(labels: SpanLabels) {
@@ -1147,12 +1163,14 @@ export class FancyDate {
     const numeric = Number(text)
     if (Number.isFinite(numeric)) return numeric
     const parsed = this.dic.numeral?.to_number?.(text)
-    return parsed ?? numeric
+    return parsed ?? this.dic.numeral_text?.to_number?.(text) ?? numeric
   }
 
   private number_pattern(fallback = '\\d+') {
-    const pattern = this.dic.numeral?.regex
-    return pattern ? `(?:${pattern}|${fallback})` : fallback
+    const patterns = [this.dic.numeral?.regex, this.dic.numeral_text?.regex, fallback].filter(
+      Boolean,
+    )
+    return patterns.length === 1 ? patterns[0]! : `(?:${patterns.join('|')})`
   }
 
   init() {
@@ -2170,6 +2188,12 @@ export class FancyDate {
   }
 
   private hierarchical_span_rows(precision: Precision, earlierTempos: Tempos, laterTempos: Tempos) {
+    const dayIndex = (tempos: Tempos) => tempos.d.raw_now_idx
+    const monthDayCount = (tempos: Tempos) => {
+      const end = Math.max(tempos.M.last_at, tempos.M.next_at - 1)
+      const lastDay = this.to_tempos(end).d
+      return Math.max(1, lastDay.raw_now_idx + 1)
+    }
     const coreRows: [Token, Unit, string, number, number, number][] = [
       ['y', 'year', '年', earlierTempos.y.now_idx, laterTempos.y.now_idx, Infinity],
       ['M', 'month', 'ヶ月', earlierTempos.M.now_idx, laterTempos.M.now_idx, this.dic.M.length],
@@ -2177,9 +2201,9 @@ export class FancyDate {
         'd',
         'day',
         '日',
-        earlierTempos.d.now_idx,
-        laterTempos.d.now_idx,
-        earlierTempos.M.size / this.calc.msec.day,
+        dayIndex(earlierTempos),
+        dayIndex(laterTempos),
+        monthDayCount(earlierTempos),
       ],
       ['H', 'hour', '時間', earlierTempos.H.now_idx, laterTempos.H.now_idx, this.dic.H.length],
       ['m', 'minute', '分', earlierTempos.m.now_idx, laterTempos.m.now_idx, this.dic.m.length],
@@ -2278,8 +2302,31 @@ export class FancyDate {
       if (format === 'note') {
         return this.note(utc).some((note) => this.match_find_value(note, matcher))
       }
+      if ('string' === typeof matcher) {
+        const matched = this.match_find_token_condition(utc, format, matcher)
+        if (matched != null) return matched
+      }
       return this.match_find_value(this.format(utc, format), matcher)
     })
+  }
+
+  private match_find_token_condition(utc: number, format: string, matcher: string) {
+    const tokens = format.match(reg_token)
+    if (!tokens || tokens.length !== 1 || tokens[0] !== format) return null
+    const parts = format_token_parts(format)
+    if (!parts) return null
+    if (!['M', 'd', 'H', 'm', 's', 'S'].includes(parts.top)) return null
+    try {
+      const expected = this.parse_obj(matcher, format)
+      const actual = this.to_tempos(utc)[parts.top]
+      const expectedIndex = expected[parts.top]
+      if (actual == null || 'number' !== typeof expectedIndex) return null
+      if (actual.now_idx !== expectedIndex) return false
+      if (parts.top === 'M' && actual.is_leap !== !!expected.M_is_leap) return false
+      return true
+    } catch {
+      return null
+    }
   }
 
   match_find_value(value: string, matcher: FindMatcher) {
@@ -2542,8 +2589,8 @@ export class FancyDate {
       }
     }
 
-    function month(cb: LabelFactory): LabelFactory {
-      return (list, val, size) => `${val.is_leap ? '閏' : ''}${cb(list, val, size)}`
+    function month(cb: LabelFactory, leap = '閏'): LabelFactory {
+      return (list, val, size) => `${val.is_leap ? leap : ''}${cb(list, val, size)}`
     }
 
     const float: LabelFactory = (__, val, size) => {
@@ -2625,7 +2672,7 @@ export class FancyDate {
     }
 
     const cut = () => ''
-    M = month(at(cut))
+    M = month(at(cut), 'うるう')
     A = B = C = E = H = N = Q = Z = a = b = c = d = m = s = at(cut)
     const object2 = { A, B, C, E, H, M, N, Q, Z, a, b, c, d, m, s }
     for (const key in object2) {
@@ -2645,7 +2692,7 @@ export class FancyDate {
     // 「ふりがな表現」を bare の y(numeral()の挙動のまま)とは独立に
     // 指定できるようにする。
     this.dic.y.to_label = (_list, val, size) => this.format_numeral_label(val.now_idx, size)
-    this.dic.y.to_ruby = (_list, val) => this.format_numeral_label_ruby(val.now_idx)
+    this.dic.y.to_ruby = (_list, val, size) => this.format_numeral_label_ruby(val.now_idx, size)
   }
 
   private week_cycle_token(): WeekCycleToken {
@@ -4105,7 +4152,7 @@ K   = @dic.earthy[2] / 360
       }
       return this.format_number(year, size)
     }
-    return tokens.map((token) => {
+    const parts = tokens.map((token) => {
       if (token === 'Ha') {
         return {
           token,
@@ -4122,15 +4169,16 @@ K   = @dic.earthy[2] / 360
       if (!val) return { token: '', text: token }
 
       const dic = this.dic[top]
-      const ruby = dic.to_ruby(dic.rubys, val, size)
-      const withRuby = (text: string): FormatPart =>
+      const explicitRuby = dic.to_ruby(dic.rubys, val, size)
+      const defaultRuby = explicitRuby || this.format_default_part_ruby(top, val, size)
+      const withRuby = (text: string, ruby = defaultRuby): FormatPart =>
         ruby ? { token, text, ruby } : { token, text }
 
       switch (mode) {
         case 'r':
-          return { token, text: ruby }
+          return { token, text: explicitRuby }
         case 'o':
-          return withRuby(dic.to_label(dic.list, val, size))
+          return withRuby(dic.to_label(dic.list, val, size), explicitRuby)
         default:
           if ('y' === top && !has_era && past && tempos.G?.label === past) {
             return { token, text: signed_year(1 - val.now_idx, size) }
@@ -4146,6 +4194,63 @@ K   = @dic.earthy[2] / 360
           return withRuby(dic.to_value(dic.list, val, size))
       }
     })
+    return this.merge_format_part_suffixes(parts)
+  }
+
+  private format_default_part_ruby(
+    top: ALL_DIC | 'Zz',
+    val: { now_idx: number; is_leap?: boolean },
+    size: number,
+  ) {
+    const countFromOne = () => this.format_number_ruby(val.now_idx + 1, size)
+    const countFromZero = () => this.format_number_ruby(val.now_idx, size)
+    switch (top) {
+      case 'M': {
+        const ruby = countFromOne()
+        return val.is_leap && ruby ? `うるう${ruby}` : ruby
+      }
+      case 'd':
+      case 'D':
+      case 'Q':
+      case 'p':
+      case 'w':
+        return countFromOne()
+      case 'H':
+      case 'm':
+      case 's':
+      case 'S':
+      case 'N':
+      case 'Y':
+      case 'u':
+      case 'y':
+        return countFromZero()
+      default:
+        return ''
+    }
+  }
+
+  private merge_format_part_suffixes(parts: FormatPart[]): FormatPart[] {
+    const result: FormatPart[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const tokenParts = format_token_parts(part.token)
+      const relatives = tokenParts ? this.dic[tokenParts.top]?.relatives : undefined
+      const next = parts[i + 1]
+      if (
+        part.ruby &&
+        'string' === typeof relatives &&
+        next?.token === '' &&
+        next.text.startsWith(relatives)
+      ) {
+        result.push({ ...part, text: `${part.text}${relatives}` })
+        const rest = next.text.slice(relatives.length)
+        if (rest) result.push({ token: '', text: rest })
+        i++
+        continue
+      }
+      result.push(part)
+    }
+    return result
   }
 
   tree() {

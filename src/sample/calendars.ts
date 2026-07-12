@@ -1,6 +1,6 @@
 import { FancyDate, tithi, transformOrbital } from '../fancy-date'
 import type { PLANET, SATELLITE } from '../fancy-date'
-import { jpn, mod, old_jpn, roman } from '../number'
+import { english, jpn, mod, old_jpn, roman, sanskrit, sizewise } from '../number'
 import { localTimezoneDeg } from '../time'
 import { 北朝元号 } from './eras'
 import {
@@ -26,11 +26,8 @@ import {
   和風月名かな,
   バビロニア月名,
   バビロニア月名かな,
+  ロムルス月ラベル数値,
   ロムルス月ラベルラテン語,
-  ロムルス月ラベルラテン語かな,
-  ローマ時法時,
-  ローマ時法時かな,
-  ローマ時法分,
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
@@ -85,12 +82,13 @@ const commonNotation: Parameters<FancyDate['notation']>[0] = {
 const baseCalendar = (c: FancyDate) => c.notation(commonNotation)
 
 const romanTemporalNotation: Parameters<FancyDate['notation']>[0] = {
-  H: [ローマ時法時, ローマ時法時かな, ' hora'],
-  m: [ローマ時法分, null, ' pars minuta'],
+  H: [24],
+  m: [60],
 }
 
 const gregorianBase = (c: FancyDate) =>
   baseCalendar(c)
+    .lang('y年M月d日', 'Gy年M月d日(E) HH:mm')
     .era('西暦', '紀元前')
     .calendar(
       ['1970年 木-斗 庚戌-辛巳', 'y年 dC7-dC28 yC60-dC60', 0],
@@ -122,7 +120,7 @@ const LocalGregorian = new FancyDate(Gregorian, (c) => c.spot(月, 0, 0, localTi
 
 const Julian = new FancyDate((c) =>
   baseCalendar(c)
-    .lang('y年M月d日', 'Gy年M月d日(dC7) Ho mo')
+    .lang('y年M月d日', 'Gy年M月d日(dC7) HH:mm')
     .spot(...Romus)
     .era('西暦', '紀元前')
     .calendar(
@@ -140,6 +138,7 @@ const Julian = new FancyDate((c) =>
     // H は昼夜12分割の horae temporariae として表し、m はその不定時に
     // ぶら下がる pars minuta として表示する。秒・ミリ秒は計算精度としては
     // 残るが、ローマ暦サンプルの標準表示からは外す。
+    .numeral_ruby(english.lower)
     .notation(romanTemporalNotation),
 )
 
@@ -149,6 +148,7 @@ const アマンタ = new FancyDate((c) =>
     .era('サカ歴', '紀元前')
     .calendar(['1891-09-08(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
     .division({ H: 'solar' })
+    .numeral_ruby(sanskrit.latin)
     .notation({
       yC9: [九星, 九星かな],
       dC9: [九星rev, 九星かなrev],
@@ -161,6 +161,7 @@ const プールニマンタ = new FancyDate((c) =>
     .era('サカ歴', '紀元前')
     .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
     .division({ H: 'solar' })
+    .numeral_ruby(sanskrit.latin)
     .notation({
       yC9: [九星, 九星かな],
       dC9: [九星rev, 九星かなrev],
@@ -213,6 +214,7 @@ const 平気法 = new FancyDate((c) =>
       0,
     ])
     .division({ H: 'solar' })
+    .numeral_text(jpn.漢字)
     .numeral_label(jpn.漢字, jpn.rubys)
     .notation({
       R6: [六曜, 六曜かな],
@@ -255,6 +257,7 @@ const 定気法 = new FancyDate((c) =>
       0,
     ])
     .division({ H: 'solar' })
+    .numeral_text(jpn.漢字)
     .numeral_label(jpn.漢字, jpn.rubys)
     .notation({
       R6: [六曜, 六曜かな],
@@ -277,16 +280,13 @@ const 定気法 = new FancyDate((c) =>
 
 const Romulus = new FancyDate((c) =>
   baseCalendar(c)
-    // M(サフィックスなし)は常に数値のまま(def_to_label() 参照)なので、
-    // 暦外ラベルを反映するには Mo(list 参照あり)を明示的に使う書式に
-    // する必要がある。既定の 'Gy年M月d日...' のような「M+リテラル月」
-    // の組み合わせのままだと、Mo に変えても暦外の位置で「暦外月1日」の
-    // ような不自然な表示になるため、月を表す助字自体を書式から外す。
+    // 月本文は数値表示にし、ruby でラテン語月名(Martius〜December)を示す。
+    // 暦外期間だけは数値本文では意味が薄いが、標準表示では数値規約を優先する。
     // parse は他の暦(平気法/定気法等)と同様、format より要素を絞った
     // 最小形にする(曜日(dC7)や干支(yC60-dC60)は表示専用の付加情報であり、
     // parse 側にまで同じ要素を含めると、その通りの文字列でなければ
     // parse できなくなり format() の出力と噛み合わなくなる)。
-    .lang('y年Mo d日', 'Gy年Mo d日(dC8) Ho mo')
+    .lang('y年M d日', 'Gy年M d日(dC8) HH:mm')
     .spot(...Romus)
     .era('ロムルス暦', '紀元前')
     .calendar(
@@ -297,16 +297,13 @@ const Romulus = new FancyDate((c) =>
     .notation({
       // 11番目(month_divs の null が担う可変長月、約60日)は暦月ではなく
       // 冬籠もりのための暦外期間(10月の後に置かれるのは正しい配置)。
-      // 伝統的なロムルス暦の月名(ラテン語、Martius〜December)を割り当て、
-      // 11番目だけ「暦外」ラベルにする(ロムルス月ラベルラテン語/
-      // ロムルス月ラベルラテン語かな のドキュメント参照。数値のみ版が
-      // 欲しい場合は ロムルス月ラベル数値/ロムルス月ラベル数値かな に
-      // 差し替える)。上の .lang() で Mo(list 参照あり)を使う書式に
-      // しているため、通常の月はラテン語名、11番目は「暦外」になる。
-      M: [ロムルス月ラベルラテン語, ロムルス月ラベルラテン語かな],
+      // 通常月は数値本文にし、ラテン語月名(Martius〜December)を ruby にする。
+      // 11番目だけは暦月ではないため「暦外」ラベルを本文に残す。
+      M: [ロムルス月ラベル数値, ロムルス月ラベルラテン語],
       dC8: [[...'ABCDEFGH'], null] as const,
       ...romanTemporalNotation,
     })
+    .numeral_ruby(english.lower)
     // Julian と同じ理由(horae temporariae、development-notes.md 参照)で
     // ロムルス暦の時代のローマも不定時法だった。
     .division({ H: 'solar' }),
@@ -415,6 +412,7 @@ const Jupiter = new FancyDate((c) =>
 
 const フランス革命暦 = new FancyDate((c) =>
   baseCalendar(c)
+    .lang('y年M月d日', 'Gy年Mo d日(dC10)')
     .spot(...Paris)
     .era('革命暦', '紀元前')
     .calendar(
@@ -546,6 +544,10 @@ const Beat = new FancyDate((c) =>
     }),
 )
 
+const 漢数字Gregorian = new FancyDate(Gregorian, (c) =>
+  c.numeral(sizewise(jpn.漢字, jpn.桁読み)).numeral_ruby(jpn.rubys),
+)
+
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
 const エジプト民用暦 = new FancyDate((c) => {
   const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
@@ -608,6 +610,7 @@ export const Calendar = {
   フランス革命暦,
   Maya,
   Beat,
+  漢数字Gregorian,
   エジプト民用暦,
   コプト暦,
   RomanClock,

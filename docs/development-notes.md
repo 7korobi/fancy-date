@@ -51,6 +51,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 - `format()` の既定書式は `Gy年M月d日(E)` の日付表示に戻した。秒・分・時は、暦法を使っていた文化圏やサンプルの主題として時刻表現を持つ場合だけ、各暦の `.lang()` で明示する。ローマ/ロムルス/和暦は従来通り文化的な時刻語彙を出し、バビロニア暦(カスプ/ベール)は時刻制度自体が主題なので `H時m分` まで、Beat は日付側を通常の西暦とし、Swatch Internet Time の時計サンプルとして `@HHH` までを標準表示にする。秒は内部精度に留め、標準表示には出さない。
 - `format_parts(utc, fmt)` / `format_parts_by(utc, fmt)` を追加した。戻り値は `{ token, text, ruby? }[]`。`token` は元の format token、リテラル片は `''`、`text` の連結は常に `format()` と一致する。`ruby` は本文 token に添える読みがある場合だけ付け、`dC60r`/`Er` のような `r` suffix token は読みそのものを `text` にするため `ruby` を付けない。`format_parts_by()` が内部で `to_tempos_input()` するため、数値・文字列・解決済み `Tempos` のいずれでも使える。
+- `format_parts()` の ruby は、`o`/`r` suffix では明示辞書(`to_label`/`to_ruby`)を使う従来仕様を維持する。一方 bare token には `.numeral_ruby()` で数値本文用の読みを付けられるようにした。`notation()` 第3要素が文字列の token では、直後の同じリテラルを ruby 対象の本文へ吸収するため、和暦の `d日` は `{ text: '24日', ruby: 'にじゅうよっか' }` になる。閏月 ruby は `閏` ではなく `うるう` を前置する。
 - `format()` は内部的に `format_parts_by(...).map((p) => p.text).join('')` へ委譲する形にしたため、文字列出力と parts API の整合性を実装上保証している。旧 `format_by()` の役割は `format()` と `format_parts_by()` が巻き取った。
 - svelte-tick-timer の `/fancy` ページは `format_parts()` ベースへ移行し、空白 split と固定配列分割代入をやめた。`FormatPart` から `{ text, ruby }` を作って `<ruby>{text}<rt>{ruby}</rt></ruby>` に流し込む形になり、format 文字列・分割代入・テンプレートの三重管理を解消した。
 - `labels()` と `parse_span()` / `format_span()` を追加し、span の表記を暦ごとに調整できるようにした。
