@@ -3294,6 +3294,19 @@ K   = @dic.earthy[2] / 360
     return new SubdivideTempoRule(this.calc.msec.day, offset)
   }
 
+  private fixed_tempo(size: number, zero: number, write_at: number): Tempo<TempoBase> {
+    return Tempo.at(new FixedTempoRule(size, zero), { write_at })
+  }
+
+  private subdivide_tempo(
+    size: number,
+    write_at: number,
+    parent: TempoEnvelope,
+    offset = 0,
+  ): Tempo<SubdivideBase> {
+    return Tempo.at(new SubdivideTempoRule(size, offset), { write_at, parent })
+  }
+
   private assign_day_tempo(day: Tempo<SubdivideBase>): Tempo<SubdivideBase> {
     const assignment = this.dic.assignments.d
     if (!assignment) return day
@@ -3370,14 +3383,10 @@ K   = @dic.earthy[2] / 360
     // すべて弾く。
     if (!Number.isFinite(utc)) throw new Error(`invalid timestamp ${utc}`)
 
-    const J = Tempo.at(new FixedTempoRule(this.calc.msec.day, this.calc.zero.jd), {
-      write_at: utc,
-    }) // ユリウス日
+    const J = this.fixed_tempo(this.calc.msec.day, this.calc.zero.jd, utc) // ユリウス日
 
     // season in year_of_planet
-    const Zz = Tempo.at(new FixedTempoRule(this.calc.msec.year, this.calc.zero.season), {
-      write_at: utc,
-    }) // 太陽年
+    const Zz = this.fixed_tempo(this.calc.msec.year, this.calc.zero.season, utc) // 太陽年
     // 実軌道(sunny.timeOfPhase)を持つ場合は定気法(実際の黄経)で二十四節気を解決する。
     // そうでなければ従来通り平気法(等角分割、SubdivideTempoRule)のまま。
     const usesOrbitalSeasons = hasSolarEvents(this.dic.sunny)
@@ -3432,9 +3441,7 @@ K   = @dic.earthy[2] / 360
     }
 
     if (this.is_table_leap) {
-      p = Tempo.at(new FixedTempoRule(this.calc.msec.period, this.calc.zero.period), {
-        write_at: utc,
-      })
+      p = this.fixed_tempo(this.calc.msec.period, this.calc.zero.period, utc)
       // table.msec.year は def_year_table() で dic.leaps の最後の要素
       // (period)個ぴったりに作られ、dic.p.length も同じ period から
       // 設定される(常に table.msec.year.length === dic.p.length)。
@@ -3596,28 +3603,13 @@ K   = @dic.earthy[2] / 360
     // hour minute second  in day
     if (this.dic.is_solor) {
       H = Tempo.at(this.solar_hour_rule(), { write_at: utc, day: envelope_of(d) })
-      m = Tempo.at(new SubdivideTempoRule(H.size / this.dic.m.length), {
-        write_at: utc,
-        parent: envelope_of(H),
-      })
+      m = this.subdivide_tempo(H.size / this.dic.m.length, utc, envelope_of(H))
     } else {
-      H = Tempo.at(new SubdivideTempoRule(this.calc.msec.hour), {
-        write_at: utc,
-        parent: envelope_of(d),
-      })
-      m = Tempo.at(new SubdivideTempoRule(this.calc.msec.minute), {
-        write_at: utc,
-        parent: envelope_of(H),
-      })
+      H = this.subdivide_tempo(this.calc.msec.hour, utc, envelope_of(d))
+      m = this.subdivide_tempo(this.calc.msec.minute, utc, envelope_of(H))
     }
-    const s = Tempo.at(new SubdivideTempoRule(this.calc.msec.second), {
-      write_at: utc,
-      parent: envelope_of(m),
-    })
-    const S = Tempo.at(new SubdivideTempoRule(this.calc.msec.msec), {
-      write_at: utc,
-      parent: envelope_of(s),
-    })
+    const s = this.subdivide_tempo(this.calc.msec.second, utc, envelope_of(m))
+    const S = this.subdivide_tempo(this.calc.msec.msec, utc, envelope_of(s))
 
     // def_eras() は常に table.msec.era を([Infinity] だけでも)設定するため
     // 下の分岐は実際にはほぼ必ず通るが、万一 table.msec.era が未設定のまま
@@ -3654,19 +3646,11 @@ K   = @dic.earthy[2] / 360
     const uEnvelope = envelope_of(u)
 
     // 年初来番号
-    const w0 = Tempo.at(new FixedTempoRule(this.calc.msec.week, this.calc.zero.week), {
-      write_at: u.last_at,
-    })
-    const w = Tempo.at(new SubdivideTempoRule(this.calc.msec.week), {
-      write_at: utc,
-      parent: envelope_of(w0),
-    })
+    const w0 = this.fixed_tempo(this.calc.msec.week, this.calc.zero.week, u.last_at)
+    const w = this.subdivide_tempo(this.calc.msec.week, utc, envelope_of(w0))
     // D(年初来日数)は d(月内日)とは別の関心事(年内の通し日数)なので、
     // dusk()/dayBoundary() の対象にしない(常に実時計 0 時起点のまま)。
-    const D = Tempo.at(new SubdivideTempoRule(this.calc.msec.day), {
-      write_at: utc,
-      parent: uEnvelope,
-    })
+    const D = this.subdivide_tempo(this.calc.msec.day, utc, uEnvelope)
 
     // 年末最終週は、翌年初週の扱いにする。Y はその調整を反映した年ラベル。
     const yearEndsInNextYearsFirstWeek = u.next_at < w.next_at
