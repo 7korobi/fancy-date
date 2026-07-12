@@ -385,6 +385,10 @@ function is_legacy_token_alias(token: string): token is LegacyTokenAlias {
   return token in legacy_token_aliases
 }
 
+function canonical_token(token: string): string {
+  return is_legacy_token_alias(token) ? legacy_token_aliases[token] : token
+}
+
 function is_cycle_token(token: string): token is CycleToken {
   return (cycle_tokens as readonly string[]).includes(token)
 }
@@ -402,7 +406,7 @@ function is_calendar_note_token(token: string): token is CalendarNoteToken {
 }
 
 function token_base(token: Token): ALL_DIC | 'Zz' {
-  return is_legacy_token_alias(token) ? legacy_token_aliases[token] : token
+  return canonical_token(token) as ALL_DIC | 'Zz'
 }
 
 function define_token_alias<T extends Partial<Record<string, unknown>>>(
@@ -432,18 +436,17 @@ function format_token_parts(
   const hasSuffix = token.endsWith('o') || token.endsWith('r')
   const source = hasSuffix ? token.slice(0, -1) : token
   const suffix = hasSuffix ? token.slice(-1) : ''
-  if (is_cycle_token(source)) {
-    return { top: source, mode: suffix, size: 1 }
-  }
-  if (is_legacy_token_alias(source)) {
-    return { top: legacy_token_aliases[source], mode: suffix, size: 1 }
+  const canonicalSource = canonical_token(source)
+  if (is_cycle_token(canonicalSource)) {
+    return { top: canonicalSource, mode: suffix, size: 1 }
   }
   const [top, mode = ''] = token
-  if (top && is_legacy_token_alias(top)) {
-    return { top: legacy_token_aliases[top], mode, size: token.length }
+  const canonicalTop = top ? canonical_token(top) : top
+  if (canonicalTop && is_cycle_token(canonicalTop)) {
+    return { top: canonicalTop, mode, size: token.length }
   }
-  if (top && all_tokens.includes(top)) {
-    return { top: top as ALL_DIC, mode, size: token.length }
+  if (canonicalTop && all_tokens.includes(canonicalTop)) {
+    return { top: canonicalTop as ALL_DIC, mode, size: token.length }
   }
   return null
 }
