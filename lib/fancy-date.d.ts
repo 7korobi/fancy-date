@@ -272,6 +272,7 @@ export declare class FancyDate {
     constructor(base?: FancyDate);
     constructor(build: (calendar: FancyDate) => FancyDate);
     constructor(base: FancyDate | undefined, build: (calendar: FancyDate) => FancyDate);
+    private initBlank;
     static lazy(create: () => FancyDate): FancyDate;
     spot(...spot: SPOT): this;
     lang(parse: string, format: string): this;

@@ -881,50 +881,51 @@ export class FancyDate {
     baseOrBuild?: FancyDate | ((calendar: FancyDate) => FancyDate),
     build?: (calendar: FancyDate) => FancyDate,
   ) {
-    // new FancyDate(build): ゼロから遅延生成(build は生成直後のインスタンスを受け取る)
-    if ('function' === typeof baseOrBuild) {
-      const create = baseOrBuild
-      return FancyDate.lazy(() => create(new FancyDate()).init())
-    }
-    // new FancyDate(base, build): base を複製してから遅延生成
-    if (build) {
-      const base = baseOrBuild
-      return FancyDate.lazy(() => build(new FancyDate(base)).init())
-    }
-    // new FancyDate() / new FancyDate(base): 即時(新規生成 / 複製)
-    const o = baseOrBuild
-    if (o) {
-      ;({ dic: this.dic, calc: this.calc } = cloneValue(o))
-    } else {
-      this.dic = {
-        parse: 'y年M月d日',
-        format: 'Gy年M月d日(E)H時m分s秒',
-      } as any
-      Object.defineProperty(this.dic, 'labels', {
-        configurable: true,
-        enumerable: false,
-        value: { ...DEFAULT_LABELS },
-        writable: true,
-      })
-      Object.defineProperty(this.dic, 'assignments', {
-        configurable: true,
-        enumerable: false,
-        value: {},
-        writable: true,
-      })
+    const isBuild = 'function' === typeof baseOrBuild
+    const create = isBuild ? baseOrBuild : build
+    const base = isBuild ? undefined : baseOrBuild
 
-      this.calc = {
-        eras: [],
-        idx: {},
-        zero: {},
-        msec: {},
-        range: {},
-      } as any
-      for (const key of all_dic_tokens) {
-        this.dic[key] = new Indexer([])
-      }
-      sync_legacy_token_aliases(this.dic)
+    // build を渡した場合: build(複製 or 新規).init() を遅延評価する Proxy を返す
+    if (create) return FancyDate.lazy(() => create(new FancyDate(base)).init())
+
+    // 即時: base があれば複製、なければ空の暦を生成
+    if (base) {
+      ;({ dic: this.dic, calc: this.calc } = cloneValue(base))
+    } else {
+      this.initBlank()
     }
+  }
+
+  // 空の暦を初期化する(new FancyDate() 経路)。
+  private initBlank() {
+    this.dic = {
+      parse: 'y年M月d日',
+      format: 'Gy年M月d日(E)H時m分s秒',
+    } as any
+    Object.defineProperty(this.dic, 'labels', {
+      configurable: true,
+      enumerable: false,
+      value: { ...DEFAULT_LABELS },
+      writable: true,
+    })
+    Object.defineProperty(this.dic, 'assignments', {
+      configurable: true,
+      enumerable: false,
+      value: {},
+      writable: true,
+    })
+
+    this.calc = {
+      eras: [],
+      idx: {},
+      zero: {},
+      msec: {},
+      range: {},
+    } as any
+    for (const key of all_dic_tokens) {
+      this.dic[key] = new Indexer([])
+    }
+    sync_legacy_token_aliases(this.dic)
   }
 
   static lazy(create: () => FancyDate): FancyDate {
