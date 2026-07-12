@@ -738,7 +738,6 @@ class AssignedTempoRule<
   assign(raw: TempoEnvelope, base: Base): TempoEnvelope {
     const rawEnvelope = this.raw_envelope(raw)
     const previous = this.innerRule.slide(rawEnvelope, -1, base)
-    const next = this.innerRule.slide(rawEnvelope, 1, base)
     const dayStart = this.currentDayStart()
     const assigned = this.assignment(dayStart, {
       token: this.token,
@@ -746,7 +745,7 @@ class AssignedTempoRule<
       dayStart,
       at: rawEnvelope.last_at,
       previousAt: previous.last_at,
-      nextAt: next.last_at,
+      nextAt: rawEnvelope.next_at,
     })
     const now_idx = 'number' === typeof assigned ? assigned : assigned.now_idx
     const assignment_raw_now_idx =

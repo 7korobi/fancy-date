@@ -1086,6 +1086,26 @@ describe('Gregorian', () => {
     expect(next.last_at).toBe(day.next_at)
   })
 
+  test('assignment context reuses the current day envelope for nextAt', () => {
+    const contexts = []
+    const calendar = new FancyDate(g)
+      .dayStart('sunrise')
+      .assign({
+        d: (_dayStart, context) => {
+          contexts.push(context)
+          return 0
+        },
+      })
+      .init()
+    const base = calendar.parse('2024年6月21日')
+    const day = new FancyDate(g).dayStart('sunrise').init().to_tempos(base).d
+
+    calendar.to_tempos(base)
+
+    expect(contexts[0].at).toBe(day.last_at)
+    expect(contexts[0].nextAt).toBe(day.next_at)
+  })
+
   test('tithi() caches raw lunar phase indexes across repeated civil-day queries', () => {
     const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: tithi() }).init()
     const base = calendar.parse('2024年6月21日')
