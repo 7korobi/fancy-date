@@ -5,6 +5,7 @@ const { to_tempo_by_solor, solar_terms } = require('../lib/phenomena/solar')
 const { lunisolar } = require('../lib/phenomena/lunisolar')
 const { mod } = require('../lib/number')
 const {
+  CachedTempoRule,
   FixedTempoRule,
   TableTempoRule,
   SubdivideTempoRule,
@@ -79,6 +80,50 @@ function buildYearTable() {
 }
 
 describe('tempo', () => {
+  describe('CachedTempoRule', () => {
+    const countedRule = (counter) => ({
+      at(write_at) {
+        counter.calls++
+        return to_tempo_bare(DAY, ZERO, write_at)
+      },
+      slide(envelope, amount) {
+        return to_tempo_bare(DAY, ZERO, envelope.write_at + amount * DAY)
+      },
+    })
+
+    test('keeps several recently resolved envelopes instead of only the latest one', () => {
+      const counter = { calls: 0 }
+      const rule = new CachedTempoRule(countedRule(counter), undefined, 3)
+
+      rule.at(ZERO + 0.1 * DAY, { write_at: ZERO })
+      rule.at(ZERO + 1.1 * DAY, { write_at: ZERO })
+      rule.at(ZERO + 2.1 * DAY, { write_at: ZERO })
+      expect(counter.calls).toBe(3)
+
+      rule.at(ZERO + 0.2 * DAY, { write_at: ZERO })
+      rule.at(ZERO + 1.2 * DAY, { write_at: ZERO })
+      rule.at(ZERO + 2.2 * DAY, { write_at: ZERO })
+      expect(counter.calls).toBe(3)
+    })
+
+    test('keeps cacheKey-separated envelopes distinct', () => {
+      const counter = { calls: 0 }
+      const rule = new CachedTempoRule(
+        countedRule(counter),
+        (base) => base.parent.last_at,
+        4,
+      )
+      const parentA = { last_at: ZERO }
+      const parentB = { last_at: ZERO + DAY }
+
+      rule.at(ZERO + 0.1 * DAY, { write_at: ZERO, parent: parentA })
+      rule.at(ZERO + 0.2 * DAY, { write_at: ZERO, parent: parentB })
+      rule.at(ZERO + 0.3 * DAY, { write_at: ZERO, parent: parentA })
+
+      expect(counter.calls).toBe(2)
+    })
+  })
+
   describe('join', () => {
     // 旧 time.ts の静的 Tempo.join(a, b)(Tempo への統合に伴いクラスごと
     // 削除済み)と数値的に一致することを確認していた式を、その場でインライン

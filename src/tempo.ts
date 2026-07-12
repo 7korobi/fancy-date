@@ -72,10 +72,10 @@ export interface TempoRule<Base = TempoBase> {
 }
 
 /**
- * CachedTempoRule: 他の TempoRule をラップし、直近に解決した envelope を
+ * CachedTempoRule: 他の TempoRule をラップし、直近に解決した envelope 群を
  * 再利用するデコレータ。
  *
- * at(write_at, base) は、直近の envelope がまだ write_at を覆っており
+ * at(write_at, base) は、キャッシュ済み envelope がまだ write_at を覆っており
  * (last_at <= write_at < next_at)、かつ任意の cacheKey(base) も一致する
  * 場合はそれをそのまま返し、それ以外だけ元の rule.at() を呼んで
  * 解決し直す。実軌道の位相探索(OrbitalPhaseTempoRule)や観測太陰太陽暦の
@@ -88,34 +88,48 @@ export interface TempoRule<Base = TempoBase> {
  * 包んだインスタンスを呼び出し側(FancyDate)で使い回す(1回だけ構築して
  * 保持する)ことで初めて効果が出る。
  *
+ * 単一スロットでは、同じ呼び出し内で複数の近接区間を往復する場面
+ * (例: 現在のZ・月初の中気・月末の中気)で毎回上書きされてしまうため、
+ * 小さなMRUとして保持する。
+ *
  * slide() はキャッシュを更新しない(素通しで元の rule.slide() を呼ぶ)。
  * TempoView.slide() は隣接区間への遷移であり、都度 at() が再度呼ばれる
  * とは限らないため、明示的にキャッシュへ反映する余地はあるが、
  * 現状 slide() は at() ほど頻繁に(重い探索を伴って)呼ばれないため
  * 単純化のため省略する。
  */
+type CachedTempoRuleEntry = {
+  key: unknown
+  envelope: TempoEnvelope
+}
+
 export class CachedTempoRule<Base extends TempoBase = TempoBase> implements TempoRule<Base> {
-  private cached?: TempoEnvelope
-  private cachedKey?: unknown
+  private readonly entries: CachedTempoRuleEntry[] = []
 
   constructor(
     private readonly rule: TempoRule<Base>,
     private readonly cacheKey?: (base: Base) => unknown,
+    private readonly capacity = 8,
   ) {}
 
   at(write_at: number, base: Base): TempoEnvelope {
-    const cached = this.cached
     const key = this.cacheKey?.(base)
-    if (
-      cached &&
-      (this.cacheKey == null || Object.is(key, this.cachedKey)) &&
-      cached.last_at <= write_at &&
-      write_at < cached.next_at
-    ) {
-      return cached
+    const hitIndex = this.entries.findIndex(({ key: cachedKey, envelope }) => {
+      return (
+        (this.cacheKey == null || Object.is(key, cachedKey)) &&
+        envelope.last_at <= write_at &&
+        write_at < envelope.next_at
+      )
+    })
+    if (hitIndex >= 0) {
+      const [hit] = this.entries.splice(hitIndex, 1)
+      this.entries.unshift(hit)
+      return hit.envelope
     }
-    this.cachedKey = key
-    return (this.cached = this.rule.at(write_at, base))
+    const envelope = this.rule.at(write_at, base)
+    this.entries.unshift({ key, envelope })
+    this.entries.length = Math.min(this.entries.length, Math.max(1, this.capacity))
+    return envelope
   }
 
   slide(envelope: TempoEnvelope, amount: number, base: Base): TempoEnvelope {
