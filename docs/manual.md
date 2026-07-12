@@ -250,7 +250,7 @@ g.add(from, '1年2ヶ月9日4時間5分後')
 `parse_span(text, { at? })` は現在の暦の `labels()` と `notation(..., relatives)` を使って相対表現を読む。`at` を渡した場合は、その基準時刻を span の anchor として保持する。`format_span(span, direction?)` は `SpanLike` を現在の暦の表記へ整える。
 
 ```ts
-const custom = g.dup().labels({ w: '週目', dC: '日巡り' }).init()
+const custom = new FancyDate(g).labels({ w: '週目', dC: '日巡り' }).init()
 
 custom.parse_span('1日巡り後')
 // { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }

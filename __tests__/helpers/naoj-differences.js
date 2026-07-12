@@ -1,4 +1,5 @@
 const { Calendar, 天文月 } = require('../../lib/sample')
+const { FancyDate } = require('../../lib/fancy-date')
 const {
   NAOJ_LUNAR_EVENT_FIXTURES,
   NAOJ_LUNAR_EVENT_SOURCE,
@@ -128,7 +129,7 @@ function lunarPhaseDifferences(calendar = Calendar.GregorianAstronomical) {
 }
 
 function solarEventDifferences() {
-  const nagoya = Calendar.Gregorian.dup()
+  const nagoya = new FancyDate(Calendar.Gregorian)
     .spot(
       天文月,
       NAOJ_SOLAR_EVENT_SOURCE.latitudeDeg,
@@ -153,7 +154,7 @@ function solarEventDifferences() {
 }
 
 function lunarEventDifferences() {
-  const nagoya = Calendar.Gregorian.dup()
+  const nagoya = new FancyDate(Calendar.Gregorian)
     .spot(
       天文月,
       NAOJ_LUNAR_EVENT_SOURCE.latitudeDeg,

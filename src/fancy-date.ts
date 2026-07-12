@@ -2286,10 +2286,6 @@ export class FancyDate {
     )
   }
 
-  dup() {
-    return new FancyDate(this)
-  }
-
   def_regex() {
     let A, B, C, D, E, G, H, N, Q, S, Y, Z
     let a, b, c, d, m, p, s, w, x, y

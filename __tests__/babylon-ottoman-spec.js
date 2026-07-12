@@ -1,4 +1,5 @@
 const { Calendar } = require('../lib/sample')
+const { FancyDate } = require('../lib/fancy-date')
 
 // バビロニア暦(カスプ/ベール)・オスマン帝国の時刻制度(季節時法/アラトゥルカ)の
 // サンプル暦(docs/development-notes.md 参照)。いずれも日没起点の暦日境界を
@@ -133,7 +134,7 @@ describe('バビロニア暦', () => {
     const kaspu = Calendar.バビロニア暦カスプ
     expect(kaspu.dic.is_solor).toBe(true)
     // 北緯32.5度は極域ガード(66.5度)の対象外なので construction 自体は成功する
-    expect(() => kaspu.dup().init()).not.toThrow()
+    expect(() => new FancyDate(kaspu).init()).not.toThrow()
   })
 
   test('北緯32.5度は不定時法の極域ガードに抵触しない', () => {

@@ -75,7 +75,7 @@ function shiftedMeanOrbital(source, shiftMsec) {
 function solarShiftCalendar(shiftMsec) {
   const shiftedEarth = [太陽, shiftedMeanOrbital(地球[1], shiftMsec), 地球[2]]
   const shiftedMoon = [shiftedEarth, 月[1], 月[2]]
-  return g.dup().spot(shiftedMoon, 東京[1], 東京[2], 東京[3]).init()
+  return new FancyDate(g).spot(shiftedMoon, 東京[1], 東京[2], 東京[3]).init()
 }
 
 const calendars = [
@@ -190,7 +190,7 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
 
   test('is_up_all_day distinguishes polar day from polar night when has_sunrise is false', () => {
     // 北緯78度(スヴァールバル諸島相当)は夏至に白夜、冬至に極夜になる。
-    const arctic = g.dup().spot(月, 78, 15.6, 15).init()
+    const arctic = new FancyDate(g).spot(月, 78, 15.6, 15).init()
     const summer = arctic.solor(arctic.parse('2024年6月21日'))
     const winter = arctic.solor(arctic.parse('2024年12月21日'))
     expect(summer.has_sunrise).toBe(false)
@@ -199,7 +199,7 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(winter.is_up_all_day).toBe(false) // 極夜: 終日太陽が昇らない
 
     // hasSolarEvents を持つ精密モデル(GregorianAstronomical)側でも同様に判定できる。
-    const arcticGa = ga.dup().spot(月, 78, 15.6, 15).init()
+    const arcticGa = new FancyDate(ga).spot(月, 78, 15.6, 15).init()
     const summerGa = arcticGa.solor(arcticGa.parse('2024年6月21日'))
     expect(summerGa.has_sunrise).toBe(false)
     expect(summerGa.is_up_all_day).toBe(true)
@@ -208,29 +208,33 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
   test("division({ H: 'solar' })(不定時法)は極域(緯度66.5度以遠)では construction 時点で例外になる", () => {
     // 不定時法は日の出・日の入りの間隔を等分する前提のため、日の出/日の入りが
     // 存在しない期間が生じる極域では成立しない(調査結果、development-notes.md 参照)。
-    expect(() => g.dup().spot(月, 78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
-    expect(() => g.dup().spot(月, -78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+    expect(() => new FancyDate(g).spot(月, 78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+    expect(() => new FancyDate(g).spot(月, -78, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
     // 極圏ちょうど(66.5度)も含めて例外にする(下限として扱う)。
-    expect(() => g.dup().spot(月, 66.5, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
+    expect(() => new FancyDate(g).spot(月, 66.5, 15.6, 15).daily('Sunny').init()).toThrow(/極域/)
 
     // 極域でなければ不定時法は従来どおり構築できる
     // (東京: 北緯約35.7度、既存の平気法/定気法サンプルと同じ緯度帯)。
-    expect(() => g.dup().spot(月, 35.7, 139.7, 135).daily('Sunny').init()).not.toThrow()
+    expect(() => new FancyDate(g).spot(月, 35.7, 139.7, 135).daily('Sunny').init()).not.toThrow()
     // spot()/daily() の呼び出し順が逆でも同様に検出できる。
-    expect(() => g.dup().daily('Sunny').spot(月, 78, 15.6, 15).init()).toThrow(/極域/)
-    expect(() => g.dup().spot(月, 78, 15.6, 15).division({ H: 'solar' }).init()).toThrow(/極域/)
-    expect(() => g.dup().spot(月, 35.7, 139.7, 135).division({ H: 'solar' }).init()).not.toThrow()
-    expect(g.dup().division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(
-      true,
+    expect(() => new FancyDate(g).daily('Sunny').spot(月, 78, 15.6, 15).init()).toThrow(/極域/)
+    expect(() => new FancyDate(g).spot(月, 78, 15.6, 15).division({ H: 'solar' }).init()).toThrow(
+      /極域/,
     )
-    expect(g.dup().division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor).toBe(
-      false,
-    )
-    expect(() => g.dup().spot(月, 78, 15.6, 15).dayStart('sunrise').init()).toThrow(/極域/)
+    expect(() =>
+      new FancyDate(g).spot(月, 35.7, 139.7, 135).division({ H: 'solar' }).init(),
+    ).not.toThrow()
+    expect(
+      new FancyDate(g).division({ H: 'solar' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor,
+    ).toBe(true)
+    expect(
+      new FancyDate(g).division({ H: 'equal' }).spot(月, 35.7, 139.7, 135).init().dic.is_solor,
+    ).toBe(false)
+    expect(() => new FancyDate(g).spot(月, 78, 15.6, 15).dayStart('sunrise').init()).toThrow(/極域/)
   })
 
   test("dayStart('sunrise') uses actual sunrise as the civil day boundary", () => {
-    const dawn = g.dup().dayStart('sunrise').init()
+    const dawn = new FancyDate(g).dayStart('sunrise').init()
     const base = dawn.parse('2024年6月21日')
     const tempos = dawn.to_tempos(base)
     const next = tempos.d.succ().last_at
@@ -261,7 +265,7 @@ describe('has_moonrise/has_transit/has_moonset/has_sunrise', () => {
     expect(Math.abs(toDeg(mean.日の入方位) - toDeg(precise.日の入方位))).toBeLessThan(0.5)
 
     // 白夜/極夜(has_sunrise=false)では他のイベント系フィールド同様 NaN になる。
-    const arctic = g.dup().spot(月, 78, 15.6, 15).init()
+    const arctic = new FancyDate(g).spot(月, 78, 15.6, 15).init()
     const arcticSummer = arctic.solor(arctic.parse('2024年6月21日'))
     expect(arcticSummer.has_sunrise).toBe(false)
     expect(Number.isNaN(arcticSummer.日の出方位)).toBe(true)
@@ -1013,13 +1017,11 @@ describe('Gregorian', () => {
   test('notation() is the expression API while algo() remains a compatibility alias', () => {
     const utc = g.parse('2024年3月10日')
     const start = ['1970年 Thu-斗 庚戌-辛巳', 'y年 dC7-dC28 yC60-dC60', 0]
-    const notation = g
-      .dup()
+    const notation = new FancyDate(g)
       .calendar(start, [4, 100, 400], [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
       .notation({ dC7: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']] })
       .init()
-    const legacy = g
-      .dup()
+    const legacy = new FancyDate(g)
       .calendar(start, [4, 100, 400], [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
       .algo({ dC7: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']] })
       .init()
@@ -1032,8 +1034,8 @@ describe('Gregorian', () => {
     const utc = g.parse('2024年3月10日')
     const assignment = (dayStart, context) =>
       dayStart === 'sunrise' && context.token === 'd' ? 1 : 0
-    const calendar = g.dup().dayStart('sunrise').assign({ d: assignment }).init()
-    const clone = calendar.dup()
+    const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: assignment }).init()
+    const clone = new FancyDate(calendar)
 
     expect(calendar.dic.assignments.d).toBe(assignment)
     expect(Object.prototype.propertyIsEnumerable.call(calendar.dic, 'assignments')).toBe(false)
@@ -1045,7 +1047,7 @@ describe('Gregorian', () => {
     let constructed = 0
     const calendar = FancyDate.lazy(() => {
       constructed++
-      return g.dup().init()
+      return new FancyDate(g).init()
     })
 
     expect(calendar).toBeInstanceOf(FancyDate)
@@ -1057,7 +1059,7 @@ describe('Gregorian', () => {
   })
 
   test('tithi() assigns d from the lunar phase at the configured dayStart boundary', () => {
-    const calendar = g.dup().dayStart('sunrise').assign({ d: tithi() }).init()
+    const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: tithi() }).init()
     const base = calendar.parse('2024年6月21日')
     const day = calendar.to_tempos(base).d
     const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
@@ -1065,7 +1067,9 @@ describe('Gregorian', () => {
 
     expect(day.now_idx).toBe(expected)
     expect(calendar.format(base, 'd')).toBe(String(expected + 1))
-    expect(day.raw_now_idx).toBe(g.dup().dayStart('sunrise').init().to_tempos(base).d.now_idx)
+    expect(day.raw_now_idx).toBe(
+      new FancyDate(g).dayStart('sunrise').init().to_tempos(base).d.now_idx,
+    )
     expect(day.assignment_raw_now_idx % 30).toBe(day.now_idx)
     expect(next.raw_now_idx).toBe(day.raw_now_idx + 1)
     expect(next.assignment_raw_now_idx).toBeGreaterThanOrEqual(day.assignment_raw_now_idx)
@@ -1087,8 +1091,7 @@ describe('Gregorian', () => {
     expect(collectFlags(amTithi, g.parse('2024年1月1日'), 180)).toContain('skipped')
 
     const slowMoon = [月[0], [31 * to_msec('1d'), 月[1][1]], 月[2]]
-    const repeatedCalendar = g
-      .dup()
+    const repeatedCalendar = new FancyDate(g)
       .spot(slowMoon, 東京[1], 東京[2], 東京[3])
       .dayStart('sunrise')
       .assign({ d: tithi() })
@@ -1122,8 +1125,8 @@ describe('Gregorian', () => {
   test('span precise supports week-year and day-of-year hierarchy', () => {
     const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
     const to = g.parse('2025年3月10日 4時5分6秒', 'y年M月d日 H時m分s秒')
-    const custom = g.dup().labels({ w: '週目', dC60: '日巡り' }).init()
-    const legacy = g.dup().labels({ A: '旧日巡り' }).init()
+    const custom = new FancyDate(g).labels({ w: '週目', dC60: '日巡り' }).init()
+    const legacy = new FancyDate(g).labels({ A: '旧日巡り' }).init()
 
     expect(g.span([from, to], { precise: 'Y' })).toBe('1年後')
     expect(g.span([from, to], { precise: 'w' })).toBe('1年10週後')
@@ -1161,10 +1164,10 @@ describe('Gregorian', () => {
 
   test('numeral dictionaries format numeric tokens', () => {
     const msec = g.parse('2024年3月10日')
-    const kanji = g.dup().numeral(jpn.漢字).init()
-    const englishLower = g.dup().numeral(english.lower).init()
-    const englishTitle = g.dup().numeral(english.title).init()
-    const romanUpper = g.dup().numeral(roman.upper).init()
+    const kanji = new FancyDate(g).numeral(jpn.漢字).init()
+    const englishLower = new FancyDate(g).numeral(english.lower).init()
+    const englishTitle = new FancyDate(g).numeral(english.title).init()
+    const romanUpper = new FancyDate(g).numeral(roman.upper).init()
 
     expect(kanji.format(msec, 'y年M月d日')).toBe('二千廿四年三月十日')
     expect(kanji.parse('二千廿四年三月十日')).toBe(msec)
@@ -1178,7 +1181,7 @@ describe('Gregorian', () => {
     expect(romanUpper.format(msec, 'M/d')).toBe('III/X')
     expect(romanUpper.parse('III/X', 'M/d')).toBe(g.parse('3月10日', 'M月d日'))
 
-    expect(g.dup().numeral().init().format(msec, 'yyyy年MM月dd日')).toBe('2024年03月10日')
+    expect(new FancyDate(g).numeral().init().format(msec, 'yyyy年MM月dd日')).toBe('2024年03月10日')
   })
 
   test('english numeral regex matches only number words, not arbitrary alphabetic tokens', () => {
@@ -1268,7 +1271,9 @@ describe('Gregorian', () => {
   // sunnyのみ天文精度(平気法の moony はそのまま)にした合成暦で、
   // 既知の閘月判定が実軌道基準に切り替わっていることを確認する。
   test('Nn/Zs leap-month detection also switches to orbital phase alongside Z', () => {
-    const testCal = 平気法.dup().spot([天文地球, 月[1], 月[2]], 東京[1], 東京[2], 東京[3]).init()
+    const testCal = new FancyDate(平気法)
+      .spot([天文地球, 月[1], 月[2]], 東京[1], 東京[2], 東京[3])
+      .init()
     expect(testCal.dic.sunny.solarEvents || testCal.dic.sunny.timeOfPhase).toBeTruthy()
 
     // 以前の等角(平気法)ロジックでは mean=false だったが、

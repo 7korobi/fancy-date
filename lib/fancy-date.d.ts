@@ -433,7 +433,6 @@ export declare class FancyDate {
     private span_args;
     private is_span_options;
     private is_span_text;
-    dup(): FancyDate;
     def_regex(): void;
     def_to_idx(): void;
     def_to_label(): void;
@@ -742,7 +741,7 @@ export declare class FancyDate {
     private day_start_event;
     private current_day_start;
     /**
-    * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
+     * d/N(dayStart() による太陽イベント起点の暦日)で使う SolarEventDayTempoRule を
      * 使い回す(D: TempoEnvelope キャッシュ)。solar_hour_rule() と同様、
      * 日をまたぐ遷移だけ天文計算(日の出/日の入探索)のやり直しが必要になる。
      * 束探索の起点(仮の civil day)には calc.zero.day(dusk() の有無に
@@ -880,7 +879,7 @@ export declare class FancyDate {
      * に加算し、対象の暦日の開始時刻を返す。to_tempos() 側の day_rule() と
      * 対になる逆方向の解決——dusk() な暦は d*msec.day という単純な等分割
      * ではないため(実際の日没時刻は日ごとにわずかに変動する)、
-    * SolarEventDayTempoRule('sunset') と同じ束探索で解決する。dayBoundary() は
+     * SolarEventDayTempoRule('sunset') と同じ束探索で解決する。dayBoundary() は
      * 固定オフセットなので、加算するだけで閉じた式になる。
      *
      * dusk() 側は「d*msec.day の中央」を初期推測にした束探索だが、月始点
@@ -890,7 +889,7 @@ export declare class FancyDate {
      * 決め打つと、d が大きくなるほどではなく最初の1日目からすでに
      * 隣の日境界を誤って掴むことがある(実測: 日付境界がちょうど推測点の
      * 前後で1日分ずれ、parse('...3日',...) が format() で「2日」に化けた)。
-    * SolarEventDayTempoRule.at() 自身が返す now_idx(month_start からの
+     * SolarEventDayTempoRule.at() 自身が返す now_idx(month_start からの
      * floor 経過日数)と目標 d の差分ぶん推測を補正し再解決する、既存の
      * 元号年収束ループ(このメソッドの少し上、観測太陰太陽暦の年逆算)と
      * 同じ「差分フィードバックで少数回のうちに収束させる」方式にする
@@ -899,8 +898,8 @@ export declare class FancyDate {
      * real_sunset_day_rule()(D: TempoEnvelope キャッシュ付き、to_tempos() の
      * d/N と共有)ではなく、ここだけの使い捨てインスタンスを直接構築する。
      * このメソッドは呼び出しごとに違う month_start(=parent)を渡すため、
-    * かつてはキャッシュを共有すると CachedTempoRule が別の呼び出しの
-    * parent を誤って使い回す実バグが
+     * かつてはキャッシュを共有すると CachedTempoRule が別の呼び出しの
+     * parent を誤って使い回す実バグが
      * あった(実測: add()/sub() を同じ暦インスタンスで連続して呼ぶと、
      * 後の呼び出しが前の呼び出しの月始点を引き継いで誤った日付を返した)。
      * 呼び出し頻度は parse()/add()/sub() 1回あたり高々数回で、天文計算

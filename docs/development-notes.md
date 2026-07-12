@@ -36,7 +36,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `Calendar` 初期化の遅延化を検討した。`import { Calendar } from 'fancy-date'` だけで `src/sample/calendars.ts` の多数の `FancyDate` インスタンスが即座に構築され、Cloudflare Workers のコールドスタートで CPU 予算超過(cpuTime 実測約2010ms)を起こした一因になった。
 - 2026-07-11時点の perf 調査: 明確な劣等は cold require だった。対策前は `require('./lib/sample')`/`require('./lib/index')` が約1.86〜1.97sで、原因は `src/sample/calendars.ts` の全サンプル即時 `.init()` と、`src/index.ts` の sample 再エクスポートだった。`FancyDate.lazy(create)` を追加し、`Calendar` の各サンプルを enumerable lazy proxy 化して参照されたサンプルだけ初期化するようにした後は `require('./lib/index')`/`require('./lib/sample')`/`require('./lib/sample/calendars')` が約10〜14msまで低下した。`tithi()` assignment の per-call cost は現時点では支配的でないため、詳細値は `scripts/perf.js` 側の測定項目に留める。
 - 調査の結果、コストの正体は「暦を何個構築するか」ではなく「モジュール評価そのもの」。`.init()` 配下は正規表現構築や固定長ループ中心で、天文学的な反復計算は `to_tempos()`/`lunisolar()` まで遅延されている。支配的コストは `sample/eras.ts` の元号配列や `naoj`/`nasa` の巨大な静的データ。
-- Proxy による `Calendar` 遅延化は、サンプル暦の即時 `.init()`/`.dup()` を避ける効果が大きかった。一方、同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しく、そこまで必要ならサブパス分割や動的 import を別途検討する。
+- Proxy による `Calendar` 遅延化は、サンプル暦の即時 `.init()`/`new FancyDate()` を避ける効果が大きかった。一方、同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しく、そこまで必要ならサブパス分割や動的 import を別途検討する。
 - サブパス分割(`fancy-date/calendars/core` 等)は実効性があるが、現行の `Calendar.X` 集約アクセスを使い続ける限り恩恵はゼロ。消費側がサブパス import へ移行する非互換な変更が要る。将来、1〜数暦だけを使う利用者が現れた場合の候補として保留する。
 - svelte-tick-timer の `/fancy` ページは複数の重い暦を意図的に同時表示するデモなので、暦単位の遅延化をしても結局多くを使う。その用途への対処は `export const ssr = false` のままでよい。
 

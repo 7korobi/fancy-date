@@ -110,7 +110,7 @@ g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
 `parse_span()` は相対表現を `Span` にし、`format_span()` は `SpanLike` を現在の暦の表記へ整える。
 
 ```ts
-const custom = g.dup().labels({ w: '週目', dC: '日巡り' }).init()
+const custom = new FancyDate(g).labels({ w: '週目', dC: '日巡り' }).init()
 
 custom.span([from, to], { precise: 'w' })
 // '1年10週目後'

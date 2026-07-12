@@ -108,19 +108,9 @@ const g = FancyDate.lazy(() =>
 )
 
 const UTC = g
-const Gregorian = FancyDate.lazy(() =>
-  g
-    .dup()
-    .spot(...東京)
-    .init(),
-)
+const Gregorian = FancyDate.lazy(() => new FancyDate(g).spot(...東京).init())
 
-const GregorianAstronomical = FancyDate.lazy(() =>
-  g
-    .dup()
-    .spot(...天文東京)
-    .init(),
-)
+const GregorianAstronomical = FancyDate.lazy(() => new FancyDate(g).spot(...天文東京).init())
 
 /**
  * LocalGregorian: ブラウザ(実行環境)のタイムゾーンを反映した「現地グレゴリオ暦」。
@@ -129,14 +119,14 @@ const GregorianAstronomical = FancyDate.lazy(() =>
  * タイムゾーンでは「今日」「今週」の区切りがズレる。Gregorian は
  * division({ H: 'solar' })(日の出・日の入りに基づく不定時法)を使っていないため
  * 緯度・経度には依存せず、タイムゾーンだけ差し替えれば動的に「現地版」を
- * 作れる(dup().spot(...) は fancy-date が「同じ暦を別地点/別タイムゾーンで
- * 複製する」ために元々用意している機構)。
+ * 作れる(new FancyDate(暦).spot(...) で「同じ暦を別地点/別タイムゾーンで
+ * 複製」できる)。
  *
  * timezoneDeg(経度換算)は localTimezoneDeg() が実行環境から算出する
  * (ブラウザ以外では東京 UTC+9 を既定値とする)。
  */
 const LocalGregorian = FancyDate.lazy(() =>
-  Gregorian.dup().spot(月, 0, 0, localTimezoneDeg()).init(),
+  new FancyDate(Gregorian).spot(月, 0, 0, localTimezoneDeg()).init(),
 )
 
 const Julian = FancyDate.lazy(() =>
@@ -201,16 +191,14 @@ const 天文黒分月: SATELLITE = [
   天文月[2],
 ] as const
 const アマンタティティ = FancyDate.lazy(() =>
-  アマンタ
-    .dup()
+  new FancyDate(アマンタ)
     .spot(天文月, Madurai[1], Madurai[2], Madurai[3])
     .dayStart('sunrise')
     .assign({ d: tithi() })
     .init(),
 )
 const プールニマンタティティ = FancyDate.lazy(() =>
-  プールニマンタ
-    .dup()
+  new FancyDate(プールニマンタ)
     .spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3])
     .dayStart('sunrise')
     .assign({ d: tithi() })
@@ -386,8 +374,7 @@ const バビロニア暦カスプ = FancyDate.lazy(() =>
 )
 
 const バビロニア暦ベール = FancyDate.lazy(() =>
-  バビロニア暦カスプ
-    .dup()
+  new FancyDate(バビロニア暦カスプ)
     .division({ H: false })
     .dayStart('midnight')
     .dayBoundary(18)
@@ -407,7 +394,7 @@ const バビロニア暦ベール = FancyDate.lazy(() =>
 // オスマン季節時法: 初期イスラム世界に広く見られた季節時法の伝統
 // (昼夜それぞれ12不等分)。division({ H: 'solar' })+dayStart('sunset')で再現できる。
 const オスマン季節時法 = FancyDate.lazy(() =>
-  Julian.dup()
+  new FancyDate(Julian)
     .spot(...Istanbul)
     .era('ヒジュラ紀元', '紀元前')
     .division({ H: 'solar' })
@@ -420,7 +407,11 @@ const オスマン季節時法 = FancyDate.lazy(() =>
 // 1時間の長さは等時法のまま日付・時刻の起点だけ日没にリセットする
 // (dayBoundary(18))。
 const アラトゥルカ = FancyDate.lazy(() =>
-  オスマン季節時法.dup().division({ H: false }).dayStart('midnight').dayBoundary(18).init(),
+  new FancyDate(オスマン季節時法)
+    .division({ H: false })
+    .dayStart('midnight')
+    .dayBoundary(18)
+    .init(),
 )
 
 // Gregorianは太陽暦なので、衛星未定義でもよい
@@ -636,7 +627,7 @@ const コプト暦 = FancyDate.lazy(() =>
  * ため、0時・ちょうど0分のような値は数字のまま表示される——これは
  * ローマ数字という記法自体の制約であり、このサンプル固有の不具合ではない。
  */
-const RomanClock = FancyDate.lazy(() => Gregorian.dup().numeral(roman.upper).init())
+const RomanClock = FancyDate.lazy(() => new FancyDate(Gregorian).numeral(roman.upper).init())
 
 export const Calendar = {
   UTC,
