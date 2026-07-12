@@ -31,6 +31,7 @@ type LunisolarMonth = Omit<
 }
 
 type PhaseResolver = (phase: number, near: number) => number
+type YearResolver = (at: number) => number
 
 const LUNISOLAR_MONTH_WINDOW_PAST_MARGIN = 5
 const LUNISOLAR_MONTH_WINDOW_FUTURE_MARGIN = 6
@@ -38,6 +39,8 @@ const LUNISOLAR_MONTH_WINDOW_FUTURE_MARGIN = 6
 export type LunisolarOptions = {
   moony?: OrbitalModel
   solarPeriodMsec?: number
+  principalTermCount?: number
+  solarYear?: YearResolver
   geo: TIMEZONE
   dayMsec: number
   dayZero: number
@@ -137,6 +140,8 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
 }
 
 function assign_lunisolar_months(options: LunisolarOptions, months: LunisolarMonth[]) {
+  const yearOf = (at: number) =>
+    options.solarYear?.(at) ?? new Date(at + local_timezone_msec(options)).getUTCFullYear()
   let month = NaN
   for (const item of months) {
     if (item.principal_term) {
@@ -167,20 +172,18 @@ function assign_lunisolar_months(options: LunisolarOptions, months: LunisolarMon
 
   const firstMonthOneIndex = months.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
   if (firstMonthOneIndex < 0) {
-    const year = new Date(months[0].last_at + local_timezone_msec(options)).getUTCFullYear()
+    const year = yearOf(months[0].last_at)
     for (const item of months) item.year = year
     return
   }
-  let year = new Date(
-    months[firstMonthOneIndex].last_at + local_timezone_msec(options),
-  ).getUTCFullYear()
+  let year = yearOf(months[firstMonthOneIndex].last_at)
   for (let i = 0; i < firstMonthOneIndex; i++) {
     months[i].year = year - 1
   }
   for (let i = firstMonthOneIndex; i < months.length; i++) {
     const item = months[i]
     if (item.month === 1 && !item.is_leap) {
-      year = new Date(item.last_at + local_timezone_msec(options)).getUTCFullYear()
+      year = yearOf(item.last_at)
     }
     item.year = year
   }
@@ -191,22 +194,24 @@ function lunisolar_principal_term(
   monthStartAt: number,
   nextMonthStartAt: number,
 ) {
+  const termCount = options.principalTermCount ?? 12
+  if (!Number.isInteger(termCount) || termCount <= 0) {
+    throw new Error(`invalid principal term count ${termCount}`)
+  }
   const near = (monthStartAt + nextMonthStartAt) / 2
   const startAt = local_day_start(options, monthStartAt)
   const nextAt = local_day_start(options, nextMonthStartAt)
-  // index < 12 は「太陽の1公転(黄経360°)を12等分した中気の間隔が、
-  // 概ね1朔望月と同程度の長さである」という地球の月・太陽比率を前提に
-  // している。探索窓は lunisolar_month_window_counts() で月/年比率に応じて
-  // 広げられるが、月番号割り当てそのものは「中気は12個」という地球型の
-  // 太陰太陽暦モデルのままなので、1朔望月に複数の中気が入るほど比率が
-  // 大きく異なる衛星暦では、別の割り当て規則が必要になる。
-  for (let index = 0; index < 12; index++) {
-    const at = options.solarPhase(index / 12, near)
+  // principalTermCount は「月名を決める中気の数」。地球型なら12、木星・
+  // カリストのように1太陽年あたり約260朔望月ある暦では260にできる。
+  // 探索窓は lunisolar_month_window_counts() が月/年比率から広げ、ここでは
+  // その年を principalTermCount 等分した中気のうち、この月に入るものを探す。
+  for (let index = 0; index < termCount; index++) {
+    const at = options.solarPhase(index / termCount, near)
     if (startAt <= at && at < nextAt) {
       return {
         index,
-        longitudeDeg: index * 30,
-        month: ((index + 1) % 12) + 1,
+        longitudeDeg: (index * 360) / termCount,
+        month: ((index + 1) % termCount) + 1,
         at,
       }
     }

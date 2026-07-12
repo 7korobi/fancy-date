@@ -410,6 +410,8 @@ const Jupiter = new FancyDate((c) =>
     }),
 )
 
+const JupiterObserved = new FancyDate(Jupiter, (c) => c.observedLunisolar())
+
 const フランス革命暦 = new FancyDate((c) =>
   baseCalendar(c)
     .lang('y年M月d日', 'Gy年Mo d日(dC10)')
@@ -607,6 +609,7 @@ export const Calendar = {
   Romulus,
   MarsGregorian,
   Jupiter,
+  JupiterObserved,
   フランス革命暦,
   Maya,
   Beat,

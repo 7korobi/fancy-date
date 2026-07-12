@@ -568,6 +568,7 @@ type IDIC = IIDX & {
   day_start?: DayStart
   assignments: AssignmentOptions
   is_dusk: boolean
+  observed_lunisolar?: boolean
 }
 export type DivisionOptions = {
   H?: false | 'equal' | 'solar'
@@ -1077,6 +1078,12 @@ export class FancyDate {
     return this
   }
 
+  observedLunisolar(enabled = true) {
+    this.dic.observed_lunisolar = enabled
+    this._lunisolar_cache.length = 0
+    return this
+  }
+
   division(options: DivisionOptions) {
     if ('H' in options) {
       const H = options.H
@@ -1305,6 +1312,10 @@ export class FancyDate {
       {
         moony: this.dic.moony,
         solarPeriodMsec: this.dic.sunny.periodMsec,
+        principalTermCount: this.dic.M.length || 12,
+        solarYear: this.dic.observed_lunisolar
+          ? (at) => to_tempo_bare(this.calc.msec.year, this.calc.zero.season, at).now_idx
+          : undefined,
         geo: this.dic.geo,
         dayMsec: this.calc.msec.day,
         dayZero: this.calc.zero.day,
@@ -3405,7 +3416,10 @@ K   = @dic.earthy[2] / 360
     let Nn: (Tempo<TempoBase> & TempoMonth) | undefined
     const moon_msec = this.calc.msec.moon
     const usesObservedLunisolar =
-      !this.is_table_month && hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)
+      !this.is_table_month &&
+      this.dic.moony != null &&
+      (this.dic.observed_lunisolar ||
+        (hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)))
     if (this.dic.moony && moon_msec != null && !usesObservedLunisolar) {
       // 今月と中気(平均朔望月+日境界切り詰め+閏月判定 = MeanLunisolarMonthRule)。
       // 閏月判定・月番号は、Z 本体と同じ基準(実軌道 or 平気法)の

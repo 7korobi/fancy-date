@@ -48,6 +48,7 @@ const pmTithi = Calendar.プールニマンタティティ
 const b = Calendar.Beat
 const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
+const jog = Calendar.JupiterObserved
 
 function mod(value, by) {
   return ((value % by) + by) % by
@@ -1344,6 +1345,25 @@ describe('Gregorian', () => {
     // 以前の等角ロジックでは mean=true だったが、実軌道では通常月(2006-11-19付近)。
     const nonLeapMonth = testCal.to_tempos(Date.UTC(2006, 10, 25)).M
     expect(nonLeapMonth.is_leap).toBeFalsy()
+  })
+
+  test('JupiterObserved opts non-earth lunisolar calendars into phase-resolved months', () => {
+    const utc = g.parse('2024年3月10日')
+    const mean = jg.to_tempos(utc)
+    const observed = jog.to_tempos(utc)
+    const lunisolar = jog.lunisolar(utc)
+
+    expect(jog.dic.observed_lunisolar).toBe(true)
+    expect(jog.dic.M.length).toBe(260)
+    expect(lunisolar.principal_term.longitudeDeg).toBeCloseTo(
+      (lunisolar.principal_term.index * 360) / jog.dic.M.length,
+      10,
+    )
+    expect(observed.u.now_idx).toBe(mean.u.now_idx)
+    expect(lunisolar.year).toBe(observed.u.raw_now_idx)
+    expect(observed.M.now_idx + 1).toBe(lunisolar.month)
+    expect(observed.d.now_idx + 1).toBe(lunisolar.day)
+    expect(observed.M.now_idx).not.toBe(mean.M.now_idx)
   })
 
   // d(月内日、observed lunisolar 経路)は以前 to_tempo_bare(calc.zero.day,...)+
