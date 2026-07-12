@@ -36,10 +36,13 @@
   ],
   "preferGlobal": true,
   "private": false,
+  "sideEffects": false,
   "files": [
-    "lib"
+    "lib/**/*.js",
+    "lib/**/*.d.ts"
   ],
   "scripts": {
+    "prepublishOnly": "bun run compile",
     "test": "bun run compile && bun run format:check && bun run jest",
     "watch": "jest --watchAll --config config/jest.js --rootDir .",
     "deploy": "bun run test && bun run deploy:npm",

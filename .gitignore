@@ -1,4 +1,5 @@
 node_modules
+lib/
 yarn-error.log
 bun-error.log
 vue-petit-store-*.tgz
