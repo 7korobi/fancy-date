@@ -1,0 +1,3 @@
+lib/
+bun.lock
+__tests__/__snapshots__/
