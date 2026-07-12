@@ -1,7 +1,32 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { to_msec } = require('../lib/time')
+const { lunisolar_month_window_counts } = require('../lib/phenomena/lunisolar')
 const { NAOJ_LUNISOLAR_FIXTURES, NAOJ_LUNISOLAR_SOURCE } = require('./fixtures/lunisolar-naoj')
+
+describe('lunisolar month search window', () => {
+  const dayMsec = to_msec('1d')
+  const options = (monthMsec, solarPeriodMsec) => ({
+    moony: { periodMsec: monthMsec },
+    solarPeriodMsec,
+  })
+
+  test('keeps the historical 18/19 month window for earth-like lunar ratios', () => {
+    expect(lunisolar_month_window_counts(options(29.53059 * dayMsec, 365.2422 * dayMsec)))
+      .toEqual({ past: 18, future: 19 })
+  })
+
+  test('widens or narrows the search from the actual moon/year ratio', () => {
+    expect(lunisolar_month_window_counts(options(7 * dayMsec, 365 * dayMsec))).toEqual({
+      past: 58,
+      future: 59,
+    })
+    expect(lunisolar_month_window_counts(options(100 * dayMsec, 365 * dayMsec))).toEqual({
+      past: 9,
+      future: 10,
+    })
+  })
+})
 
 describe('NAOJ lunisolar fixtures', () => {
   test('source metadata is explicit', () => {

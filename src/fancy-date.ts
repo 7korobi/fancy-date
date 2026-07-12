@@ -1305,6 +1305,7 @@ export class FancyDate {
     const resolved = resolveLunisolar(
       {
         moony: this.dic.moony,
+        solarPeriodMsec: this.dic.sunny.periodMsec,
         geo: this.dic.geo,
         dayMsec: this.calc.msec.day,
         dayZero: this.calc.zero.day,

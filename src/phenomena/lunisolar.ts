@@ -32,13 +32,38 @@ type LunisolarMonth = Omit<
 
 type PhaseResolver = (phase: number, near: number) => number
 
+const LUNISOLAR_MONTH_WINDOW_PAST_MARGIN = 5
+const LUNISOLAR_MONTH_WINDOW_FUTURE_MARGIN = 6
+
 export type LunisolarOptions = {
   moony?: OrbitalModel
+  solarPeriodMsec?: number
   geo: TIMEZONE
   dayMsec: number
   dayZero: number
   lunarPhase: PhaseResolver
   solarPhase: PhaseResolver
+}
+
+export function lunisolar_month_window_counts(
+  options: Pick<LunisolarOptions, 'moony' | 'solarPeriodMsec'>,
+) {
+  if (!options.moony) {
+    throw new Error('lunisolar requires a satellite orbital model')
+  }
+  const monthMsec = options.moony.periodMsec
+  const yearMsec = options.solarPeriodMsec ?? monthMsec * 13
+  if (!Number.isFinite(monthMsec) || monthMsec <= 0) {
+    throw new Error(`invalid lunar period ${monthMsec}`)
+  }
+  if (!Number.isFinite(yearMsec) || yearMsec <= 0) {
+    throw new Error(`invalid solar period ${yearMsec}`)
+  }
+  const monthsPerSolarYear = Math.max(1, Math.ceil(yearMsec / monthMsec))
+  return {
+    past: monthsPerSolarYear + LUNISOLAR_MONTH_WINDOW_PAST_MARGIN,
+    future: monthsPerSolarYear + LUNISOLAR_MONTH_WINDOW_FUTURE_MARGIN,
+  }
 }
 
 export function lunisolar(options: LunisolarOptions, utc: number): LunisolarDate {
@@ -83,26 +108,16 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
     monthStartAt = local_day_start(options, newMoonAt)
   }
 
-  // 前後18/19ヶ月(中心含め計37ヶ月)は「1年 ≈ 12〜13朔望月」という
-  // 地球の月・太陽比率(朔望月≈29.53日 / 太陽年12等分≈30.44日)を
-  // 前提にしたハードコード値であり、options.moony.periodMsec と
-  // options.sunny(太陽側の周期)の比率からは動的に導出していない。
-  // 前後の正月(年境界)を確実に窓へ収めるための安全マージンなので、
-  // 月/年比率がこれと大きく異なる衛星(地球の月以外)を LunarEventModel
-  // として実装した場合、この固定マージンでは年境界を見失う
-  // (比率が地球よりずっと高い場合)か、無駄に広い範囲を探索する
-  // (比率がずっと低い場合)おそれがある。同種の前提は
-  // lunisolar_principal_term() の `index < 12`(太陽の中気間隔が
-  // 概ね1朔望月と同程度という前提)にも独立に存在する。現状
-  // LunarEventModel を実装するのは naoj/earth-moon.ts の
-  // EarthMoonOrbital のみなので、この制約が実害になることはない
-  // (ドーマント)。地球以外の衛星向け実装を追加する際は、この2箇所を
-  // 比率から動的に導出する形へ見直すこと。
+  // 前後の探索幅は「太陽年に含まれる朔望月数 + 安全マージン」から導く。
+  // 地球の月では ceil(太陽年/朔望月)=13 なので従来と同じ過去18/未来19ヶ月
+  // (中心を含む37ヶ月区間)になる。月が地球より短い場合は年境界を見失わない
+  // よう探索幅を広げ、長い場合は不要な探索を減らす。
+  const window = lunisolar_month_window_counts(options)
   const newMoons = [newMoonAt]
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < window.past; i++) {
     newMoons.unshift(lunarPhase(0, newMoons[0] - periodMsec))
   }
-  for (let i = 0; i < 19; i++) {
+  for (let i = 0; i < window.future; i++) {
     newMoons.push(lunarPhase(0, newMoons[newMoons.length - 1] + periodMsec))
   }
   const months = newMoons.slice(0, -1).map((at, index) => {
@@ -181,11 +196,10 @@ function lunisolar_principal_term(
   const nextAt = local_day_start(options, nextMonthStartAt)
   // index < 12 は「太陽の1公転(黄経360°)を12等分した中気の間隔が、
   // 概ね1朔望月と同程度の長さである」という地球の月・太陽比率を前提に
-  // している(該当する中気を1朔望月の範囲内から探すだけで、複数の中気が
-  // 同じ月に入らない・逆に何ヶ月も中気が入らない月が連続しない、という
-  // 前提)。lunisolar_months_around() の前後18/19ヶ月マージンと同じく
-  // 地球以外の月/年比率では成り立たない可能性がある(詳細はそちら側の
-  // コメント参照)。
+  // している。探索窓は lunisolar_month_window_counts() で月/年比率に応じて
+  // 広げられるが、月番号割り当てそのものは「中気は12個」という地球型の
+  // 太陰太陽暦モデルのままなので、1朔望月に複数の中気が入るほど比率が
+  // 大きく異なる衛星暦では、別の割り当て規則が必要になる。
   for (let index = 0; index < 12; index++) {
     const at = options.solarPhase(index / 12, near)
     if (startAt <= at && at < nextAt) {
