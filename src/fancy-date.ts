@@ -594,19 +594,43 @@ export type AssignmentOptions = Partial<{
   [Token in AssignmentToken]: AssignmentRule<Token> | undefined
 }>
 
+const TITHI_ASSIGNMENT_CACHE_CAPACITY = 128
+
+type TithiRawIndexCacheEntry = {
+  at: number
+  raw: number
+}
+
 export function tithi(): AssignmentRule<'d'> {
+  const rawIndexCache = new WeakMap<OrbitalModel, TithiRawIndexCacheEntry[]>()
+  const rawAt = (moony: OrbitalModel, targetAt: number) => {
+    let entries = rawIndexCache.get(moony)
+    if (!entries) {
+      entries = []
+      rawIndexCache.set(moony, entries)
+    }
+    const hitIndex = entries.findIndex((entry) => entry.at === targetAt)
+    if (hitIndex >= 0) {
+      const [hit] = entries.splice(hitIndex, 1)
+      entries.unshift(hit)
+      return hit.raw
+    }
+
+    const now_idx = Math.min(29, Math.floor(mod(moony.phaseAt(targetAt), 1) * 30))
+    const cycle = Math.floor((targetAt - moony.epochMsec) / moony.periodMsec)
+    const raw = cycle * 30 + now_idx
+    entries.unshift({ at: targetAt, raw })
+    entries.length = Math.min(entries.length, TITHI_ASSIGNMENT_CACHE_CAPACITY)
+    return raw
+  }
+
   return (_dayStart, { calendar, at, previousAt, nextAt }) => {
     const moony = calendar.dic.moony
     if (!moony) throw new Error('tithi() assignment requires a satellite orbital model')
-    const rawAt = (targetAt: number) => {
-      const now_idx = Math.min(29, Math.floor(mod(moony.phaseAt(targetAt), 1) * 30))
-      const cycle = Math.floor((targetAt - moony.epochMsec) / moony.periodMsec)
-      return cycle * 30 + now_idx
-    }
-    const assignment_raw_now_idx = rawAt(at)
+    const assignment_raw_now_idx = rawAt(moony, at)
     const now_idx = mod(assignment_raw_now_idx, 30)
-    const previous = rawAt(previousAt)
-    const next = rawAt(nextAt)
+    const previous = rawAt(moony, previousAt)
+    const next = rawAt(moony, nextAt)
     const assignment_flags = [
       assignment_raw_now_idx === previous ? 'repeated' : undefined,
       assignment_raw_now_idx + 1 < next ? 'skipped' : undefined,

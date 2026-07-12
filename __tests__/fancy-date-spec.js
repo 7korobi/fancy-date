@@ -1086,6 +1086,26 @@ describe('Gregorian', () => {
     expect(next.last_at).toBe(day.next_at)
   })
 
+  test('tithi() caches raw lunar phase indexes across repeated civil-day queries', () => {
+    const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: tithi() }).init()
+    const base = calendar.parse('2024年6月21日')
+    const moony = calendar.dic.moony
+    const phaseAt = moony.phaseAt.bind(moony)
+    let calls = 0
+    moony.phaseAt = (at) => {
+      calls++
+      return phaseAt(at)
+    }
+
+    const day = calendar.to_tempos(base).d
+    const firstCalls = calls
+    calendar.to_tempos(base).d
+    expect(calls).toBe(firstCalls)
+
+    calendar.to_tempos(day.next_at + 1000).d
+    expect(calls).toBe(firstCalls + 1)
+  })
+
   test('tithi() calendars do not leak fractional day counts into span()', () => {
     for (const base of ['2024年3月10日', '2026年7月13日']) {
       const from = g.parse(base)
