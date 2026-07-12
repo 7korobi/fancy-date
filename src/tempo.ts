@@ -862,6 +862,8 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
 
 export type SolarDayBoundaryEvent = 'sunrise' | 'sunset'
 
+const SOLAR_EVENT_DAY_CACHE_CAPACITY = 128
+
 /**
  * SolarEventDayTempoRule: 実際の(季節で変動する)日の出/日没時刻そのものを
  * 暦日の境界に使う規則。dayBoundary()(固定オフセットで日没相当にずらす
@@ -888,6 +890,8 @@ export type SolarDayBoundaryEvent = 'sunrise' | 'sunset'
  * 冬至付近で数分〜十数分程度)ため、月を通して欠番・重複のない連番になる。
  */
 export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
+  private readonly eventCache = new Map<number, number>()
+
   constructor(
     private readonly sunny: OrbitalModel,
     private readonly earthy: RotationModel,
@@ -900,6 +904,14 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
   ) {}
 
   private event_of(civilDay: TempoEnvelope): number {
+    const cacheKey = civilDay.now_idx
+    if (this.eventCache.has(cacheKey)) {
+      const cached = this.eventCache.get(cacheKey)!
+      this.eventCache.delete(cacheKey)
+      this.eventCache.set(cacheKey, cached)
+      return cached
+    }
+
     const center_at = (civilDay.last_at + civilDay.next_at) / 2
     const day = new Tempo(
       civilDay,
@@ -927,7 +939,13 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
       2,
       solarNoon,
     )
-    return this.event === 'sunrise' ? 日の出 : 日の入
+    const eventAt = this.event === 'sunrise' ? 日の出 : 日の入
+    this.eventCache.set(cacheKey, eventAt)
+    if (SOLAR_EVENT_DAY_CACHE_CAPACITY < this.eventCache.size) {
+      const oldestKey = this.eventCache.keys().next().value
+      if (oldestKey != null) this.eventCache.delete(oldestKey)
+    }
+    return eventAt
   }
 
   boundary_at_or_after(write_at: number): number {

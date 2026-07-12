@@ -752,6 +752,39 @@ describe('tempo', () => {
       expect(sunriseRule.at(after, { write_at: after, parent }).last_at).toBe(sunrise)
     })
 
+    test('reuses solar event resolution for the same civil day', () => {
+      const observed = Calendar.GregorianAstronomical
+      const rule = new SolarEventDayTempoRule(
+        observed.dic.sunny,
+        observed.dic.earthy,
+        observed.dic.geo,
+        observed.calc.msec.day,
+        observed.calc.zero.day,
+        observed.calc.msec.year,
+        observed.calc.zero.season,
+        'sunrise',
+      )
+      const civil = to_tempo_bare(observed.calc.msec.day, observed.calc.zero.day, Date.UTC(2024, 5, 21))
+      const parent = envelopeOf(
+        to_tempo_bare(observed.calc.msec.day * 30, civil.last_at, civil.last_at + 1),
+      )
+      const solarEvents = observed.dic.sunny.solarEvents.bind(observed.dic.sunny)
+      let calls = 0
+      observed.dic.sunny.solarEvents = (...args) => {
+        calls++
+        return solarEvents(...args)
+      }
+
+      try {
+        rule.at(civil.center_at, { write_at: civil.center_at, parent })
+        const firstCalls = calls
+        rule.at(civil.center_at, { write_at: civil.center_at, parent })
+        expect(calls).toBe(firstCalls)
+      } finally {
+        observed.dic.sunny.solarEvents = solarEvents
+      }
+    })
+
     test('sunrise mode advances now_idx by civil day even when sunrise gets earlier', () => {
       const monthStart = to_tempo_bare(dayMsec, dayZero, Date.UTC(2024, 5, 1)).last_at
       const firstSunrise = sunriseRule.boundary_at_or_after(monthStart)
