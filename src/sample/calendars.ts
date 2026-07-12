@@ -338,7 +338,7 @@ const Romulus = new FancyDate((c) =>
 // で表現)。
 const バビロニア暦カスプ = new FancyDate((c) =>
   baseCalendar(c)
-    .lang('y年M月d日', 'y年M月d日(dC7) H時m分s秒')
+    .lang('y年M月d日', 'y年M月d日(dC7) H時m分')
     .spot(...Babylon)
     .era('バビロニア紀元', '紀元前')
     .calendar(['1年1月1日', 'y年M月d日', 0])
@@ -538,7 +538,8 @@ export function mayaHaab(utc: number) {
 const Beat = new FancyDate((c) =>
   gregorianBase(c)
     .spot(...zürich)
-    .era('@', '紀元前')
+    .era('西暦', '紀元前')
+    .lang('y年M月d日', 'Gy年M月d日(E) @HHH')
     .notation({
       H: [1000],
       m: [100],
@@ -546,23 +547,20 @@ const Beat = new FancyDate((c) =>
 )
 
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
-let ナボナサル紀元Cache: number | undefined
-function ナボナサル紀元() {
-  return (ナボナサル紀元Cache ??= Julian.parse('紀元前747年2月26日'))
-}
-const エジプト民用暦 = new FancyDate((c) =>
-  baseCalendar(c)
+const エジプト民用暦 = new FancyDate((c) => {
+  const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
+  return baseCalendar(c)
     .spot(エジプト民用暦地球, Cairo[1], Cairo[2], Cairo[3])
     .era('ナボナサル紀元', '紀元前')
     .calendar(
-      ['1年トート1日', 'y年Mod日', ナボナサル紀元()],
+      ['1年トート1日', 'y年Mod日', ナボナサル紀元],
       [],
       [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, null],
     )
     .notation({
       M: [エジプト月名, null],
-    }),
-)
+    })
+})
 
 const コプト暦 = new FancyDate((c) =>
   baseCalendar(c)

@@ -246,7 +246,7 @@ type LocaleEntry = {
   displayName: string // 人間向け表示名
   numerals: Partial<Record<NumeralPurpose, Numeral>>
   defaultParseFormat: string // 例: 'y年M月d日'(.lang() の第1引数に対応)
-  defaultFormat: string // 例: 'Gy年M月d日(E)H時m分s秒'(.lang() の第2引数に対応)
+  defaultFormat: string // 例: 'Gy年M月d日(E)'(.lang() の第2引数に対応)
   labels?: Record<string, string> // span の fallback 単位表記の既定値(.labels() 相当)
 }
 
@@ -270,8 +270,8 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
       cardinal: english.lower,
       ordinal: english.ordinal, // 未実装。将来追加
     },
-    defaultParseFormat: 'y/M/d H:m:s',
-    defaultFormat: 'Gy/M/d(E) H:m:s',
+    defaultParseFormat: 'y/M/d',
+    defaultFormat: 'Gy/M/d(E)',
   },
   ko: {
     tag: 'ko',

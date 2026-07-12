@@ -900,7 +900,7 @@ export class FancyDate {
   private initBlank() {
     this.dic = {
       parse: 'y年M月d日',
-      format: 'Gy年M月d日(E)H時m分s秒',
+      format: 'Gy年M月d日(E)',
     } as any
     Object.defineProperty(this.dic, 'labels', {
       configurable: true,
@@ -1817,6 +1817,32 @@ export class FancyDate {
     return fallback ?? this.to_tempos(yearStart).M
   }
 
+  // 平均太陰太陽暦の parse 用。中気ベースの近似シード付近から、実際に
+  // 表示上の元号年・月番号・閏月フラグが一致する月を選ぶ。
+  private find_lunisolar_parse_month(
+    seedAt: number,
+    eraIndex: number,
+    eraYear: number,
+    monthIndex: number,
+    isLeap: boolean,
+  ) {
+    let cursor = seedAt - this.calc.msec.year
+    const endAt = seedAt + this.calc.msec.year
+    let fallback: (TempoLike & TempoMonth) | undefined
+    let guard = 0
+    while (cursor < endAt && guard++ < 40) {
+      const tempos = this.to_tempos(cursor)
+      const month = tempos.M
+      if (month.now_idx === monthIndex && month.is_leap === isLeap) {
+        if (tempos.G.now_idx === eraIndex && tempos.y.now_idx === eraYear) return month
+        fallback ??= month
+      }
+      if (month.next_at <= cursor) break
+      cursor = month.next_at
+    }
+    return fallback ?? this.to_tempos(seedAt).M
+  }
+
   private find_span_year_start(year: number, near: number) {
     // year/tempo.now_idx ではなく tempo.raw_now_idx で比較する。now_idx は
     // 元号ごとに1へリセットされるため、絶対値としての到達判定に使えない
@@ -2530,7 +2556,7 @@ export class FancyDate {
     // M(月、サフィックスなし=to_value)は常に数値のまま(list を見ない)。
     // 一見 at() 経由にして list(月名/暦外ラベル)を反映させたくなるが、
     // 既存の暦定義の多くは .lang() を呼ばずデフォルトの format
-    // ('Gy年M月d日(E)H時m分s秒' 等、M の直後にリテラル「月」が続く)を
+    // ('Gy年M月d日(E)' 等、M の直後にリテラル「月」が続く)を
     // そのまま使っており、M が数値ではなく list の月名文字列を返すように
     // なると、その月名の直後に元のリテラル「月」がそのまま残ってしまい
     // 「霧月月1日」のような重複表示になる不具合が実際に起きた
@@ -3949,10 +3975,17 @@ K   = @dic.earthy[2] / 360
       const M_utc = M_is_leap
         ? base + this.calc.msec.season * (M * 2 + 2) - moon_msec
         : base + this.calc.msec.season * (M * 2 + 1)
-
-      last_at = new FloorTempoRule(moon_msec, this.calc.zero.moon, [
+      const seedMonthStart = new FloorTempoRule(moon_msec, this.calc.zero.moon, [
         { size: this.calc.msec.day, zero: this.calc.zero.day },
       ]).at(M_utc).last_at
+      const month = this.find_lunisolar_parse_month(
+        seedMonthStart,
+        G,
+        era_relative_y,
+        M,
+        !!M_is_leap,
+      )
+      last_at = month.last_at
       utc += last_at - base
     }
 

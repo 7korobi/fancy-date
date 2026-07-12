@@ -118,6 +118,19 @@ describe('バビロニア暦', () => {
     expect(Calendar.バビロニア暦カスプ.format(utc, 'Mo')).toBe('ニサンヌ')
   })
 
+  test('月初の標準表示が閏月を含む範囲で同じ表示へ戻る', () => {
+    for (const c of [Calendar.バビロニア暦カスプ, Calendar.バビロニア暦ベール]) {
+      let cursor = Calendar.Gregorian.parse('1980年1月1日')
+      const end = Calendar.Gregorian.parse('2025年1月1日')
+      while (cursor < end) {
+        const month = c.to_tempos(cursor).M
+        const label = c.format(month.last_at)
+        expect(c.format(c.parse(label))).toBe(label)
+        cursor = month.next_at
+      }
+    }
+  })
+
   test('ベールは1日=12等分(2時間ごと)の等時法になる', () => {
     const b = Calendar.バビロニア暦ベール
     expect(b.dic.H.length).toBe(12)

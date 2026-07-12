@@ -12,6 +12,8 @@ describe('ロケール登録簿(発見・カタログ)', () => {
     expect(ja.numerals['date-reading'].parse(20)).toBe('はつか')
     expect(ja.numerals['count-reading'].parse(1)).toBe('ひとつ')
     expect(ja.defaultParseFormat).toBe('y年M月d日')
+    expect(getLocale('en').defaultParseFormat).toBe('y/M/d')
+    expect(getLocale('en').defaultFormat).toBe('Gy/M/d(E)')
     expect(getLocale('xx')).toBeUndefined()
   })
 

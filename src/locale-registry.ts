@@ -46,8 +46,8 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
     numerals: {
       cardinal: english.lower,
     },
-    defaultParseFormat: 'y/M/d H:m:s',
-    defaultFormat: 'Gy/M/d(E) H:m:s',
+    defaultParseFormat: 'y/M/d',
+    defaultFormat: 'Gy/M/d(E)',
   },
   ko: {
     tag: 'ko',

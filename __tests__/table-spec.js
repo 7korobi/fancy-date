@@ -24,7 +24,7 @@ const calendars = [
   [平気法, 'J Z yC60dC60 yyyy年MM月dd日(R6) Homo ssss:S G'],
   [am, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
   [pm, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @H.m'],
+  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @HHH'],
   [mg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
   [jg, 'J Z yC60-dC60 yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
 ]

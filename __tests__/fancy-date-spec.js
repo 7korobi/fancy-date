@@ -87,7 +87,7 @@ const calendars = [
   [平気法, 'J Z yC60dC60 yyyy年MM月dd日(R6) Homo ssss:S G'],
   [am, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
   [pm, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
-  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @H.m'],
+  [b, 'J Z yC60-dC60 yyyy年MM月dd日(E) @HHH'],
   [mg, 'J Z yC60-dC60 yyyy年MM月dd日(E) HH:mm:ss:SS G'],
   [jg, 'J Z yC60-dC60 yyyy年MMM月dd日(E) HH:mm:ss:SS G'],
 ]
@@ -313,27 +313,27 @@ describe('Gregorio calculate', () => {
 
   test('add 10/10/10', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.add(msec, '10年10ヶ月10日後'))).toEqual('西暦12年12月12日(水)0時0分0秒')
+    expect(g.format(g.add(msec, '10年10ヶ月10日後'))).toEqual('西暦12年12月12日(水)')
   })
 
   test('add 11/11/11', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.add(msec, '11年11ヶ月11日後'))).toEqual('西暦14年1月13日(月)0時0分0秒')
+    expect(g.format(g.add(msec, '11年11ヶ月11日後'))).toEqual('西暦14年1月13日(月)')
   })
 
   test('sub 1/1/1', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.sub(msec, '1年1ヶ月1日後'))).toEqual('西暦1年1月1日(月)0時0分0秒')
+    expect(g.format(g.sub(msec, '1年1ヶ月1日後'))).toEqual('西暦1年1月1日(月)')
   })
 
   test('sub 5/5/5', () => {
     const msec = g.parse('2年2月2日')
-    expect(g.format(g.sub(msec, '5年5ヶ月5日後'))).toEqual('紀元前5年8月28日(水)0時0分0秒')
+    expect(g.format(g.sub(msec, '5年5ヶ月5日後'))).toEqual('紀元前5年8月28日(水)')
   })
 
   test('sub 10y', () => {
     const msec = g.parse('401年1月1日')
-    expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火)0時0分0秒')
+    expect(g.format(g.sub(msec, '10年後'))).toEqual('西暦391年1月1日(火)')
   })
 
   test('SpanLike text without 前/後 is treated as 後', () => {
@@ -579,6 +579,16 @@ describe('平気法 calculate', () => {
       ret,
       平気法.add(ret, '1ヶ月後'),
     ]).toEqual([-2951546400000, -2948954400000, -2946448800000, -2943856800000])
+  })
+
+  test('閏月を含む年の月初既定表示が同じ月へ往復する', () => {
+    const gregorianMonths = ['1985年3月20日', '1996年1月19日', '2012年5月19日', '2020年7月19日']
+    for (const gregorian of gregorianMonths) {
+      const monthStart = 平気法.to_tempos(g.parse(gregorian)).M.last_at
+      const label = 平気法.format(monthStart)
+      expect(平気法.format(平気法.parse(label))).toBe(label)
+      expect(平気法.parse(label)).toBe(monthStart)
+    }
   })
 
   test('base', () => {
@@ -1425,6 +1435,22 @@ describe('エジプト民用暦', () => {
 })
 
 describe('ローマ・ユリウス時法', () => {
+  test('一般的な標準表示は日付までに留め、秒を既定で主張しない', () => {
+    const msec = g.parse('2020年3月22日')
+
+    expect(g.format(msec)).toBe('西暦2020年3月22日(日)')
+    for (const calendar of [
+      g,
+      fg,
+      am,
+      pm,
+      Calendar.バビロニア暦カスプ,
+      Calendar.バビロニア暦ベール,
+    ]) {
+      expect(calendar.format(msec)).not.toContain('秒')
+    }
+  })
+
   test('標準表示は不定時の hora と pars minuta を使い、秒を主張しない', () => {
     const msec = g.parse('2020年3月22日')
     const julian = j.format(msec)
@@ -1435,6 +1461,28 @@ describe('ローマ・ユリウス時法', () => {
       expect(text).toContain('pars minuta')
       expect(text).not.toContain('秒')
     }
+  })
+
+  test('バビロニア暦は時刻制度を主題にするため標準表示に時分を含める', () => {
+    const msec = g.parse('2020年3月22日')
+
+    for (const text of [
+      Calendar.バビロニア暦カスプ.format(msec),
+      Calendar.バビロニア暦ベール.format(msec),
+    ]) {
+      expect(text).toContain('時')
+      expect(text).toContain('分')
+      expect(text).not.toContain('秒')
+    }
+  })
+
+  test('Beatは通常の西暦日付に3桁のSwatch Internet Timeを添える', () => {
+    const midnightBmt = Date.parse('2020-03-21T23:00:00Z')
+    const noonBmt = Date.parse('2020-03-22T11:00:00Z')
+
+    expect(b.format(midnightBmt)).toBe('西暦2020年3月22日(日) @000')
+    expect(b.format(noonBmt)).toBe('西暦2020年3月22日(日) @500')
+    expect(b.format(midnightBmt, '@HHH.mm')).toBe('@000.33')
   })
 })
 
