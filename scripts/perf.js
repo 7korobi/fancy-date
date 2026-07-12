@@ -32,6 +32,29 @@ function bench({ key, label, count, run }) {
   ]
 }
 
+function countMethodCalls(methods, run) {
+  const counts = Object.fromEntries(methods.map(({ key }) => [key, 0]))
+  const originals = methods.map(({ object, method, key }) => {
+    const original = object[method]
+    object[method] = function (...args) {
+      counts[key]++
+      return original.apply(this, args)
+    }
+    return { object, method, original }
+  })
+
+  try {
+    run()
+  } finally {
+    for (const { object, method, original } of originals) {
+      object[method] = original
+    }
+  }
+  return counts
+}
+
+const toTemposCount = (calendar) => [{ key: 'to_tempos', object: calendar, method: 'to_tempos' }]
+
 const g = Calendar.Gregorian
 const ga = Calendar.GregorianAstronomical
 const old = Calendar.平気法
@@ -62,36 +85,42 @@ const suites = [
     label: 'Gregorian to_tempos',
     count: 3000,
     run: () => g.to_tempos(base),
+    countCalls: toTemposCount(g),
   },
   {
     key: 'spanGregorian',
     label: 'Gregorian span',
     count: 3000,
     run: () => g.span_obj(base + to_msec('3d'), base),
+    countCalls: toTemposCount(g),
   },
   {
     key: 'addGregorian',
     label: 'Gregorian add',
     count: 3000,
     run: () => g.add(base, '1年1ヶ月1日後'),
+    countCalls: toTemposCount(g),
   },
   {
     key: 'subGregorian',
     label: 'Gregorian sub',
     count: 3000,
     run: () => g.sub(base, '1年1ヶ月1日後'),
+    countCalls: toTemposCount(g),
   },
   {
     key: 'toTemposMeanLunisolar',
     label: 'Mean lunisolar to_tempos',
     count: 1000,
     run: () => old.to_tempos(base),
+    countCalls: toTemposCount(old),
   },
   {
     key: 'toTemposObservedLunisolar',
     label: 'Observed lunisolar to_tempos',
     count: 20,
     run: () => observed.to_tempos(base),
+    countCalls: toTemposCount(observed),
   },
   {
     key: 'toTemposAmanta',
@@ -110,6 +139,7 @@ const suites = [
     label: 'Amanta tithi assignment to_tempos',
     count: 1000,
     run: () => amantaTithi.to_tempos(base),
+    countCalls: toTemposCount(amantaTithi),
   },
   {
     key: 'formatAmantaTithi',
@@ -134,6 +164,7 @@ const suites = [
     label: 'Purnimanta tithi assignment to_tempos',
     count: 1000,
     run: () => purnimantaTithi.to_tempos(base),
+    countCalls: toTemposCount(purnimantaTithi),
   },
   {
     key: 'formatPurnimantaTithi',
@@ -146,12 +177,14 @@ const suites = [
     label: 'Observed lunisolar precise span',
     count: 20,
     run: () => observed.span_obj(target, base, { precise: 'S' }),
+    countCalls: toTemposCount(observed),
   },
   {
     key: 'addObservedPrecise',
     label: 'Observed lunisolar precise add',
     count: 10,
     run: () => observed.add(base, '1年1刻半1112秒154ミリ秒後'),
+    countCalls: toTemposCount(observed),
   },
   {
     key: 'lunisolarObserved',
@@ -176,6 +209,11 @@ const suites = [
 const report = {
   generatedAt: new Date().toISOString(),
   benchmarks: Object.fromEntries(suites.map(bench)),
+  callCounts: Object.fromEntries(
+    suites
+      .filter(({ countCalls }) => countCalls)
+      .map((suite) => [suite.key, countMethodCalls(suite.countCalls, suite.run)]),
+  ),
 }
 
 console.log(JSON.stringify(report, null, 2))
