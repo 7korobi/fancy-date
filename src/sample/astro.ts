@@ -1,6 +1,15 @@
 import type { BodyProfile, PLANET, SATELLITE, SPOT, STAR } from '../fancy-date'
 import { placeStar, transformOrbital } from '../fancy-date'
-import { MarsSolarOrbital, VenusSolarOrbital } from '../nasa'
+import {
+  JupiterSolarOrbital,
+  MarsSolarOrbital,
+  MercurySolarOrbital,
+  NeptuneSolarOrbital,
+  PlutoSolarOrbital,
+  SaturnSolarOrbital,
+  UranusSolarOrbital,
+  VenusSolarOrbital,
+} from '../nasa'
 import { EarthMoonOrbital, EarthSolarOrbital } from '../naoj'
 import { placeMeanPlanet, placeMeanSatellite } from '../preset'
 
@@ -132,9 +141,15 @@ export const 天文 = (function () {
 
 export const 太陽: STAR = placeStar(天文.太陽.本体)
 
+export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, { body: 天文.水星.本体 })
 export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 天文.地球.本体 })
 export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, { body: 天文.金星.本体 })
 export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: 天文.火星.本体 })
+export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, { body: 天文.木星.本体 })
+export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, { body: 天文.土星.本体 })
+export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, { body: 天文.天王星.本体 })
+export const 天文海王星: PLANET = NeptuneSolarOrbital.planet(太陽, { body: 天文.海王星.本体 })
+export const 天文冥王星: PLANET = PlutoSolarOrbital.planet(太陽, { body: 天文.冥王星.本体 })
 
 export const 地球: PLANET = placeMeanPlanet(太陽, 天文.地球)
 export const 水星: PLANET = placeMeanPlanet(太陽, 天文.水星)

@@ -56,10 +56,28 @@ import { to_tempo_bare } from './time'
 
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
-export { MarsSolarOrbital, PlanetarySolarEventModel, VenusSolarOrbital } from './nasa'
+export {
+  JupiterSolarOrbital,
+  MarsSolarOrbital,
+  MeanPlanetSolarOrbital,
+  MercurySolarOrbital,
+  NeptuneSolarOrbital,
+  PlanetarySolarEventModel,
+  PlutoSolarOrbital,
+  SaturnSolarOrbital,
+  UranusSolarOrbital,
+  VenusSolarOrbital,
+} from './nasa'
 export type {
+  JupiterSolarOrbitalOptions,
   MarsSolarOrbitalOptions,
+  MeanPlanetSolarOrbitalOptions,
+  MercurySolarOrbitalOptions,
+  NeptuneSolarOrbitalOptions,
   PlanetarySolarEventModelOptions,
+  PlutoSolarOrbitalOptions,
+  SaturnSolarOrbitalOptions,
+  UranusSolarOrbitalOptions,
   VenusSolarOrbitalOptions,
 } from './nasa'
 export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean'

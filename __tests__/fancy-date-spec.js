@@ -11,8 +11,14 @@ const {
   panchangaNotes,
   太陽,
   地球,
+  天文水星,
   天文金星,
   天文火星,
+  天文木星,
+  天文土星,
+  天文天王星,
+  天文海王星,
+  天文冥王星,
   木星,
   月,
   東京,
@@ -24,7 +30,16 @@ const {
 const { 天文地球 } = require('../lib/sample/astro')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
-const { MarsSolarOrbital, VenusSolarOrbital } = require('../lib/nasa')
+const {
+  JupiterSolarOrbital,
+  MarsSolarOrbital,
+  MercurySolarOrbital,
+  NeptuneSolarOrbital,
+  PlutoSolarOrbital,
+  SaturnSolarOrbital,
+  UranusSolarOrbital,
+  VenusSolarOrbital,
+} = require('../lib/nasa')
 const { format } = require('date-fns')
 const { ja: locale } = require('date-fns/locale/ja')
 
@@ -605,15 +620,33 @@ describe('平気法 calculate', () => {
 
   test('body placement keeps tuple compatibility', () => {
     expect(地球.body).toMatchObject({ kind: 'physical', name: 'Earth', radiusKm: 6378.137 })
+    expect(天文水星.body).toMatchObject({ kind: 'physical', name: 'Mercury', radiusKm: 2439.7 })
     expect(天文金星.body).toMatchObject({ kind: 'physical', name: 'Venus', radiusKm: 6051.8 })
     expect(天文火星.body).toMatchObject({ kind: 'physical', name: 'Mars', radiusKm: 3389.5 })
+    expect(天文木星.body).toMatchObject({ kind: 'physical', name: 'Jupiter', radiusKm: 69911 })
+    expect(天文土星.body).toMatchObject({ kind: 'physical', name: 'Saturn', radiusKm: 58232 })
+    expect(天文天王星.body).toMatchObject({ kind: 'physical', name: 'Uranus', radiusKm: 25362 })
+    expect(天文海王星.body).toMatchObject({ kind: 'physical', name: 'Neptune', radiusKm: 24622 })
+    expect(天文冥王星.body).toMatchObject({ kind: 'physical', name: 'Pluto', radiusKm: 1188.3 })
     expect(月.body).toMatchObject({ kind: 'physical', name: 'Moon', radiusKm: 1737.4 })
     expect(地球[1]).toBe(地球.orbital)
     expect(地球[2]).toBe(地球.rotation)
+    expect(天文水星[1]).toBe(天文水星.orbital)
+    expect(天文水星[2]).toBe(天文水星.rotation)
     expect(天文金星[1]).toBe(天文金星.orbital)
     expect(天文金星[2]).toBe(天文金星.rotation)
     expect(天文火星[1]).toBe(天文火星.orbital)
     expect(天文火星[2]).toBe(天文火星.rotation)
+    expect(天文木星[1]).toBe(天文木星.orbital)
+    expect(天文木星[2]).toBe(天文木星.rotation)
+    expect(天文土星[1]).toBe(天文土星.orbital)
+    expect(天文土星[2]).toBe(天文土星.rotation)
+    expect(天文天王星[1]).toBe(天文天王星.orbital)
+    expect(天文天王星[2]).toBe(天文天王星.rotation)
+    expect(天文海王星[1]).toBe(天文海王星.orbital)
+    expect(天文海王星[2]).toBe(天文海王星.rotation)
+    expect(天文冥王星[1]).toBe(天文冥王星.orbital)
+    expect(天文冥王星[2]).toBe(天文冥王星.rotation)
     expect(月[0]).toBe(地球)
     expect(月[1]).toBe(月.orbital)
     expect(黒分月[1]).toBe(黒分月軌道)
@@ -1666,7 +1699,16 @@ describe('火星', () => {
 
   test('planetary solar event models resolve local sun events', () => {
     const near = g.parse('2024年1月1日')
-    for (const orbital of [new MarsSolarOrbital(), new VenusSolarOrbital()]) {
+    for (const orbital of [
+      new MarsSolarOrbital(),
+      new MercurySolarOrbital(),
+      new VenusSolarOrbital(),
+      new JupiterSolarOrbital(),
+      new SaturnSolarOrbital(),
+      new UranusSolarOrbital(),
+      new NeptuneSolarOrbital(),
+      new PlutoSolarOrbital(),
+    ]) {
       expect(hasSolarEvents(orbital)).toBe(true)
       const events = orbital.solarEvents(near, { latitudeDeg: 0, longitudeDeg: 0, timezoneDeg: 0 })
       expect(events.has_sunrise).toBe(true)
@@ -1678,10 +1720,20 @@ describe('火星', () => {
     }
   })
 
-  test('Venus solar model exposes mean season phases and sample placement', () => {
-    const venus = new VenusSolarOrbital()
-    expect(venus.phaseAt(VenusSolarOrbital.vernalEquinoxEpochMsec)).toBe(0)
-    expect(天文金星.orbital).toBeInstanceOf(VenusSolarOrbital)
+  test('mean planetary solar models expose mean season phases and sample placements', () => {
+    for (const [Model, planet] of [
+      [MercurySolarOrbital, 天文水星],
+      [VenusSolarOrbital, 天文金星],
+      [JupiterSolarOrbital, 天文木星],
+      [SaturnSolarOrbital, 天文土星],
+      [UranusSolarOrbital, 天文天王星],
+      [NeptuneSolarOrbital, 天文海王星],
+      [PlutoSolarOrbital, 天文冥王星],
+    ]) {
+      const orbital = new Model()
+      expect(orbital.phaseAt(Model.vernalEquinoxEpochMsec)).toBe(0)
+      expect(planet.orbital).toBeInstanceOf(Model)
+    }
   })
 
   test('calc', () => {
