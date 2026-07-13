@@ -193,6 +193,8 @@ function defineKeplerianProfile(profile: KeplerianSolarOrbitalProfile) {
 
 const MEAN_SEASON_EPOCH_MSEC = Date.UTC(2019, 2, 21, 6, 58)
 
+// Source notes live in docs/astronomy-sources.md.
+// Mercury/Venus use JPL SSD approximate planetary elements; Pluto uses JPL SBDB elements.
 const MERCURY_PROFILE = defineKeplerianProfile({
   periodMsec: 7596288000,
   epochMsec: MEAN_SEASON_EPOCH_MSEC,

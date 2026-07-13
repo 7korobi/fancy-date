@@ -14,6 +14,8 @@ import { EarthMoonOrbital, EarthSolarOrbital } from '../naoj'
 import { placeMeanPlanet, placeMeanSatellite } from '../preset'
 
 export const 天文 = (function () {
+  // 平均天体データは理科年表由来として扱う。旧コードに版情報が残っていないため、
+  // 出典・未確定点は docs/astronomy-sources.md にまとめる。
   const 平均 = {
     太陽: {
       本体: { kind: 'physical', name: 'Sun', radiusKm: 695700 } as BodyProfile,
