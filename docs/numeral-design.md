@@ -227,7 +227,7 @@ function digitwise(num: number, items: readonly string[]): string {
 ### 設計方針
 
 - 登録簿が持つのは「その言語・地域で使える数詞の選択肢と、書式の既定値」という**カタログ**であり、「どの暦トークンにどの数詞を割り当てるか」という配線は暦定義側(呼び出し側)の責務として明確に分離する(2つの層を混ぜない、という既存の結論を踏襲)。
-- 数詞は「日付用の読み」「桁列挙用」のような**意味役割(purpose)**をキーにして引けるようにする。役割名は固定の enum ではなく緩やかな慣習(文字列)とするが、**表記ゆれを避けるため下記の推奨語彙を基本とする**: `cardinal`(基本の位取り数詞)、`cardinal-digit`(桁列挙数詞)、`ordinal`(序数)、`date-reading`(日付専用の読み)、`count-reading`(日付以外の計数読み)。アラビア語の性別ごと・スワヒリ語の名詞クラスごとのように、この語彙で足りない役割は言語ごとに追加してよい(例: `cardinal-masculine`/`concord-class7`)——閉じた enum にはしない。
+- 数詞は「日付用の読み」「桁列挙用」のような**意味役割(purpose)**をキーにして引けるようにする。役割名は固定の enum ではなく緩やかな慣習(文字列)とするが、オブジェクトキーとして直接参照しやすいよう camelCase の推奨語彙を基本とする: `cardinal`(基本の位取り数詞)、`cardinalDigit`(桁列挙数詞)、`ordinal`(序数)、`dateRuby`(日付専用の読み)、`countRuby`(日付以外の計数読み)。アラビア語の性別ごと・スワヒリ語の名詞クラスごとのように、この語彙で足りない役割は言語ごとに追加してよい(例: `cardinalMasculine`/`concordClass7`)——閉じた enum にはしない。
 - **`arabic`(算用数字パススルー)や `roman`(ローマ数字)のような、特定言語の文法に紐づかない記法は `LOCALE_REGISTRY` に含めない**。ロケールごとに重複登録すると同じものが何度も現れて冗長になるため、言語非依存の `SCRIPT_REGISTRY` に一度だけ登録し、暦定義側がどちらのカタログからでも参照できるようにする。
 - タグは BCP-47 に緩く着想を得るが、厳密な準拠は求めない(`ja`、`ja-old`、`en`、`ko`、`ar` 等の軽量なタグで十分)。
 
@@ -239,7 +239,7 @@ export const SCRIPT_REGISTRY = {
   'roman-lower': roman.lower,
 }
 
-type NumeralPurpose = string // 推奨語彙: 'cardinal' | 'cardinal-digit' | 'ordinal' | 'date-reading' | 'count-reading' など。閉じた enum にはしない
+type NumeralPurpose = string // 推奨語彙: 'cardinal' | 'cardinalDigit' | 'ordinal' | 'dateRuby' | 'countRuby' など。閉じた enum にはしない
 
 type LocaleEntry = {
   tag: string // 例: 'ja', 'ja-old', 'en', 'ko', 'ar'
@@ -256,9 +256,9 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
     displayName: '日本語',
     numerals: {
       cardinal: jpn.漢字,
-      'cardinal-digit': jpn.桁読み,
-      'date-reading': old_jpn.rubys.語尾('か'),
-      'count-reading': old_jpn.rubys.語尾('つ'),
+      cardinalDigit: jpn.桁読み,
+      dateRuby: old_jpn.rubys.語尾('か'),
+      countRuby: old_jpn.rubys.語尾('つ'),
     },
     defaultParseFormat: 'y年M月d日',
     defaultFormat: 'Gy年M月d日(E)',
@@ -277,9 +277,9 @@ export const LOCALE_REGISTRY: Record<string, LocaleEntry> = {
     tag: 'ko',
     displayName: '한국어',
     numerals: {
-      'cardinal-sino': kor.漢語系, // 既存 DIC エンジンの辞書差し替えで実装済み
-      'cardinal-native': kor.固有系.基本, // 助数詞なしの素の計数(実装済み)
-      'count-reading-native': kor.固有系.助数詞前, // 助数詞直前の縮約形(実装済み)
+      cardinalSino: kor.漢語系, // 既存 DIC エンジンの辞書差し替えで実装済み
+      cardinalNative: kor.固有系.基本, // 助数詞なしの素の計数(実装済み)
+      countNative: kor.固有系.助数詞前, // 助数詞直前の縮約形(実装済み)
     },
     defaultParseFormat: 'y년 M월 d일',
     defaultFormat: 'Gy년 M월 d일(E)',
@@ -314,7 +314,7 @@ new FancyDate()
   .calendar(['2024年1月1日', locale.defaultParseFormat, 0])
   .lang(locale.defaultParseFormat, locale.defaultFormat)
   .numeral({
-    d: locale.numerals['date-reading'],
+    d: locale.numerals.dateRuby,
     y: locale.numerals['cardinal'],
   })
   .labels(locale.labels ?? {})
@@ -335,7 +335,7 @@ new FancyDate()
 1. (完了)`DIC` に `語尾()`/`語尾必須()`/`例外()` を追加し、`old_jpn.rubys` の bare 使用を例外化しつつ `つくも` の到達可能性を修正(3・5節)。
 2. (完了)`InflectedNumeral` ラッパーと `assertRoundTrips` テストヘルパーを追加し、`old_jpn.rubys` の全語尾で完全往復を検証(4節)。
 3. (完了)`arabic`/`jpn.桁読み` を追加(6節)。
-4. (完了)`SCRIPT_REGISTRY`/`LOCALE_REGISTRY`(`ja`/`en`/`ko`)を `src/locale-registry.ts` に追加した。既存サンプル暦の書き換えは行っていない(`.numeral()` はまだ暦全体で1つの Numeral しか受け付けず、per-token map 拡張は未実装のため——次点の課題として残す)。
+4. (完了)`SCRIPT_REGISTRY`/`LOCALE_REGISTRY`(`ja`/`en`/`ko`)を追加した。語彙は `src/locale/ja.ts` / `src/locale/en.ts` / `src/locale/ko.ts` に地域ごとに分け、`src/locale-registry.ts` は互換用の集約入口にした。`LocaleEntry.vocabulary` は `dC7` / `yC9` / `R6` / `M` / `H` のような実 token 名をキーにし、`week7` のような中間名への読み替えを挟まない。`FancyDate.locale(locale, options)` で `LocaleEntry.numerals` の役割名を既存の `.numeral()` / `.numeral_text()` / `.numeral_ruby()` / `.numeral_label()` へ流し込めるようにし、平気法・定気法・韓国語Gregorianサンプルはこの経路へ移した。`.numeral()` 自体はまだ暦全体で1つの Numeral を受け付ける設計で、per-token map は未実装。
 5. (完了)`RomanClock`(`src/sample/calendars.ts`)としてローマ数字クロックフェース・サンプルを追加した。
 6. (完了)韓国語(`kor.漢語系`/`kor.固有系.基本`/`kor.固有系.助数詞前`)と `LOCALE_REGISTRY.ko` を追加した(逆引きは未実装)。
 7. (完了)平気法・定気法(`src/sample/calendars.ts`)へ実際に適用した。
@@ -344,4 +344,4 @@ new FancyDate()
 - `y`(年): `list`/`rubys` の静的配列が無界の年には使えないため、新規メソッド `FancyDate.numeral_label(numeral, ruby)` を追加した。当初 `.numeral(numeral, ruby)` 自体を拡張する案を検討したが、`format_number()` は `y` だけでなく `H`/`m`/`s`/`S`/`u`、`d`/`D`/`Q`/`p`/`w` とも共有されており、`y` を狙って `.numeral()` を設定すると bare の `d`/`H`/`m`/`s` まで意図せず変わってしまう(既存のスナップショットを壊す)ため、`y` 専用の独立した状態(`dic.numeral_label`/`numeral_label_ruby`)を持つ形に設計を変更した。あわせて `def_to_label()` で `y` を `to_label`/`to_ruby` に配線し、tokenizer の正規表現(`reg_token`)にも `y` を `[or]` サフィックス対象として追加した(既存の format 文字列に `"yo"`/`"yr"` という並びは無いことを確認済みで後方互換)。平気法・定気法には `.numeral_label(jpn.漢字, jpn.rubys)` を設定し、`yo`(漢字)/`yr`(日付以外のふりがな、和語の old_jpn ではなく漢語の jpn.rubys——年のような3〜4桁の数は和語の数え方の対象外のため)が使えるようになった。
 - この過程で、`定気法.parse('...年M月d日', 'Gy年M月d日')` が誤った日付を返す既存の潜在バグを発見した(平気法では発生しない、`d` の list/rubys 変更とは無関係——詳細は development-notes.md 参照)。今回の変更範囲外として修正はしていない。
 
-**次点の課題(未着手)**: `.numeral()`/`.numeral_label()` を他の暦(Julian・Romulus 等)や英語・ローマ数字ロケールへ横展開すること、`LOCALE_REGISTRY` 自体を暦定義に直接配線する仕組み化(今回は平気法/定気法に直接 `jpn.漢字`/`jpn.rubys`/`old_jpn.rubys` を割り当てており、レジストリ経由の配線ではない)、韓国語数詞の逆引き(`regex`/`to_number`)、定気法の parse 不具合の修正。
+**次点の課題(未着手)**: tokenごとに異なる Numeral を直接指定できる per-token map API(例: `numerals({ y: ..., d: ..., H: ... })`)の検討、韓国語数詞の逆引き(`regex`/`to_number`)、定気法の parse 不具合の修正。Julian・Romulus のローマ時法は `notation()` の list/ruby で、韓国語Gregorian は `locale(..., { numeral_ruby: 'cardinalSino' })` で対応済み。

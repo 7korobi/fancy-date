@@ -163,6 +163,7 @@ export type {
   SpanLike,
   Tempos,
   FindCondition,
+  LocaleApplyOptions,
   LunisolarDate,
   LunisolarPrincipalTerm,
 } from './fancy-date'

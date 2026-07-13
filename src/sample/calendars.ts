@@ -1,42 +1,20 @@
 import { FancyDate, tithi, transformOrbital } from '../fancy-date'
 import type { PLANET, SATELLITE } from '../fancy-date'
+import { getLocale } from '../locale-registry'
 import { english, jpn, mod, old_jpn, roman, sanskrit, sizewise } from '../number'
 import { localTimezoneDeg } from '../time'
-import { 北朝元号 } from './eras'
 import {
-  七曜,
-  七曜かな,
-  九星,
-  九星かな,
-  九星rev,
-  九星かなrev,
-  二十七宿,
-  二十七宿かな,
-  二十八宿,
-  二十八宿かな,
-  二十四節季,
-  二十四節季かな,
-  六曜,
-  六曜かな,
-  十干,
-  十干かな,
-  十二支,
-  十二支かな,
-  和風月名,
-  和風月名かな,
   バビロニア月名,
   バビロニア月名かな,
   ロムルス月ラベル数値,
   ロムルス月ラベルラテン語,
+  ローマ時法分,
+  ローマ時法時,
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
   エジプト月名,
   コプト月名,
-  月相,
-  月相かな,
-  時鐘,
-  時鐘かな,
 } from './locale'
 import {
   Alexandria,
@@ -61,29 +39,49 @@ import {
 // ---  -  I  L -OP R TUVWX -
 // --- efghijkl no qr t v   z
 
+const jaLocale = getLocale('ja')!
+const koLocale = getLocale('ko')!
+const ja = jaLocale.vocabulary as {
+  G: { current: string; past: string; eras: Parameters<FancyDate['era']>[2] }
+  H: readonly [readonly string[], readonly string[], string]
+  M: readonly [readonly string[], readonly string[]]
+  N: readonly [readonly string[], readonly string[]]
+  Z: readonly [readonly string[], readonly string[]]
+  R6: readonly [readonly string[], readonly string[]]
+  LM27: readonly [readonly string[], readonly string[]]
+  dC7: readonly [readonly string[], readonly string[]]
+  dC9: readonly [readonly string[], readonly string[]]
+  dC10: readonly [readonly string[], readonly string[]]
+  dC12: readonly [readonly string[], readonly string[]]
+  dC28: readonly [readonly string[], readonly string[]]
+  yC9: readonly [readonly string[], readonly string[]]
+}
+
 const commonNotation: Parameters<FancyDate['notation']>[0] = {
   M: [12],
   H: [24],
   m: [60],
   s: [60],
 
-  N: [月相, 月相かな],
+  N: ja.N,
 
-  dC7: [七曜, 七曜かな],
-  dC28: [二十八宿, 二十八宿かな],
-  Z: [二十四節季, 二十四節季かな],
+  dC7: ja.dC7,
+  dC28: ja.dC28,
+  Z: ja.Z,
 
   yC60: [60],
   dC60: [60],
-  dC12: [十二支, 十二支かな],
-  dC10: [十干, 十干かな],
+  dC12: ja.dC12,
+  dC10: ja.dC10,
 }
 
 const baseCalendar = (c: FancyDate) => c.notation(commonNotation)
 
+const numericLabels = (length: number) => Array.from({ length }, (_, index) => `${index}`)
+
 const romanTemporalNotation: Parameters<FancyDate['notation']>[0] = {
-  H: [24],
-  m: [60],
+  H: [numericLabels(24), ローマ時法時],
+  m: [numericLabels(60), ローマ時法分],
 }
 
 const gregorianBase = (c: FancyDate) =>
@@ -150,8 +148,8 @@ const アマンタ = new FancyDate((c) =>
     .division({ H: 'solar' })
     .numeral_ruby(sanskrit.latin)
     .notation({
-      yC9: [九星, 九星かな],
-      dC9: [九星rev, 九星かなrev],
+      yC9: ja.yC9,
+      dC9: ja.dC9,
     }),
 )
 
@@ -163,8 +161,8 @@ const プールニマンタ = new FancyDate((c) =>
     .division({ H: 'solar' })
     .numeral_ruby(sanskrit.latin)
     .notation({
-      yC9: [九星, 九星かな],
-      dC9: [九星rev, 九星かなrev],
+      yC9: ja.yC9,
+      dC9: ja.dC9,
     }),
 )
 
@@ -199,7 +197,7 @@ const 平気法 = new FancyDate((c) =>
   baseCalendar(c)
     .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
     .spot(...東京)
-    .era('皇紀', '紀元前', 北朝元号)
+    .era(ja.G.current, ja.G.past, ja.G.eras)
     // 日干支(dC)がグレゴリオ暦(実測で2020年1月22日=甲子という既知の事実と
     // 一致することを確認済み)に対して常に+6(60日周期、anchor の日付
     // "7日"の0始まり index と一致)ずれていた。真因は anchor 側ではなく
@@ -214,14 +212,18 @@ const 平気法 = new FancyDate((c) =>
       0,
     ])
     .division({ H: 'solar' })
-    .numeral_text(jpn.漢字)
-    .numeral_label(jpn.漢字, jpn.rubys)
+    .locale(jaLocale, {
+      lang: false,
+      numeral_text: 'cardinal',
+      numeral_label: 'cardinal',
+      numeral_label_ruby: 'cardinalRuby',
+    })
     .notation({
-      R6: [六曜, 六曜かな],
-      LM27: [二十七宿, 二十七宿かな],
-      M: [和風月名, 和風月名かな],
+      R6: ja.R6,
+      LM27: ja.LM27,
+      M: ja.M,
       d: [和暦日付漢字, 和暦日付ふりがな, '日'],
-      H: [時鐘, 時鐘かな, '刻'],
+      H: ja.H,
       m: [
         ['', '半'],
         ['', 'はん'],
@@ -230,8 +232,8 @@ const 平気法 = new FancyDate((c) =>
       s: [3600],
       S: [1000],
 
-      yC9: [九星, 九星かな],
-      dC9: [九星rev, 九星かなrev],
+      yC9: ja.yC9,
+      dC9: ja.dC9,
     }),
 )
 
@@ -239,7 +241,7 @@ const 定気法 = new FancyDate((c) =>
   baseCalendar(c)
     .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
     .spot(...天文東京)
-    .era('皇紀', '紀元前', 北朝元号)
+    .era(ja.G.current, ja.G.past, ja.G.eras)
     // 年干支(yC)が平気法の同一起点(皇紀2629年=西暦1969年)と1年ずれていた
     // (戊申=1968年の干支。1969年の正しい年干支は己酉で、平気法側の
     // 起点値と一致する)。同じ皇紀年を起点にしている以上、年干支は暦の
@@ -257,14 +259,18 @@ const 定気法 = new FancyDate((c) =>
       0,
     ])
     .division({ H: 'solar' })
-    .numeral_text(jpn.漢字)
-    .numeral_label(jpn.漢字, jpn.rubys)
+    .locale(jaLocale, {
+      lang: false,
+      numeral_text: 'cardinal',
+      numeral_label: 'cardinal',
+      numeral_label_ruby: 'cardinalRuby',
+    })
     .notation({
-      R6: [六曜, 六曜かな],
-      LM27: [二十七宿, 二十七宿かな],
-      M: [和風月名, 和風月名かな],
+      R6: ja.R6,
+      LM27: ja.LM27,
+      M: ja.M,
       d: [和暦日付漢字, 和暦日付ふりがな, '日'],
-      H: [時鐘, 時鐘かな, '刻'],
+      H: ja.H,
       m: [
         ['', '半'],
         ['', 'はん'],
@@ -273,8 +279,8 @@ const 定気法 = new FancyDate((c) =>
       s: [3600],
       S: [1000],
 
-      yC9: [九星, 九星かな],
-      dC9: [九星rev, 九星かなrev],
+      yC9: ja.yC9,
+      dC9: ja.dC9,
     }),
 )
 
@@ -550,6 +556,10 @@ const 漢数字Gregorian = new FancyDate(Gregorian, (c) =>
   c.numeral(sizewise(jpn.漢字, jpn.桁読み)).numeral_ruby(jpn.rubys),
 )
 
+const 韓国語Gregorian = new FancyDate(Gregorian, (c) =>
+  c.locale(koLocale, { lang: false, numeral_ruby: 'cardinalSino' }),
+)
+
 const エジプト民用暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
 const エジプト民用暦 = new FancyDate((c) => {
   const ナボナサル紀元 = Julian.parse('紀元前747年2月26日')
@@ -614,6 +624,7 @@ export const Calendar = {
   Maya,
   Beat,
   漢数字Gregorian,
+  韓国語Gregorian,
   エジプト民用暦,
   コプト暦,
   RomanClock,

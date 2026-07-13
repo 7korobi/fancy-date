@@ -1533,9 +1533,9 @@ describe('ローマ・ユリウス時法', () => {
 
       const hour = calendar.format_parts(msec).find((part) => part.token === 'HH')
       const minute = calendar.format_parts(msec).find((part) => part.token === 'mm')
-      expect(hour).toMatchObject({ ruby: expect.stringMatching(/^[a-z -]+$/) })
-      expect(minute).toMatchObject({ ruby: expect.stringMatching(/^[a-z -]+$/) })
-      expect(calendar.format(msec, 'Hr')).toBe('')
+      expect(hour).toMatchObject({ ruby: expect.stringMatching(/^hora [a-z ]+$/) })
+      expect(minute).toMatchObject({ ruby: expect.stringMatching(/^pars minuta \d{2}$/) })
+      expect(calendar.format(msec, 'Hr')).toContain('hora')
     }
   })
 

@@ -1,0 +1,62 @@
+import { jpn, old_jpn } from '../number'
+import {
+  七曜,
+  七曜かな,
+  九星,
+  九星かな,
+  九星rev,
+  九星かなrev,
+  二十七宿,
+  二十七宿かな,
+  二十八宿,
+  二十八宿かな,
+  二十四節季,
+  二十四節季かな,
+  六曜,
+  六曜かな,
+  十干,
+  十干かな,
+  十二支,
+  十二支かな,
+  和風月名,
+  和風月名かな,
+  月相,
+  月相かな,
+  時鐘,
+  時鐘かな,
+} from '../sample/locale'
+import { 北朝元号 } from '../sample/eras'
+import type { LocaleEntry } from './types'
+
+export const jaLocale: LocaleEntry = {
+  tag: 'ja',
+  displayName: '日本語',
+  numerals: {
+    cardinal: jpn.漢字,
+    cardinalDigit: jpn.桁読み,
+    cardinalRuby: jpn.rubys,
+    dateRuby: old_jpn.rubys.語尾('か'),
+    countRuby: old_jpn.rubys.語尾('つ'),
+  },
+  vocabulary: {
+    G: {
+      current: '皇紀',
+      past: '紀元前',
+      eras: 北朝元号,
+    },
+    M: [和風月名, 和風月名かな],
+    N: [月相, 月相かな],
+    Z: [二十四節季, 二十四節季かな],
+    H: [時鐘, 時鐘かな, '刻'],
+    dC7: [七曜, 七曜かな],
+    dC28: [二十八宿, 二十八宿かな],
+    dC12: [十二支, 十二支かな],
+    dC10: [十干, 十干かな],
+    yC9: [九星, 九星かな],
+    dC9: [九星rev, 九星かなrev],
+    R6: [六曜, 六曜かな],
+    LM27: [二十七宿, 二十七宿かな],
+  },
+  defaultParseFormat: 'y年M月d日',
+  defaultFormat: 'Gy年M月d日(E)',
+}

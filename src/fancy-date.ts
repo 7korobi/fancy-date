@@ -1,4 +1,5 @@
 import { mod, parseNumeral, type Numeral } from './number'
+import type { LocaleEntry, NumeralPurpose } from './locale-registry'
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import type {
   LunarApsisKind,
@@ -573,6 +574,16 @@ type IDIC = IIDX & {
 export type DivisionOptions = {
   H?: false | 'equal' | 'solar'
 }
+type LocaleNumeralRef = Numeral | NumeralPurpose | null | undefined
+export type LocaleApplyOptions = {
+  lang?: boolean
+  labels?: boolean | SpanLabels
+  numeral?: LocaleNumeralRef
+  numeral_text?: LocaleNumeralRef
+  numeral_ruby?: LocaleNumeralRef
+  numeral_label?: LocaleNumeralRef
+  numeral_label_ruby?: LocaleNumeralRef
+}
 export type DayStart = 'midnight' | SolarDayBoundaryEvent
 export type AssignmentToken = 'd'
 export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> = {
@@ -1075,6 +1086,29 @@ export class FancyDate {
 
   assign(assignments: AssignmentOptions) {
     Object.assign(this.dic.assignments, assignments)
+    return this
+  }
+
+  locale(locale: LocaleEntry, options: LocaleApplyOptions = {}) {
+    const numeral = (ref: LocaleNumeralRef): Numeral | null => {
+      if (ref == null) return null
+      if ('string' !== typeof ref) return ref
+      const value = locale.numerals[ref]
+      if (!value) throw new Error(`locale ${locale.tag} has no numeral ${ref}`)
+      return value
+    }
+
+    if (options.lang !== false) this.lang(locale.defaultParseFormat, locale.defaultFormat)
+    if ('numeral' in options) this.numeral(numeral(options.numeral))
+    if ('numeral_text' in options) this.numeral_text(numeral(options.numeral_text))
+    if ('numeral_ruby' in options) this.numeral_ruby(numeral(options.numeral_ruby))
+    if ('numeral_label' in options || 'numeral_label_ruby' in options) {
+      this.numeral_label(numeral(options.numeral_label), numeral(options.numeral_label_ruby))
+    }
+    if (options.labels !== false) {
+      if (locale.labels) this.labels(locale.labels)
+      if (options.labels && 'object' === typeof options.labels) this.labels(options.labels)
+    }
     return this
   }
 
