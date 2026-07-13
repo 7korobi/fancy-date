@@ -36,6 +36,7 @@ type KeplerianAnomalyTerms = {
 }
 
 type KeplerianSolarOrbitalProfile = MeanPlanetSolarOrbitalProfile & {
+  elementEpochJd?: number
   elements: KeplerianElements
   elementRates?: Partial<KeplerianElements>
   anomalyTerms?: KeplerianAnomalyTerms
@@ -117,7 +118,7 @@ function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axia
 }
 
 function apparentSunLongitudeDeg(utc: number, profile: KeplerianSolarOrbitalProfile) {
-  const centuries = (julian_day(utc) - 2451545.0) / 36525
+  const centuries = (julian_day(utc) - (profile.elementEpochJd ?? 2451545.0)) / 36525
   const elements = elementsAt(profile, centuries)
   const eccentricAnomalyRad = solveEccentricAnomalyRad(
     elements.meanAnomalyDeg,
@@ -273,12 +274,24 @@ const NEPTUNE_PROFILE = defineProfile({
   axialTiltDeg: 28.32,
 })
 
-const PLUTO_PROFILE = defineProfile({
-  periodMsec: 7818100727754,
+const PLUTO_PROFILE = defineKeplerianProfile({
+  periodMsec: 90981.71647718345 * 86400000,
   epochMsec: MEAN_SEASON_EPOCH_MSEC,
   meanSolarDayMsec: 551856672,
   rotationEpochMsec: 0,
   axialTiltDeg: -60.41,
+  elementEpochJd: 2457588.5,
+  elements: {
+    semiMajorAxisAu: 39.58862938517124,
+    eccentricity: 0.2518378778576892,
+    inclinationDeg: 17.14771140999114,
+    meanLongitudeDeg: 38.68366347318184 + 113.7090015158565 + 110.2923840543057,
+    perihelionLongitudeDeg: 113.7090015158565 + 110.2923840543057,
+    ascendingNodeLongitudeDeg: 110.2923840543057,
+  },
+  elementRates: {
+    meanLongitudeDeg: 0.003956838955553025 * 36525,
+  },
 })
 
 export type MercurySolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
@@ -465,7 +478,7 @@ export class NeptuneSolarOrbital extends MeanPlanetSolarOrbital {
   }
 }
 
-export class PlutoSolarOrbital extends MeanPlanetSolarOrbital {
+export class PlutoSolarOrbital extends KeplerianSolarOrbital {
   static readonly sun: STAR = [null, null, null]
   static readonly meanSolarDayMsec = PLUTO_PROFILE.meanSolarDayMsec
   static readonly meanSiderealDayMsec = inferSiderealDayMsec(

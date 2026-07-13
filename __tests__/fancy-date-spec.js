@@ -1741,10 +1741,11 @@ describe('火星', () => {
     }
   })
 
-  test('Mercury and Venus use Keplerian solar longitude instead of linear mean longitude', () => {
+  test('Keplerian solar models use non-linear solar longitude instead of linear mean longitude', () => {
     for (const [Model, thresholdDeg] of [
       [MercurySolarOrbital, 1],
       [VenusSolarOrbital, 0.05],
+      [PlutoSolarOrbital, 1],
     ]) {
       const orbital = new Model()
       const at = Model.vernalEquinoxEpochMsec + Model.meanTropicalYearMsec / 4
