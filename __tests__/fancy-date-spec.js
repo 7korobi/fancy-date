@@ -6,6 +6,9 @@ const {
   mayaHaab,
   mayaLongCount,
   mayaTzolkin,
+  panchanga,
+  panchangaCandidates,
+  panchangaNotes,
   太陽,
   地球,
   天文火星,
@@ -1465,6 +1468,49 @@ describe('Maya', () => {
     expect(mayaLongCount(utc)).toBe('13.0.0.0.0')
     expect(mayaTzolkin(utc)).toBe('4 Ajaw')
     expect(mayaHaab(utc)).toBe('3 Kankin')
+  })
+})
+
+describe('Panchanga helpers', () => {
+  test('panchanga() derives tithi, paksha, nakshatra, yoga and karana at the civil day boundary', () => {
+    const utc = g.parse('2024年6月21日')
+    const value = panchanga(amTithi, utc)
+
+    expect(value.at).toBe(amTithi.to_tempos(utc).d.last_at)
+    expect(value.tithi.number).toBeGreaterThanOrEqual(1)
+    expect(value.tithi.number).toBeLessThanOrEqual(30)
+    expect(value.paksha.name).toMatch(/白分|黒分/)
+    expect(value.nakshatra.number).toBeGreaterThanOrEqual(1)
+    expect(value.nakshatra.number).toBeLessThanOrEqual(27)
+    expect(value.yoga.number).toBeGreaterThanOrEqual(1)
+    expect(value.yoga.number).toBeLessThanOrEqual(27)
+    expect(value.karana.number).toBeGreaterThanOrEqual(1)
+    expect(value.karana.number).toBeLessThanOrEqual(60)
+  })
+
+  test('panchangaNotes() matches festival-style derived conditions', () => {
+    const utc = g.parse('2024年6月21日')
+    const value = panchanga(amTithi, utc)
+    const notes = panchangaNotes(amTithi, utc, [
+      { name: '今日のティティ', tithi: value.tithi.number },
+      { name: '別のティティ', tithi: value.tithi.number === 1 ? 2 : 1 },
+      { name: '現在の半月', paksha: value.paksha.name },
+    ])
+
+    expect(notes).toContain('今日のティティ')
+    expect(notes).toContain('現在の半月')
+    expect(notes).not.toContain('別のティティ')
+  })
+
+  test('panchangaCandidates() returns civil-day candidates for derived conditions', () => {
+    const from = g.parse('2024年6月1日')
+    const to = g.parse('2024年7月1日')
+    const base = panchanga(amTithi, g.parse('2024年6月21日'))
+    const candidates = panchangaCandidates(amTithi, [from, to], { tithi: base.tithi.number })
+
+    expect(candidates.length).toBeGreaterThan(0)
+    expect(candidates.every((at) => from <= at && at < to)).toBe(true)
+    expect(candidates.some((at) => at === base.at)).toBe(true)
   })
 })
 

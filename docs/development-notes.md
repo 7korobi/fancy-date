@@ -60,7 +60,8 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
-- `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持し、前後の raw tithi と比較して `assignment_flags` に `skipped`/`repeated` を付ける。これは tithi 自体の判定なので `nakshatra()`/`yoga()`/`karana()` は不要で、パンチャーンガの別要素として後回しにできる。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。tithi サンプルは観測に寄る暦として `天文月` / 満月基準の `天文黒分月` を使い、日の出境界も `hasSolarEvents` を持つ太陽モデルで解決する。祭日判定、parse candidate 化は未着手。
+- `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持し、前後の raw tithi と比較して `assignment_flags` に `skipped`/`repeated` を付ける。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。tithi サンプルは観測に寄る暦として `天文月` / 満月基準の `天文黒分月` を使い、日の出境界も `hasSolarEvents` を持つ太陽モデルで解決する。
+- `panchanga(calendar, utc)` / `panchangaNotes()` / `panchangaCandidates()` を sample helper として追加した。Maya の `mayaLongCount()` と同じく、暦本体の座標階層に無理に押し込まず、派生情報層として tithi/paksha/nakshatra/yoga/karana を計算する。祭日判定は `PanchangaNoteRule` の条件マッチ、parse candidate 化は `panchangaCandidates()` の日境界走査で足場を用意した。現状はサンプル用 helper で、地域・宗派ごとの採用ルール DSL は未実装。
 
 ### 実装済み: 数詞・ロケール
 

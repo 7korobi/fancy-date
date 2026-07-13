@@ -19,6 +19,10 @@ export {
   mayaHaab,
   mayaLongCount,
   mayaTzolkin,
+  matchesPanchanga,
+  panchanga,
+  panchangaCandidates,
+  panchangaNotes,
   zürich,
   エジプト月名,
   エリス,
@@ -110,6 +114,7 @@ export {
   黒分月,
   黒分月軌道,
 } from './sample'
+export type { Panchanga, PanchangaCondition, PanchangaNoteRule } from './sample'
 
 export {
   FancyDate,

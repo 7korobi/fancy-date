@@ -1,8 +1,9 @@
 import { FancyDate, tithi, transformOrbital } from '../fancy-date'
 import type { PLANET, SATELLITE } from '../fancy-date'
 import { getLocale } from '../locale-registry'
-import { english, jpn, mod, old_jpn, roman, sanskrit, sizewise } from '../number'
+import { english, jpn, old_jpn, roman, sanskrit, sizewise } from '../number'
 import { localTimezoneDeg } from '../time'
+import { setMayaLongCountBase } from './derived/maya'
 import {
   バビロニア月名,
   バビロニア月名かな,
@@ -10,7 +11,6 @@ import {
   ロムルス月ラベルラテン語,
   ローマ時法分,
   ローマ時法時,
-  マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
   エジプト月名,
@@ -470,11 +470,15 @@ const フランス革命暦 = new FancyDate((c) =>
 )
 
 const マヤ暦地球: PLANET = [太陽, [365 * 86400000, 0], [86400000, 0, 0]] as const
-const マヤ長期暦13バクトゥン = 13 * 144000
 let マヤ長期暦基準日Cache: number | undefined
 function マヤ長期暦基準日() {
-  return (マヤ長期暦基準日Cache ??= g.parse('2012年12月21日')!)
+  if (マヤ長期暦基準日Cache == null) {
+    マヤ長期暦基準日Cache = g.parse('2012年12月21日')!
+    setMayaLongCountBase(マヤ長期暦基準日Cache)
+  }
+  return マヤ長期暦基準日Cache
 }
+setMayaLongCountBase(マヤ長期暦基準日)
 
 const Maya = new FancyDate((c) =>
   baseCalendar(c)
@@ -507,39 +511,6 @@ const Maya = new FancyDate((c) =>
       d: [マヤハアブ日, null],
     }),
 )
-
-function mayaKin(utc: number) {
-  return Math.floor((utc - マヤ長期暦基準日()) / 86400000) + マヤ長期暦13バクトゥン
-}
-
-export function mayaLongCount(utc: number) {
-  let kin = mayaKin(utc)
-  const baktun = Math.floor(kin / 144000)
-  kin -= baktun * 144000
-  const katun = Math.floor(kin / 7200)
-  kin -= katun * 7200
-  const tun = Math.floor(kin / 360)
-  kin -= tun * 360
-  const uinal = Math.floor(kin / 20)
-  kin -= uinal * 20
-  return `${baktun}.${katun}.${tun}.${uinal}.${kin}`
-}
-
-export function mayaTzolkin(utc: number) {
-  const kin = mayaKin(utc)
-  const number = mod(kin + 3, 13) + 1
-  const name = マヤツォルキン[mod(kin + 19, 20)]
-  return `${number} ${name}`
-}
-
-export function mayaHaab(utc: number) {
-  const kin = mayaKin(utc)
-  const dayOfYear = mod(kin + 348, 365)
-  const monthIndex = Math.floor(dayOfYear / 20)
-  const day = dayOfYear - monthIndex * 20
-  const name = マヤハアブ[monthIndex]
-  return `${day} ${name}`
-}
 
 const Beat = new FancyDate((c) =>
   gregorianBase(c)
