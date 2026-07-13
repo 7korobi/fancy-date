@@ -71,7 +71,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ### 天文・観測・入力安全性
 
-- 非地球惑星の太陽イベント共通層として `PlanetarySolarEventModel` を追加した。太陽黄経モデルは各惑星クラスに残し、赤道座標・地平座標・日の出/南中/日の入探索を共通化する。Mars は Mars24 系の黄経式、水星・金星・木星・土星・天王星・海王星・冥王星は `MeanPlanetSolarOrbital` の平均黄経モデルで接続している。平均モデルの惑星は、将来の高精度黄経式へクラス単位で差し替えやすい形にしている。
+- 非地球惑星の太陽イベント共通層として `PlanetarySolarEventModel` を追加した。太陽黄経モデルは各惑星クラスに残し、赤道座標・地平座標・日の出/南中/日の入探索を共通化する。Mars は Mars24 系の黄経式、水星・金星は JPL SSD の近似 Kepler 要素(1800-2050向け)から季節黄経を出す `KeplerianSolarOrbital`、木星・土星・天王星・海王星・冥王星は `MeanPlanetSolarOrbital` の平均黄経モデルで接続している。平均モデルの惑星は、将来の高精度黄経式へクラス単位で差し替えやすい形にしている。
 - `SolarEventDayTempoRule(..., 'sunrise' | 'sunset')` を追加し、`RealSunsetDayTempoRule` は `sunset` 固定の薄い互換 wrapper にした。日の出/日没境界の差は `solor()` の `日の出`/`日の入` 選択だけに寄せた。
 - `LunarObservation`/`SolarObservation` に `has_sunrise`/`has_moonrise`/`has_transit`/`has_moonset` と `is_up_all_day` を追加した。対応する数値フィールドが NaN になりうる理由を型定義に JSDoc で明記した。`number | undefined` 化は内部影響が大きく見送った。
 - mean モデル経路の `solor()` に南中高度・日の出方位・日の入方位を補った。日の入方位は日の出方位を北基準で反転して求める。精密モデルとの差は分点付近で最大0.25度程度。

@@ -1,6 +1,7 @@
 export { MarsSolarOrbital, type MarsSolarOrbitalOptions } from './mars-solar'
 export {
   JupiterSolarOrbital,
+  KeplerianSolarOrbital,
   MeanPlanetSolarOrbital,
   MercurySolarOrbital,
   NeptuneSolarOrbital,
@@ -9,6 +10,7 @@ export {
   UranusSolarOrbital,
   VenusSolarOrbital,
   type JupiterSolarOrbitalOptions,
+  type KeplerianSolarOrbitalOptions,
   type MeanPlanetSolarOrbitalOptions,
   type MercurySolarOrbitalOptions,
   type NeptuneSolarOrbitalOptions,

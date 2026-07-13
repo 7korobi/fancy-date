@@ -58,6 +58,7 @@ export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
 export {
   JupiterSolarOrbital,
+  KeplerianSolarOrbital,
   MarsSolarOrbital,
   MeanPlanetSolarOrbital,
   MercurySolarOrbital,
@@ -70,6 +71,7 @@ export {
 } from './nasa'
 export type {
   JupiterSolarOrbitalOptions,
+  KeplerianSolarOrbitalOptions,
   MarsSolarOrbitalOptions,
   MeanPlanetSolarOrbitalOptions,
   MercurySolarOrbitalOptions,

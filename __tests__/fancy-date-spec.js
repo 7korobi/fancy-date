@@ -32,6 +32,7 @@ const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
 const {
   JupiterSolarOrbital,
+  KeplerianSolarOrbital,
   MarsSolarOrbital,
   MercurySolarOrbital,
   NeptuneSolarOrbital,
@@ -51,6 +52,10 @@ function sortedUniq(list) {
     }
   }
   return result
+}
+
+function signedDegreeDiff(actual, expected) {
+  return ((((actual - expected + 180) % 360) + 360) % 360) - 180
 }
 
 const utc = Calendar.UTC
@@ -1733,6 +1738,21 @@ describe('火星', () => {
       const orbital = new Model()
       expect(orbital.phaseAt(Model.vernalEquinoxEpochMsec)).toBe(0)
       expect(planet.orbital).toBeInstanceOf(Model)
+    }
+  })
+
+  test('Mercury and Venus use Keplerian solar longitude instead of linear mean longitude', () => {
+    for (const [Model, thresholdDeg] of [
+      [MercurySolarOrbital, 1],
+      [VenusSolarOrbital, 0.05],
+    ]) {
+      const orbital = new Model()
+      const at = Model.vernalEquinoxEpochMsec + Model.meanTropicalYearMsec / 4
+      expect(orbital).toBeInstanceOf(KeplerianSolarOrbital)
+      expect(orbital.phaseAt(Model.vernalEquinoxEpochMsec)).toBe(0)
+      expect(Math.abs(signedDegreeDiff(orbital.solarLongitudeDeg(at), 90))).toBeGreaterThan(
+        thresholdDeg,
+      )
     }
   })
 

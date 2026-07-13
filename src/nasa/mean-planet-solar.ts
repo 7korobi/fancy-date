@@ -1,5 +1,6 @@
 import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
+import { atan2_deg, cos_deg, julian_day, sin_deg } from '../naoj/astro-math'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
 
@@ -16,6 +17,28 @@ type MeanPlanetSolarOrbitalProfile = {
   siderealDayMsec?: number
   rotationEpochMsec: number
   axialTiltDeg: number
+}
+
+type KeplerianElements = {
+  semiMajorAxisAu: number
+  eccentricity: number
+  inclinationDeg: number
+  meanLongitudeDeg: number
+  perihelionLongitudeDeg: number
+  ascendingNodeLongitudeDeg: number
+}
+
+type KeplerianAnomalyTerms = {
+  b?: number
+  c?: number
+  s?: number
+  f?: number
+}
+
+type KeplerianSolarOrbitalProfile = MeanPlanetSolarOrbitalProfile & {
+  elements: KeplerianElements
+  elementRates?: Partial<KeplerianElements>
+  anomalyTerms?: KeplerianAnomalyTerms
 }
 
 type MeanPlanetSolarOrbitalConstructor = new (
@@ -45,6 +68,29 @@ export abstract class MeanPlanetSolarOrbital extends PlanetarySolarEventModel {
   }
 }
 
+export type KeplerianSolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
+
+export abstract class KeplerianSolarOrbital extends MeanPlanetSolarOrbital {
+  private readonly profile: KeplerianSolarOrbitalProfile
+  private readonly referenceLongitudeDeg: number
+
+  protected constructor(
+    profile: KeplerianSolarOrbitalProfile,
+    options: KeplerianSolarOrbitalOptions = {},
+  ) {
+    super(profile, options)
+    this.profile = profile
+    this.referenceLongitudeDeg = apparentSunLongitudeDeg(
+      options.epochMsec ?? profile.epochMsec,
+      profile,
+    )
+  }
+
+  solarLongitudeDeg(utc: number) {
+    return mod(apparentSunLongitudeDeg(utc, this.profile) - this.referenceLongitudeDeg, 360)
+  }
+}
+
 function rotationOf(profile: MeanPlanetSolarOrbitalProfile): ROTATION {
   return [profile.meanSolarDayMsec, profile.rotationEpochMsec, profile.axialTiltDeg]
 }
@@ -70,27 +116,129 @@ function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axia
     : (meanSolarDayMsec * periodMsec) / (periodMsec + meanSolarDayMsec)
 }
 
+function apparentSunLongitudeDeg(utc: number, profile: KeplerianSolarOrbitalProfile) {
+  const centuries = (julian_day(utc) - 2451545.0) / 36525
+  const elements = elementsAt(profile, centuries)
+  const eccentricAnomalyRad = solveEccentricAnomalyRad(
+    elements.meanAnomalyDeg,
+    elements.eccentricity,
+  )
+  const xPrime = elements.semiMajorAxisAu * (Math.cos(eccentricAnomalyRad) - elements.eccentricity)
+  const yPrime =
+    elements.semiMajorAxisAu *
+    Math.sqrt(1 - elements.eccentricity * elements.eccentricity) *
+    Math.sin(eccentricAnomalyRad)
+  const argumentDeg = elements.perihelionLongitudeDeg - elements.ascendingNodeLongitudeDeg
+  const cosArgument = cos_deg(argumentDeg)
+  const sinArgument = sin_deg(argumentDeg)
+  const cosNode = cos_deg(elements.ascendingNodeLongitudeDeg)
+  const sinNode = sin_deg(elements.ascendingNodeLongitudeDeg)
+  const cosInclination = cos_deg(elements.inclinationDeg)
+  const x =
+    (cosArgument * cosNode - sinArgument * sinNode * cosInclination) * xPrime +
+    (-sinArgument * cosNode - cosArgument * sinNode * cosInclination) * yPrime
+  const y =
+    (cosArgument * sinNode + sinArgument * cosNode * cosInclination) * xPrime +
+    (-sinArgument * sinNode + cosArgument * cosNode * cosInclination) * yPrime
+  return mod(atan2_deg(-y, -x), 360)
+}
+
+function elementsAt(profile: KeplerianSolarOrbitalProfile, centuries: number) {
+  const element = (key: keyof KeplerianElements) =>
+    profile.elements[key] + (profile.elementRates?.[key] ?? 0) * centuries
+  const meanLongitudeDeg = element('meanLongitudeDeg')
+  const perihelionLongitudeDeg = element('perihelionLongitudeDeg')
+  const terms = profile.anomalyTerms
+  const anomalyCorrectionDeg = terms
+    ? (terms.b ?? 0) * centuries * centuries +
+      (terms.c ?? 0) * cos_deg((terms.f ?? 0) * centuries) +
+      (terms.s ?? 0) * sin_deg((terms.f ?? 0) * centuries)
+    : 0
+  return {
+    semiMajorAxisAu: element('semiMajorAxisAu'),
+    eccentricity: element('eccentricity'),
+    inclinationDeg: element('inclinationDeg'),
+    meanLongitudeDeg,
+    perihelionLongitudeDeg,
+    ascendingNodeLongitudeDeg: element('ascendingNodeLongitudeDeg'),
+    meanAnomalyDeg: signedDegree(meanLongitudeDeg - perihelionLongitudeDeg + anomalyCorrectionDeg),
+  }
+}
+
+function solveEccentricAnomalyRad(meanAnomalyDeg: number, eccentricity: number) {
+  const meanAnomalyRad = (meanAnomalyDeg * Math.PI) / 180
+  let eccentricAnomalyRad = meanAnomalyRad + eccentricity * Math.sin(meanAnomalyRad)
+  for (let index = 0; index < 8; index++) {
+    const delta =
+      (eccentricAnomalyRad - eccentricity * Math.sin(eccentricAnomalyRad) - meanAnomalyRad) /
+      (1 - eccentricity * Math.cos(eccentricAnomalyRad))
+    eccentricAnomalyRad -= delta
+    if (Math.abs(delta) < 1e-12) break
+  }
+  return eccentricAnomalyRad
+}
+
+function signedDegree(deg: number) {
+  return mod(deg + 180, 360) - 180
+}
+
 function defineProfile(profile: MeanPlanetSolarOrbitalProfile) {
+  return profile
+}
+
+function defineKeplerianProfile(profile: KeplerianSolarOrbitalProfile) {
   return profile
 }
 
 const MEAN_SEASON_EPOCH_MSEC = Date.UTC(2019, 2, 21, 6, 58)
 
-const MERCURY_PROFILE = defineProfile({
+const MERCURY_PROFILE = defineKeplerianProfile({
   periodMsec: 7596288000,
   epochMsec: MEAN_SEASON_EPOCH_MSEC,
   meanSolarDayMsec: 15192576000,
   rotationEpochMsec: 0,
   axialTiltDeg: 0.01,
+  elements: {
+    semiMajorAxisAu: 0.38709927,
+    eccentricity: 0.20563593,
+    inclinationDeg: 7.00497902,
+    meanLongitudeDeg: 252.2503235,
+    perihelionLongitudeDeg: 77.45779628,
+    ascendingNodeLongitudeDeg: 48.33076593,
+  },
+  elementRates: {
+    semiMajorAxisAu: 0.00000037,
+    eccentricity: 0.00001906,
+    inclinationDeg: -0.00594749,
+    meanLongitudeDeg: 149472.67411175,
+    perihelionLongitudeDeg: 0.16047689,
+    ascendingNodeLongitudeDeg: -0.12534081,
+  },
 })
 
-const VENUS_PROFILE = defineProfile({
+const VENUS_PROFILE = defineKeplerianProfile({
   periodMsec: 19414456423,
   epochMsec: MEAN_SEASON_EPOCH_MSEC,
   meanSolarDayMsec: 10087251840,
   siderealDayMsec: -20997360000,
   rotationEpochMsec: 0,
   axialTiltDeg: -2.64,
+  elements: {
+    semiMajorAxisAu: 0.72333566,
+    eccentricity: 0.00677672,
+    inclinationDeg: 3.39467605,
+    meanLongitudeDeg: 181.9790995,
+    perihelionLongitudeDeg: 131.60246718,
+    ascendingNodeLongitudeDeg: 76.67984255,
+  },
+  elementRates: {
+    semiMajorAxisAu: 0.0000039,
+    eccentricity: -0.00004107,
+    inclinationDeg: -0.0007889,
+    meanLongitudeDeg: 58517.81538729,
+    perihelionLongitudeDeg: 0.00268329,
+    ascendingNodeLongitudeDeg: -0.27769418,
+  },
 })
 
 const JUPITER_PROFILE = defineProfile({
@@ -141,7 +289,7 @@ export type UranusSolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
 export type NeptuneSolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
 export type PlutoSolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
 
-export class MercurySolarOrbital extends MeanPlanetSolarOrbital {
+export class MercurySolarOrbital extends KeplerianSolarOrbital {
   static readonly sun: STAR = [null, null, null]
   static readonly meanSolarDayMsec = MERCURY_PROFILE.meanSolarDayMsec
   static readonly meanSiderealDayMsec = inferSiderealDayMsec(
@@ -170,7 +318,7 @@ export class MercurySolarOrbital extends MeanPlanetSolarOrbital {
   }
 }
 
-export class VenusSolarOrbital extends MeanPlanetSolarOrbital {
+export class VenusSolarOrbital extends KeplerianSolarOrbital {
   static readonly sun: STAR = [null, null, null]
   static readonly meanSolarDayMsec = VENUS_PROFILE.meanSolarDayMsec
   static readonly meanSiderealDayMsec =
