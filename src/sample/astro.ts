@@ -1,6 +1,6 @@
 import type { BodyProfile, PLANET, SATELLITE, SPOT, STAR } from '../fancy-date'
 import { placeStar, transformOrbital } from '../fancy-date'
-import { MarsSolarOrbital } from '../nasa'
+import { MarsSolarOrbital, VenusSolarOrbital } from '../nasa'
 import { EarthMoonOrbital, EarthSolarOrbital } from '../naoj'
 import { placeMeanPlanet, placeMeanSatellite } from '../preset'
 
@@ -133,6 +133,7 @@ export const 天文 = (function () {
 export const 太陽: STAR = placeStar(天文.太陽.本体)
 
 export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 天文.地球.本体 })
+export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, { body: 天文.金星.本体 })
 export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: 天文.火星.本体 })
 
 export const 地球: PLANET = placeMeanPlanet(太陽, 天文.地球)

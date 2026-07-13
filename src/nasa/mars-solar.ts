@@ -1,6 +1,7 @@
 import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
 import { mod } from '../number'
+import { PlanetarySolarEventModel } from './planetary-solar'
 
 export type MarsSolarOrbitalOptions = {
   periodMsec?: number
@@ -10,23 +11,27 @@ export type MarsSolarOrbitalOptions = {
 
 const MSEC_PER_DAY = 86400000
 
-export class MarsSolarOrbital {
+export class MarsSolarOrbital extends PlanetarySolarEventModel {
   static readonly sun: STAR = [null, null, null]
   static readonly meanSolarDayMsec = 88775244
+  static readonly meanSiderealDayMsec = 88642663
   static readonly rotationEpochMsec = 0
   static readonly axialTiltDeg = 25.19
   static readonly meanTropicalYearMsec = 59355072000
   static readonly vernalEquinoxEpochMsec = Date.UTC(2018, 4, 22, 13, 54)
 
-  readonly periodMsec: number
-  readonly epochMsec: number
-
   constructor({
     periodMsec = MarsSolarOrbital.meanTropicalYearMsec,
     epochMsec = MarsSolarOrbital.vernalEquinoxEpochMsec,
   }: MarsSolarOrbitalOptions = {}) {
-    this.periodMsec = periodMsec
-    this.epochMsec = epochMsec
+    super({
+      periodMsec,
+      epochMsec,
+      dayMsec: MarsSolarOrbital.meanSolarDayMsec,
+      siderealDayMsec: MarsSolarOrbital.meanSiderealDayMsec,
+      rotationEpochMsec: MarsSolarOrbital.rotationEpochMsec,
+      axialTiltDeg: MarsSolarOrbital.axialTiltDeg,
+    })
   }
 
   static rotation(): ROTATION {
@@ -50,25 +55,6 @@ export class MarsSolarOrbital {
     })
   }
 
-  phaseAt(utc: number) {
-    return mod(this.solarLongitudeDeg(utc) / 360, 1)
-  }
-
-  timeOfPhase(phase: number, near: number) {
-    const target = mod(phase, 1)
-    let at = near + signedPhaseDelta(target, this.phaseAt(near)) * this.periodMsec
-    for (let index = 0; index < 8; index++) {
-      const error = signedPhaseDelta(target, this.phaseAt(at))
-      if (Math.abs(error * this.periodMsec) < 1000) break
-      at += error * this.periodMsec
-    }
-    return Math.round(
-      [at - this.periodMsec, at, at + this.periodMsec].reduce((best, candidate) =>
-        Math.abs(candidate - near) < Math.abs(best - near) ? candidate : best,
-      ),
-    )
-  }
-
   solarLongitudeDeg(utc: number) {
     const days = (utc - Date.UTC(2000, 0, 6, 0, 0)) / MSEC_PER_DAY
     const meanAnomalyDeg = mod(19.387 + 0.52402075 * days, 360)
@@ -90,11 +76,6 @@ export class MarsSolarOrbital {
       pbsDeg
     return mod(alphaFmsDeg + equationOfCenterDeg, 360)
   }
-}
-
-function signedPhaseDelta(target: number, actual: number) {
-  const delta = mod(target - actual + 0.5, 1) - 0.5
-  return delta === -0.5 ? 0.5 : delta
 }
 
 function sinDeg(deg: number) {

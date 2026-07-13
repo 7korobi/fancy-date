@@ -11,6 +11,7 @@ const {
   panchangaNotes,
   太陽,
   地球,
+  天文金星,
   天文火星,
   木星,
   月,
@@ -23,7 +24,7 @@ const {
 const { 天文地球 } = require('../lib/sample/astro')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
-const { MarsSolarOrbital } = require('../lib/nasa')
+const { MarsSolarOrbital, VenusSolarOrbital } = require('../lib/nasa')
 const { format } = require('date-fns')
 const { ja: locale } = require('date-fns/locale/ja')
 
@@ -604,10 +605,13 @@ describe('平気法 calculate', () => {
 
   test('body placement keeps tuple compatibility', () => {
     expect(地球.body).toMatchObject({ kind: 'physical', name: 'Earth', radiusKm: 6378.137 })
+    expect(天文金星.body).toMatchObject({ kind: 'physical', name: 'Venus', radiusKm: 6051.8 })
     expect(天文火星.body).toMatchObject({ kind: 'physical', name: 'Mars', radiusKm: 3389.5 })
     expect(月.body).toMatchObject({ kind: 'physical', name: 'Moon', radiusKm: 1737.4 })
     expect(地球[1]).toBe(地球.orbital)
     expect(地球[2]).toBe(地球.rotation)
+    expect(天文金星[1]).toBe(天文金星.orbital)
+    expect(天文金星[2]).toBe(天文金星.rotation)
     expect(天文火星[1]).toBe(天文火星.orbital)
     expect(天文火星[2]).toBe(天文火星.rotation)
     expect(月[0]).toBe(地球)
@@ -1658,6 +1662,26 @@ describe('火星', () => {
     expect(planet[1]).toBe(planet.orbital)
     expect(planet[2]).toBe(planet.rotation)
     expect(天文火星.orbital).toBeInstanceOf(MarsSolarOrbital)
+  })
+
+  test('planetary solar event models resolve local sun events', () => {
+    const near = g.parse('2024年1月1日')
+    for (const orbital of [new MarsSolarOrbital(), new VenusSolarOrbital()]) {
+      expect(hasSolarEvents(orbital)).toBe(true)
+      const events = orbital.solarEvents(near, { latitudeDeg: 0, longitudeDeg: 0, timezoneDeg: 0 })
+      expect(events.has_sunrise).toBe(true)
+      expect(Number.isFinite(events.日の出)).toBe(true)
+      expect(Number.isFinite(events.南中時刻)).toBe(true)
+      expect(Number.isFinite(events.日の入)).toBe(true)
+      expect(events.日の出).toBeLessThan(events.南中時刻)
+      expect(events.南中時刻).toBeLessThan(events.日の入)
+    }
+  })
+
+  test('Venus solar model exposes mean season phases and sample placement', () => {
+    const venus = new VenusSolarOrbital()
+    expect(venus.phaseAt(VenusSolarOrbital.vernalEquinoxEpochMsec)).toBe(0)
+    expect(天文金星.orbital).toBeInstanceOf(VenusSolarOrbital)
   })
 
   test('calc', () => {

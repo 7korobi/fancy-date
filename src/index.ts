@@ -86,6 +86,7 @@ export {
   地球,
   天文,
   天文地球,
+  天文金星,
   天文月,
   天文東京,
   天文火星,
@@ -121,6 +122,8 @@ export {
   EarthMoonOrbital,
   EarthSolarOrbital,
   MarsSolarOrbital,
+  PlanetarySolarEventModel,
+  VenusSolarOrbital,
   MeanOrbital,
   MeanRotation,
   TransformedOrbital,
@@ -171,6 +174,9 @@ export type {
   LocaleApplyOptions,
   LunisolarDate,
   LunisolarPrincipalTerm,
+  MarsSolarOrbitalOptions,
+  PlanetarySolarEventModelOptions,
+  VenusSolarOrbitalOptions,
 } from './fancy-date'
 // orbital-model/mean/naoj/nasa/prepare の値・型はすべて './fancy-date' が
 // 既に named export として再エクスポート済みなので、ここで重複して
