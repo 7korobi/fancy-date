@@ -4,6 +4,11 @@ export type MeanOrbital = readonly [periodMsec: number, epochMsec: number]
 export type MeanSolarDay = readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number]
 
 const MSEC_PER_DAY = 86400000
+const MEAN_SYNODIC_MONTH_MSEC = 2551442889
+const MEAN_NEW_MOON_EPOCH_MSEC = 1577310360000
+const MARS_SEASONAL_YEAR_MSEC = 59355048804
+const MARS_SEASON_EPOCH_MSEC = 1540684800000
+const MARS24_SOLAR_DAY_MSEC = 88775244
 
 export type MeanOrbitalOptions = {
   periodMsec?: number
@@ -57,6 +62,7 @@ export const MEAN_SEASON_EPOCH_MSEC = 1553119080000
 // 冥王星は JPL SBDB の 134340 Pluto の osculating period を使う。
 // `solarDay` は物理恒星自転周期ではなく、地方太陽時の南中から次の南中までの平均周期:
 //   solarDay = abs(1 / (1 / signedSiderealRotation - 1 / seasonalYear))
+// 実装値は Date/Tempo 系で扱いやすいよう、上式の結果を最も近い 1ms へ丸める。
 // 地球は暦上の1日として 86400000ms に固定する。
 // 月は暦・月相計算用に、朔望月を月面上の太陽日として扱う。
 
@@ -89,21 +95,21 @@ export const MEAN_MOON = {
     radiusKm: 1737.4,
     meanDistanceKm: 384400,
   } as BodyProfile,
-  orbital: [2551442889, 1577310360000] as const, // 29.530589d; epoch 2019/12/26 06:46 JST
-  whiteOrbital: [2551442889, 1577310360000] as const, // 29.530589d; epoch 2019/12/26 06:46 JST
-  solarDay: [2551442889, 0, 6.68] as const, // 29.530589d; epoch 0
+  orbital: [MEAN_SYNODIC_MONTH_MSEC, MEAN_NEW_MOON_EPOCH_MSEC] as const, // 29.530589d; epoch 2019/12/26 06:46 JST
+  whiteOrbital: [MEAN_SYNODIC_MONTH_MSEC, MEAN_NEW_MOON_EPOCH_MSEC] as const, // 29.530589d; epoch 2019/12/26 06:46 JST
+  solarDay: [MEAN_SYNODIC_MONTH_MSEC, 0, 6.68] as const, // 29.530589d; epoch 0
 } as const satisfies MeanSatelliteAstronomyEntry & { whiteOrbital: MeanOrbital }
 
 export const MEAN_MARS = {
   body: { kind: 'physical', name: 'Mars', radiusKm: 3389.5 } as BodyProfile,
-  orbital: [59355048804, 1540684800000] as const, // 686.979732d; epoch 2018/10/28 00:00 UTC
-  solarDay: [88775244, 0, 25.19] as const, // 1.027491d; epoch 0
+  orbital: [MARS_SEASONAL_YEAR_MSEC, MARS_SEASON_EPOCH_MSEC] as const, // 686.979732d; epoch 2018/10/28 00:00 UTC
+  solarDay: [MARS24_SOLAR_DAY_MSEC, 0, 25.19] as const, // 1.027491d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_JUPITER = {
   body: { kind: 'physical', name: 'Jupiter', radiusKm: 69911 } as BodyProfile,
-  orbital: [374322050280, MEAN_SEASON_EPOCH_MSEC] as const, // 4332.431137d; epoch 2019/03/21 06:58 JST
-  solarDay: [35769600, 0, 3.12] as const, // 0.414d; epoch 0; 旧平均値を維持
+  orbital: [374355399818, MEAN_SEASON_EPOCH_MSEC] as const, // 4332.817128d; epoch 2019/03/21 06:58 JST
+  solarDay: solarDay(9.9259 / 24, 4332.817127523, 0, 3.12), // 0.413619d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_GANYMEDE = {

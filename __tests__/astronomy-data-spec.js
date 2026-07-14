@@ -1,6 +1,7 @@
 const {
   MEAN_CERES,
   MEAN_EARTH,
+  MEAN_JUPITER,
   MEAN_MARS,
   MEAN_MERCURY,
   MEAN_MOON,
@@ -30,6 +31,7 @@ describe('mean astronomy observer periods', () => {
     const cases = [
       [MEAN_MERCURY, 58.646225, 87.969349],
       [MEAN_VENUS, -243.025, 224.700799],
+      [MEAN_JUPITER, 9.9259 / 24, 4332.817127523],
       [MEAN_URANUS, -17.24 / 24, 30685.4],
       [MEAN_NEPTUNE, 16.11 / 24, 60189],
       [MEAN_PLUTO, -6.38723, 90487.277],
@@ -37,6 +39,7 @@ describe('mean astronomy observer periods', () => {
     ]
     for (const [entry, siderealDay, seasonalYear] of cases) {
       expect(entry.solarDay[0]).toBe(meanSolarDayMsec(siderealDay, seasonalYear))
+      expect(Number.isInteger(entry.solarDay[0])).toBe(true)
     }
   })
 
