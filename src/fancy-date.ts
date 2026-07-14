@@ -299,6 +299,7 @@ export type SpanPart = {
   unit: Unit
   value: number
   label: string
+  ruby?: string
 }
 export type SpanPartLike = SpanPart | Omit<SpanPart, 'token'>
 export type Span = {
@@ -591,6 +592,17 @@ const DEFAULT_LABELS: Readonly<SpanLabels> = {
   m: '分',
   s: '秒',
   S: 'ミリ秒',
+}
+
+const default_span_unit_ruby: Readonly<Record<string, string>> = {
+  年: 'ねん',
+  ヶ月: 'かげつ',
+  週: 'しゅう',
+  日: 'にち',
+  時間: 'じかん',
+  分: 'ふん',
+  秒: 'びょう',
+  ミリ秒: 'みりびょう',
 }
 
 type IIDX = TOKENS<AnyDicToken, Indexer>
@@ -1574,6 +1586,11 @@ export class FancyDate {
           Math.abs(part.value),
           this.span_part_fallback_unit(part.token),
         ),
+        ruby: this.span_part_ruby(
+          part.token,
+          Math.abs(part.value),
+          this.span_part_fallback_unit(part.token),
+        ),
       }))
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
@@ -2423,6 +2440,15 @@ export class FancyDate {
     if ('string' === typeof relatives) return `${count}${relatives}`
     const label = relatives?.[count]
     return label != null ? label : `${count}${fallbackUnit}`
+  }
+
+  private span_part_ruby(token: Token, count: number, fallbackUnit: string) {
+    const numberRuby = this.format_numeral_label_ruby(count, 0) || this.format_number_ruby(count, 0)
+    if (!numberRuby) return undefined
+    const relatives = this.dic[token_base(token)]?.relatives
+    const unitLabel = 'string' === typeof relatives ? relatives : fallbackUnit
+    const unitRuby = default_span_unit_ruby[unitLabel]
+    return unitRuby ? `${numberRuby}${unitRuby}` : numberRuby
   }
 
   match_find_condition(utc: number, condition: FindCondition) {

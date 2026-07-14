@@ -402,6 +402,21 @@ describe('Gregorio calculate', () => {
     expect(g.span_msec(doubled)).not.toBe(g.span_msec(anchoredMonth))
   })
 
+  test('span parts expose ruby when the calendar has numeral ruby settings', () => {
+    const span = 平気法.format_span(
+      [
+        { unit: 'year', value: -2 },
+        { unit: 'month', value: -3 },
+      ],
+      '後',
+    )
+    expect(span.label).toBe('2年3ヶ月後')
+    expect(span.parts).toEqual([
+      { token: 'y', unit: 'year', value: -2, label: '2年', ruby: 'にねん' },
+      { token: 'M', unit: 'month', value: -3, label: '3ヶ月', ruby: 'さんかげつ' },
+    ])
+  })
+
   test('parse', () => {
     return
     expect([g.format(g.parse('2000年夏至', 'y年Z'))]).toEqual(['123'])
