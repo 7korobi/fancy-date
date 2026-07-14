@@ -108,11 +108,7 @@ describe('tempo', () => {
 
     test('keeps cacheKey-separated envelopes distinct', () => {
       const counter = { calls: 0 }
-      const rule = new CachedTempoRule(
-        countedRule(counter),
-        (base) => base.parent.last_at,
-        4,
-      )
+      const rule = new CachedTempoRule(countedRule(counter), (base) => base.parent.last_at, 4)
       const parentA = { last_at: ZERO }
       const parentB = { last_at: ZERO + DAY }
 
@@ -809,7 +805,11 @@ describe('tempo', () => {
         observed.calc.zero.season,
         'sunrise',
       )
-      const civil = to_tempo_bare(observed.calc.msec.day, observed.calc.zero.day, Date.UTC(2024, 5, 21))
+      const civil = to_tempo_bare(
+        observed.calc.msec.day,
+        observed.calc.zero.day,
+        Date.UTC(2024, 5, 21),
+      )
       const parent = envelopeOf(
         to_tempo_bare(observed.calc.msec.day * 30, civil.last_at, civil.last_at + 1),
       )

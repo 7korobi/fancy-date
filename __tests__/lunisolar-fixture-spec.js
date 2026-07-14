@@ -12,8 +12,10 @@ describe('lunisolar month search window', () => {
   })
 
   test('keeps the historical 18/19 month window for earth-like lunar ratios', () => {
-    expect(lunisolar_month_window_counts(options(29.53059 * dayMsec, 365.2422 * dayMsec)))
-      .toEqual({ past: 18, future: 19 })
+    expect(lunisolar_month_window_counts(options(29.53059 * dayMsec, 365.2422 * dayMsec))).toEqual({
+      past: 18,
+      future: 19,
+    })
   })
 
   test('widens or narrows the search from the actual moon/year ratio', () => {

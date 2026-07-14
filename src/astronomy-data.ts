@@ -41,18 +41,23 @@ export function meanOrbitalOptionsOf(options: MeanOrbitalInput): MeanOrbitalOpti
   return options
 }
 
-function meanSolarDayMsec(siderealRotationHours: number, seasonalYear: number) {
-  const siderealDay = siderealRotationHours / HOURS_PER_DAY
-  return Math.round(Math.abs(1 / (1 / siderealDay - 1 / seasonalYear)) * MSEC_PER_DAY)
+function meanSolarDayMsec(siderealRotationHours: number, seasonalYearDays: number) {
+  return Math.round(
+    Math.abs(1 / (HOURS_PER_DAY / siderealRotationHours - 1 / seasonalYearDays)) * MSEC_PER_DAY,
+  )
 }
 
 function solarDay(
   siderealRotationHours: number,
-  seasonalYear: number,
+  seasonalYearDays: number,
   epochMsec: number,
   axialTiltDeg: number,
 ) {
-  return [meanSolarDayMsec(siderealRotationHours, seasonalYear), epochMsec, axialTiltDeg] as const
+  return [
+    meanSolarDayMsec(siderealRotationHours, seasonalYearDays),
+    epochMsec,
+    axialTiltDeg,
+  ] as const
 }
 
 // 2019/03/21 06:58 JST
