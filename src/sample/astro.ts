@@ -1,4 +1,5 @@
 import type { BodyProfile, PLANET, SATELLITE, SPOT, STAR } from '../fancy-date'
+import { MEAN_ASTRONOMY } from '../astronomy-data'
 import { placeStar, transformOrbital } from '../fancy-date'
 import {
   JupiterSolarOrbital,
@@ -18,22 +19,22 @@ export const 天文 = (function () {
   // 出典・未確定点は docs/astronomy-sources.md にまとめる。
   const 平均 = {
     太陽: {
-      本体: { kind: 'physical', name: 'Sun', radiusKm: 695700 } as BodyProfile,
+      本体: MEAN_ASTRONOMY.Sun.body,
     },
     水星: {
-      本体: { kind: 'physical', name: 'Mercury', radiusKm: 2439.7 } as BodyProfile,
-      軌道: [7596288000, 1553119080000] as const, // 太陽年 2019/03/21 06:58
-      自転: [15192576000, 0, 0.01] as const, // 太陽日
+      本体: MEAN_ASTRONOMY.Mercury.body,
+      軌道: MEAN_ASTRONOMY.Mercury.orbital,
+      自転: MEAN_ASTRONOMY.Mercury.rotation,
     },
     金星: {
-      本体: { kind: 'physical', name: 'Venus', radiusKm: 6051.8 } as BodyProfile,
-      軌道: [19414456423, 1553119080000] as const, // 公転周期 2019/03/21 06:58
-      自転: [10087251840, 0, -2.64] as const, // 太陽日
+      本体: MEAN_ASTRONOMY.Venus.body,
+      軌道: MEAN_ASTRONOMY.Venus.orbital,
+      自転: MEAN_ASTRONOMY.Venus.rotation,
     },
     地球: {
-      本体: { kind: 'physical', name: 'Earth', radiusKm: 6378.137 } as BodyProfile,
-      軌道: [31556925147, 1553119080000] as const, // 2019/03/21 06:58
-      自転: [86400000, 0, 23.4397] as const, // LOD ではなく、暦上の1日。Unix epoch では閏秒を消し去るため。
+      本体: MEAN_ASTRONOMY.Earth.body,
+      軌道: MEAN_ASTRONOMY.Earth.orbital,
+      自転: MEAN_ASTRONOMY.Earth.rotation,
     },
     月: {
       本体: {
@@ -55,46 +56,46 @@ export const 天文 = (function () {
       軌道: [1441929600, 0] as const,
     },
     火星: {
-      本体: { kind: 'physical', name: 'Mars', radiusKm: 3389.5 } as BodyProfile,
-      軌道: [59355616881, 1540684800000] as const, // 公転周期 UTC 2018/10/28 00:00
-      自転: [88740035, 0, 25.19] as const, // 自転周期 24時間39分35秒。
+      本体: MEAN_ASTRONOMY.Mars.body,
+      軌道: MEAN_ASTRONOMY.Mars.orbital,
+      自転: MEAN_ASTRONOMY.Mars.rotation,
     },
     木星: {
-      本体: { kind: 'physical', name: 'Jupiter', radiusKm: 69911 } as BodyProfile,
-      軌道: [374322050280, 1553119080000] as const, // 公転周期 2019/03/21 06:58
-      自転: [35769600, 0, 3.12] as const,
+      本体: MEAN_ASTRONOMY.Jupiter.body,
+      軌道: MEAN_ASTRONOMY.Jupiter.orbital,
+      自転: MEAN_ASTRONOMY.Jupiter.rotation,
     },
     土星: {
-      本体: { kind: 'physical', name: 'Saturn', radiusKm: 58232 } as BodyProfile,
-      軌道: [931964092416, 1553119080000] as const, // 公転周期 2019/03/21 06:58
-      自転: [37920035, 0, 25.33] as const,
+      本体: MEAN_ASTRONOMY.Saturn.body,
+      軌道: MEAN_ASTRONOMY.Saturn.orbital,
+      自転: MEAN_ASTRONOMY.Saturn.rotation,
     },
     タイタン: {
       本体: { kind: 'physical', name: 'Titan' } as BodyProfile,
       軌道: [1377684374, 0] as const,
     },
     天王星: {
-      本体: { kind: 'physical', name: 'Uranus', radiusKm: 25362 } as BodyProfile,
-      軌道: [2658822788376, 1553119080000] as const, // 公転周期 2019/03/21 06:58
-      自転: [62061120, 0, -82.23] as const,
+      本体: MEAN_ASTRONOMY.Uranus.body,
+      軌道: MEAN_ASTRONOMY.Uranus.orbital,
+      自転: MEAN_ASTRONOMY.Uranus.rotation,
     },
     チタニア: {
       本体: { kind: 'physical', name: 'Titania' } as BodyProfile,
       軌道: [752198400, 0] as const,
     },
     海王星: {
-      本体: { kind: 'physical', name: 'Neptune', radiusKm: 24622 } as BodyProfile,
-      軌道: [5200376904000, 1553119080000] as const, // 公転周期 2019/03/21 06:58
-      自転: [64800000, 0, 28.32] as const,
+      本体: MEAN_ASTRONOMY.Neptune.body,
+      軌道: MEAN_ASTRONOMY.Neptune.orbital,
+      自転: MEAN_ASTRONOMY.Neptune.rotation,
     },
     トリトン: {
       本体: { kind: 'physical', name: 'Triton' } as BodyProfile,
       軌道: [507733056, 0] as const,
     },
     冥王星: {
-      本体: { kind: 'physical', name: 'Pluto', radiusKm: 1188.3 } as BodyProfile,
-      軌道: [7818100727754, 0] as const,
-      自転: [551856672, 0, -60.41] as const,
+      本体: MEAN_ASTRONOMY.Pluto.body,
+      軌道: MEAN_ASTRONOMY.Pluto.orbital,
+      自転: MEAN_ASTRONOMY.Pluto.rotation,
     },
     カロン: {
       本体: { kind: 'physical', name: 'Charon' } as BodyProfile,

@@ -1,5 +1,6 @@
 import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
+import { MEAN_ASTRONOMY } from '../astronomy-data'
 import { atan2_deg, cos_deg, julian_day, sin_deg } from '../naoj/astro-math'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
@@ -45,6 +46,11 @@ type KeplerianSolarOrbitalProfile = MeanPlanetSolarOrbitalProfile & {
 type MeanPlanetSolarOrbitalConstructor = new (
   options?: MeanPlanetSolarOrbitalOptions,
 ) => MeanPlanetSolarOrbital
+
+type MeanPlanetAstronomyEntry = {
+  readonly orbital: readonly [periodMsec: number, epochMsec: number]
+  readonly rotation: readonly [dayMsec: number, epochMsec: number, axialTiltDeg: number]
+}
 
 export abstract class MeanPlanetSolarOrbital extends PlanetarySolarEventModel {
   protected constructor(
@@ -115,6 +121,19 @@ function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axia
   return axialTiltDeg < 0
     ? -(meanSolarDayMsec * periodMsec) / (periodMsec - meanSolarDayMsec)
     : (meanSolarDayMsec * periodMsec) / (periodMsec + meanSolarDayMsec)
+}
+
+function meanProfileOf({
+  orbital,
+  rotation,
+}: MeanPlanetAstronomyEntry): MeanPlanetSolarOrbitalProfile {
+  return {
+    periodMsec: orbital[0],
+    epochMsec: orbital[1],
+    meanSolarDayMsec: rotation[0],
+    rotationEpochMsec: rotation[1],
+    axialTiltDeg: rotation[2],
+  }
 }
 
 function apparentSunLongitudeDeg(utc: number, profile: KeplerianSolarOrbitalProfile) {
@@ -191,16 +210,10 @@ function defineKeplerianProfile(profile: KeplerianSolarOrbitalProfile) {
   return profile
 }
 
-const MEAN_SEASON_EPOCH_MSEC = Date.UTC(2019, 2, 21, 6, 58)
-
 // Source notes live in docs/astronomy-sources.md.
 // Mercury/Venus use JPL SSD approximate planetary elements; Pluto uses JPL SBDB elements.
 const MERCURY_PROFILE = defineKeplerianProfile({
-  periodMsec: 7596288000,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 15192576000,
-  rotationEpochMsec: 0,
-  axialTiltDeg: 0.01,
+  ...meanProfileOf(MEAN_ASTRONOMY.Mercury),
   elements: {
     semiMajorAxisAu: 0.38709927,
     eccentricity: 0.20563593,
@@ -220,12 +233,8 @@ const MERCURY_PROFILE = defineKeplerianProfile({
 })
 
 const VENUS_PROFILE = defineKeplerianProfile({
-  periodMsec: 19414456423,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 10087251840,
+  ...meanProfileOf(MEAN_ASTRONOMY.Venus),
   siderealDayMsec: -20997360000,
-  rotationEpochMsec: 0,
-  axialTiltDeg: -2.64,
   elements: {
     semiMajorAxisAu: 0.72333566,
     eccentricity: 0.00677672,
@@ -244,44 +253,17 @@ const VENUS_PROFILE = defineKeplerianProfile({
   },
 })
 
-const JUPITER_PROFILE = defineProfile({
-  periodMsec: 374322050280,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 35769600,
-  rotationEpochMsec: 0,
-  axialTiltDeg: 3.12,
-})
+const JUPITER_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Jupiter))
 
-const SATURN_PROFILE = defineProfile({
-  periodMsec: 931964092416,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 37920035,
-  rotationEpochMsec: 0,
-  axialTiltDeg: 25.33,
-})
+const SATURN_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Saturn))
 
-const URANUS_PROFILE = defineProfile({
-  periodMsec: 2658822788376,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 62061120,
-  rotationEpochMsec: 0,
-  axialTiltDeg: -82.23,
-})
+const URANUS_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Uranus))
 
-const NEPTUNE_PROFILE = defineProfile({
-  periodMsec: 5200376904000,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 64800000,
-  rotationEpochMsec: 0,
-  axialTiltDeg: 28.32,
-})
+const NEPTUNE_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Neptune))
 
 const PLUTO_PROFILE = defineKeplerianProfile({
+  ...meanProfileOf(MEAN_ASTRONOMY.Pluto),
   periodMsec: 90981.71647718345 * 86400000,
-  epochMsec: MEAN_SEASON_EPOCH_MSEC,
-  meanSolarDayMsec: 551856672,
-  rotationEpochMsec: 0,
-  axialTiltDeg: -60.41,
   elementEpochJd: 2457588.5,
   elements: {
     semiMajorAxisAu: 39.58862938517124,
