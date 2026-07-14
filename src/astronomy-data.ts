@@ -1,7 +1,7 @@
 import type { BodyProfile } from './orbital-model'
 
-// 元データの「2019/03/21 06:58」はJST相当として扱う。
-export const MEAN_SEASON_EPOCH_MSEC = Date.UTC(2019, 2, 20, 21, 58)
+// 2019/03/21 06:58 JST
+export const MEAN_SEASON_EPOCH_MSEC = 1553119080000
 
 export const MEAN_ASTRONOMY = {
   Sun: {
