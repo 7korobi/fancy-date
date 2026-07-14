@@ -1,6 +1,14 @@
 import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
-import { MEAN_ASTRONOMY } from '../astronomy-data'
+import {
+  MEAN_JUPITER,
+  MEAN_MERCURY,
+  MEAN_NEPTUNE,
+  MEAN_PLUTO,
+  MEAN_SATURN,
+  MEAN_URANUS,
+  MEAN_VENUS,
+} from '../astronomy-data'
 import { atan2_deg, cos_deg, julian_day, sin_deg } from '../naoj/astro-math'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
@@ -227,7 +235,7 @@ function defineKeplerianProfile(profile: KeplerianSolarOrbitalProfile) {
 // Source notes live in docs/astronomy-sources.md.
 // Mercury/Venus use JPL SSD approximate planetary elements; Pluto uses JPL SBDB elements.
 const MERCURY_PROFILE = defineKeplerianProfile({
-  ...meanProfileOf(MEAN_ASTRONOMY.Mercury),
+  ...meanProfileOf(MEAN_MERCURY),
   elements: {
     semiMajorAxisAu: 0.38709927,
     eccentricity: 0.20563593,
@@ -247,7 +255,7 @@ const MERCURY_PROFILE = defineKeplerianProfile({
 })
 
 const VENUS_PROFILE = defineKeplerianProfile({
-  ...meanProfileOf(MEAN_ASTRONOMY.Venus),
+  ...meanProfileOf(MEAN_VENUS),
   siderealDayMsec: -20997360000,
   elements: {
     semiMajorAxisAu: 0.72333566,
@@ -267,16 +275,16 @@ const VENUS_PROFILE = defineKeplerianProfile({
   },
 })
 
-const JUPITER_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Jupiter))
+const JUPITER_PROFILE = defineProfile(meanProfileOf(MEAN_JUPITER))
 
-const SATURN_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Saturn))
+const SATURN_PROFILE = defineProfile(meanProfileOf(MEAN_SATURN))
 
-const URANUS_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Uranus))
+const URANUS_PROFILE = defineProfile(meanProfileOf(MEAN_URANUS))
 
-const NEPTUNE_PROFILE = defineProfile(meanProfileOf(MEAN_ASTRONOMY.Neptune))
+const NEPTUNE_PROFILE = defineProfile(meanProfileOf(MEAN_NEPTUNE))
 
 const PLUTO_PROFILE = defineKeplerianProfile({
-  ...meanProfileOf(MEAN_ASTRONOMY.Pluto),
+  ...meanProfileOf(MEAN_PLUTO),
   periodMsec: 90981.71647718345 * 86400000,
   elementEpochJd: 2457588.5,
   elements: {

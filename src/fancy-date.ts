@@ -54,6 +54,34 @@ import type {
 } from './tempo'
 import { to_tempo_bare } from './time'
 
+export {
+  MEAN_ASTRONOMY,
+  MEAN_CALLISTO,
+  MEAN_CERES,
+  MEAN_CHARON,
+  MEAN_DYSNOMIA,
+  MEAN_EARTH,
+  MEAN_ERIS,
+  MEAN_GANYMEDE,
+  MEAN_HAUMEA,
+  MEAN_HIIAKA,
+  MEAN_JUPITER,
+  MEAN_MAKEMAKE,
+  MEAN_MARS,
+  MEAN_MERCURY,
+  MEAN_MOON,
+  MEAN_NAMAKA,
+  MEAN_NEPTUNE,
+  MEAN_PLUTO,
+  MEAN_SATURN,
+  MEAN_SEASON_EPOCH_MSEC,
+  MEAN_SUN,
+  MEAN_TITAN,
+  MEAN_TITANIA,
+  MEAN_TRITON,
+  MEAN_URANUS,
+  MEAN_VENUS,
+} from './astronomy-data'
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
 export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
 export {

@@ -27,7 +27,7 @@ const {
   黒分月軌道,
 } = require('../lib/sample')
 const { 天文地球 } = require('../lib/sample/astro')
-const { MEAN_ASTRONOMY } = require('../lib/astronomy-data')
+const { MEAN_MOON } = require('../lib/astronomy-data')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, roman } = require('../lib/number')
 const {
@@ -655,11 +655,9 @@ describe('平気法 calculate', () => {
     expect(月[0]).toBe(地球)
     expect(月[1]).toBe(月.orbital)
     expect(黒分月[1]).toBe(黒分月軌道)
-    expect(黒分月軌道.periodMsec).toBe(MEAN_ASTRONOMY.Moon.whiteOrbital[0])
-    expect(黒分月軌道.epochMsec).toBe(
-      MEAN_ASTRONOMY.Moon.whiteOrbital[1] - MEAN_ASTRONOMY.Moon.whiteOrbital[0] / 2,
-    )
-    expect(黒分月軌道.phaseAt(MEAN_ASTRONOMY.Moon.whiteOrbital[1])).toBe(0.5)
+    expect(黒分月軌道.periodMsec).toBe(MEAN_MOON.whiteOrbital[0])
+    expect(黒分月軌道.epochMsec).toBe(MEAN_MOON.whiteOrbital[1] - MEAN_MOON.whiteOrbital[0] / 2)
+    expect(黒分月軌道.phaseAt(MEAN_MOON.whiteOrbital[1])).toBe(0.5)
     expect(木星.body).toMatchObject({ kind: 'physical', name: 'Jupiter' })
     expect(太歳.本体).toMatchObject({ kind: 'virtual', name: '太歳' })
     expect(太歳.本体.derivedFrom).toBe(木星)
