@@ -21,24 +21,26 @@ const {
 } = require('../lib/astronomy-data')
 
 const MSEC_PER_DAY = 86400000
+const HOURS_PER_DAY = 24
 
-function meanSolarDayMsec(siderealDay, seasonalYear) {
+function meanSolarDayMsec(siderealRotationHours, seasonalYear) {
+  const siderealDay = siderealRotationHours / HOURS_PER_DAY
   return Math.round(Math.abs(1 / (1 / siderealDay - 1 / seasonalYear)) * MSEC_PER_DAY)
 }
 
 describe('mean astronomy observer periods', () => {
   test('planet solarDay values are derived from signed sidereal rotation and seasonal year', () => {
     const cases = [
-      [MEAN_MERCURY, 58.646225, 87.969349],
-      [MEAN_VENUS, -243.025, 224.700799],
-      [MEAN_JUPITER, 9.9259 / 24, 4332.817127523],
-      [MEAN_URANUS, -17.24 / 24, 30685.4],
-      [MEAN_NEPTUNE, 16.11 / 24, 60189],
-      [MEAN_PLUTO, -6.38723, 90487.277],
-      [MEAN_CERES, 9.07417 / 24, 1683.146],
+      [MEAN_MERCURY, 1407.5094, 87.969349],
+      [MEAN_VENUS, -5832.6, 224.700799],
+      [MEAN_JUPITER, 9.9259, 4332.817127523],
+      [MEAN_URANUS, -17.24, 30685.4],
+      [MEAN_NEPTUNE, 16.11, 60189],
+      [MEAN_PLUTO, -153.29352, 90487.277],
+      [MEAN_CERES, 9.07417, 1683.146],
     ]
-    for (const [entry, siderealDay, seasonalYear] of cases) {
-      expect(entry.solarDay[0]).toBe(meanSolarDayMsec(siderealDay, seasonalYear))
+    for (const [entry, siderealRotationHours, seasonalYear] of cases) {
+      expect(entry.solarDay[0]).toBe(meanSolarDayMsec(siderealRotationHours, seasonalYear))
       expect(Number.isInteger(entry.solarDay[0])).toBe(true)
     }
   })
