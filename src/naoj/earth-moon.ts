@@ -1,5 +1,4 @@
 import type {
-  BodyProfile,
   LunarApsis,
   LunarApsisKind,
   LunarEquatorialCoordinates,
@@ -14,6 +13,7 @@ import type {
   SATELLITE,
 } from '../orbital-model'
 import { placeSatellite } from '../orbital-model'
+import { meanOrbitalOptionsOf, type MeanOrbitalInput } from '../astronomy-data'
 import { mod } from '../number'
 import {
   DEG_TO_RAD,
@@ -36,11 +36,7 @@ import {
   true_obliquity_deg,
 } from './astro-math'
 
-export type EarthMoonOrbitalOptions = {
-  periodMsec?: number
-  epochMsec?: number
-  body?: BodyProfile
-}
+export type EarthMoonOrbitalOptions = MeanOrbitalInput
 
 const MOON_LR_TERMS = [
   [0, 0, 1, 0, 6288774, -20905355],
@@ -176,10 +172,11 @@ export class EarthMoonOrbital implements LunarEventModel {
   readonly periodMsec: number
   readonly epochMsec: number
 
-  constructor({
-    periodMsec = EarthMoonOrbital.meanSynodicMonthMsec,
-    epochMsec = EarthMoonOrbital.newMoonEpochMsec,
-  }: EarthMoonOrbitalOptions = {}) {
+  constructor(options: EarthMoonOrbitalOptions = {}) {
+    const {
+      periodMsec = EarthMoonOrbital.meanSynodicMonthMsec,
+      epochMsec = EarthMoonOrbital.newMoonEpochMsec,
+    } = meanOrbitalOptionsOf(options)
     this.periodMsec = periodMsec
     this.epochMsec = epochMsec
   }
@@ -189,11 +186,11 @@ export class EarthMoonOrbital implements LunarEventModel {
   }
 
   static satellite(center: PLANET, options: EarthMoonOrbitalOptions = {}): SATELLITE {
-    const { body, ...orbitalOptions } = options
+    const { body } = meanOrbitalOptionsOf(options)
     return placeSatellite({
       body,
       center,
-      orbital: new EarthMoonOrbital(orbitalOptions),
+      orbital: new EarthMoonOrbital(options),
       rotation: EarthMoonOrbital.rotation(),
     })
   }

@@ -74,9 +74,7 @@ Object.defineProperties(太歳, {
   自転: { value: MEAN_JUPITER.solarDay },
 })
 
-export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, {
-  body: MEAN_MOON.body,
-})
+export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, MEAN_MOON)
 export const 月: SATELLITE = placeMeanSatellite(地球, MEAN_MOON)
 export const 白分月: SATELLITE = 月
 
