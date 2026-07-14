@@ -7,11 +7,27 @@ export type PlanetAstronomyEntry = {
   readonly 自転: ROTATION
 }
 
+export type PlanetAstronomySource =
+  | PlanetAstronomyEntry
+  | {
+      readonly body: BodyProfile
+      readonly orbital: ORBITAL
+      readonly rotation: ROTATION
+    }
+
 export type SatelliteAstronomyEntry = {
   readonly 本体: BodyProfile
   readonly 軌道: ORBITAL
   readonly 自転?: ROTATION
 }
+
+export type SatelliteAstronomySource =
+  | SatelliteAstronomyEntry
+  | {
+      readonly body: BodyProfile
+      readonly orbital: ORBITAL
+      readonly rotation?: ROTATION
+    }
 
 export function make元号(
   source: readonly ERA[],
@@ -27,13 +43,16 @@ export function make元号(
   return base.map(([name, start, side]) => [name, replace[name]?.[1] ?? start, side])
 }
 
-export function placeMeanPlanet(center: STAR, { 本体, 軌道, 自転 }: PlanetAstronomyEntry): PLANET {
-  return placePlanet({ body: 本体, center, orbital: 軌道, rotation: 自転 })
+export function placeMeanPlanet(center: STAR, source: PlanetAstronomySource): PLANET {
+  const body = 'body' in source ? source.body : source.本体
+  const orbital = 'body' in source ? source.orbital : source.軌道
+  const rotation = 'body' in source ? source.rotation : source.自転
+  return placePlanet({ body, center, orbital, rotation })
 }
 
-export function placeMeanSatellite(
-  center: PLANET,
-  { 本体, 軌道, 自転 }: SatelliteAstronomyEntry,
-): SATELLITE {
-  return placeSatellite({ body: 本体, center, orbital: 軌道, rotation: 自転 })
+export function placeMeanSatellite(center: PLANET, source: SatelliteAstronomySource): SATELLITE {
+  const body = 'body' in source ? source.body : source.本体
+  const orbital = 'body' in source ? source.orbital : source.軌道
+  const rotation = 'body' in source ? source.rotation : source.自転
+  return placeSatellite({ body, center, orbital, rotation })
 }

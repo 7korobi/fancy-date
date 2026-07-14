@@ -142,27 +142,39 @@ export const 天文 = (function () {
   return { ...平均, 太歳 }
 })()
 
-export const 太陽: STAR = placeStar(天文.太陽.本体)
+export const 太陽: STAR = placeStar(MEAN_ASTRONOMY.Sun.body)
 
-export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, { body: 天文.水星.本体 })
-export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: 天文.地球.本体 })
-export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, { body: 天文.金星.本体 })
-export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: 天文.火星.本体 })
-export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, { body: 天文.木星.本体 })
-export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, { body: 天文.土星.本体 })
-export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, { body: 天文.天王星.本体 })
-export const 天文海王星: PLANET = NeptuneSolarOrbital.planet(太陽, { body: 天文.海王星.本体 })
-export const 天文冥王星: PLANET = PlutoSolarOrbital.planet(太陽, { body: 天文.冥王星.本体 })
+export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Mercury.body,
+})
+export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Earth.body })
+export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Venus.body })
+export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Mars.body })
+export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Jupiter.body,
+})
+export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Saturn.body,
+})
+export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Uranus.body,
+})
+export const 天文海王星: PLANET = NeptuneSolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Neptune.body,
+})
+export const 天文冥王星: PLANET = PlutoSolarOrbital.planet(太陽, {
+  body: MEAN_ASTRONOMY.Pluto.body,
+})
 
-export const 地球: PLANET = placeMeanPlanet(太陽, 天文.地球)
-export const 水星: PLANET = placeMeanPlanet(太陽, 天文.水星)
-export const 金星: PLANET = placeMeanPlanet(太陽, 天文.金星)
-export const 火星: PLANET = placeMeanPlanet(太陽, 天文.火星)
-export const 木星: PLANET = placeMeanPlanet(太陽, 天文.木星)
-export const 土星: PLANET = placeMeanPlanet(太陽, 天文.土星)
-export const 天王星: PLANET = placeMeanPlanet(太陽, 天文.天王星)
-export const 海王星: PLANET = placeMeanPlanet(太陽, 天文.海王星)
-export const 冥王星: PLANET = placeMeanPlanet(太陽, 天文.冥王星)
+export const 地球: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Earth)
+export const 水星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Mercury)
+export const 金星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Venus)
+export const 火星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Mars)
+export const 木星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Jupiter)
+export const 土星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Saturn)
+export const 天王星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Uranus)
+export const 海王星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Neptune)
+export const 冥王星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Pluto)
 export const セレス: PLANET = placeMeanPlanet(太陽, 天文.セレス)
 export const ハウメア: PLANET = placeMeanPlanet(太陽, 天文.ハウメア)
 export const マケマケ: PLANET = placeMeanPlanet(太陽, 天文.マケマケ)
