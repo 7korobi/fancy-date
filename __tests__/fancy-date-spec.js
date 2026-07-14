@@ -1077,6 +1077,11 @@ describe('Gregorian', () => {
     }
   })
 
+  test('Amanta mean lunisolar anchor formats back to its declared start value', () => {
+    const [source, format, epoch] = am.dic.start
+    expect(am.format(epoch, format)).toBe(source)
+  })
+
   test('notation() is the expression API while algo() remains a compatibility alias', () => {
     const utc = g.parse('2024年3月10日')
     const start = ['1970年 Thu-斗 庚戌-辛巳', 'y年 dC7-dC28 yC60-dC60', 0]
