@@ -3017,7 +3017,10 @@ export class FancyDate {
     const sunny_epoch = this.dic.sunny.epochMsec
     const 啓蟄 = sunny_epoch - (1 / 6 - 1 / 8) * this.dic.Z.length * this.calc.msec.season
     let { last_at } = to_tempo_bare(this.calc.msec.year, 啓蟄, period || year)
-    const spring = last_at
+    // SeasonTable は month_divs で年内の月配置を明示する暦なので、年初は
+    // calendar() の anchor から逆算した year を使う。ここを太陽年境界へ
+    // 丸め直すと、Romulus のように anchor 月日が1日ずれる。
+    const spring = this.is_table_month && !this.is_table_leap ? year : last_at
 
     const 立春 = sunny_epoch + zero_size('Z', 'season')
     ;({ last_at } = to_tempo_bare(this.calc.msec.year, 立春, period || year))
