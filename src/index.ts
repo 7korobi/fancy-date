@@ -191,6 +191,7 @@ export type {
   KeplerianSolarOrbitalOptions,
   MarsSolarOrbitalOptions,
   MeanPlanetSolarOrbitalOptions,
+  MeanPlanetSolarOrbitalPlanetOptions,
   MercurySolarOrbitalOptions,
   NeptuneSolarOrbitalOptions,
   PlanetarySolarEventModelOptions,

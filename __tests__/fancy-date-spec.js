@@ -1771,7 +1771,7 @@ describe('火星', () => {
 
   test('precision', () => {
     expect(mg.precision()).toEqual({
-      leap: [1, -7, 73, -1554],
+      leap: [1, -2, -3, -3],
       year: [[20], [33, 34]],
       day: [[24], [60], [60]],
       strategy: 'SolarTable',

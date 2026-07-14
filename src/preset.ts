@@ -1,5 +1,16 @@
-import type { BodyProfile, ERA, ORBITAL, PLANET, ROTATION, SATELLITE, STAR } from './fancy-date'
+import type {
+  BodyProfile,
+  ERA,
+  ORBITAL,
+  PLANET,
+  OrbitalTransformOptions,
+  PlanetPlacement,
+  ROTATION,
+  SatellitePlacement,
+  STAR,
+} from './fancy-date'
 import { placePlanet, placeSatellite } from './fancy-date'
+import { transformOrbital } from './mean'
 
 export type PlanetAstronomyEntry = {
   readonly 本体: BodyProfile
@@ -12,7 +23,7 @@ export type PlanetAstronomySource =
   | {
       readonly body: BodyProfile
       readonly orbital: ORBITAL
-      readonly rotation: ROTATION
+      readonly solarDay: ROTATION
     }
 
 export type SatelliteAstronomyEntry = {
@@ -26,7 +37,7 @@ export type SatelliteAstronomySource =
   | {
       readonly body: BodyProfile
       readonly orbital: ORBITAL
-      readonly rotation?: ROTATION
+      readonly solarDay?: ROTATION
     }
 
 export function make元号(
@@ -43,16 +54,34 @@ export function make元号(
   return base.map(([name, start, side]) => [name, replace[name]?.[1] ?? start, side])
 }
 
-export function placeMeanPlanet(center: STAR, source: PlanetAstronomySource): PLANET {
+export function placeMeanPlanet(
+  center: STAR,
+  source: PlanetAstronomySource,
+  transformOptions: OrbitalTransformOptions = {},
+): PlanetPlacement {
   const body = 'body' in source ? source.body : source.本体
-  const orbital = 'body' in source ? source.orbital : source.軌道
-  const rotation = 'body' in source ? source.rotation : source.自転
+  const baseOrbital = 'body' in source ? source.orbital : source.軌道
+  const orbital = hasOrbitalTransform(transformOptions)
+    ? transformOrbital(baseOrbital, transformOptions)
+    : baseOrbital
+  const rotation = 'body' in source ? source.solarDay : source.自転
   return placePlanet({ body, center, orbital, rotation })
 }
 
-export function placeMeanSatellite(center: PLANET, source: SatelliteAstronomySource): SATELLITE {
+export function placeMeanSatellite(
+  center: PLANET,
+  source: SatelliteAstronomySource,
+  transformOptions: OrbitalTransformOptions = {},
+): SatellitePlacement {
   const body = 'body' in source ? source.body : source.本体
-  const orbital = 'body' in source ? source.orbital : source.軌道
-  const rotation = 'body' in source ? source.rotation : source.自転
+  const baseOrbital = 'body' in source ? source.orbital : source.軌道
+  const orbital = hasOrbitalTransform(transformOptions)
+    ? transformOrbital(baseOrbital, transformOptions)
+    : baseOrbital
+  const rotation = 'body' in source ? source.solarDay : source.自転
   return placeSatellite({ body, center, orbital, rotation })
+}
+
+function hasOrbitalTransform({ direction, epochMsec, phaseOffset }: OrbitalTransformOptions) {
+  return direction != null || epochMsec != null || phaseOffset != null
 }

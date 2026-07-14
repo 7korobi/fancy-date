@@ -1,6 +1,6 @@
 import type { BodyProfile, PLANET, SATELLITE, SPOT, STAR } from '../fancy-date'
 import { MEAN_ASTRONOMY } from '../astronomy-data'
-import { placeStar, transformOrbital } from '../fancy-date'
+import { placeStar } from '../fancy-date'
 import {
   JupiterSolarOrbital,
   MarsSolarOrbital,
@@ -16,27 +16,15 @@ import { placeMeanPlanet, placeMeanSatellite } from '../preset'
 
 export const 太陽: STAR = placeStar(MEAN_ASTRONOMY.Sun.body)
 
-export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Mercury.body,
-})
+export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, MEAN_ASTRONOMY.Mercury)
 export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Earth.body })
-export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Venus.body })
+export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Venus)
 export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: MEAN_ASTRONOMY.Mars.body })
-export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Jupiter.body,
-})
-export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Saturn.body,
-})
-export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Uranus.body,
-})
-export const 天文海王星: PLANET = NeptuneSolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Neptune.body,
-})
-export const 天文冥王星: PLANET = PlutoSolarOrbital.planet(太陽, {
-  body: MEAN_ASTRONOMY.Pluto.body,
-})
+export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Jupiter)
+export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Saturn)
+export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Uranus)
+export const 天文海王星: PLANET = NeptuneSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Neptune)
+export const 天文冥王星: PLANET = PlutoSolarOrbital.planet(太陽, MEAN_ASTRONOMY.Pluto)
 
 export const 地球: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Earth)
 export const 水星: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Mercury)
@@ -53,16 +41,16 @@ export const マケマケ: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Makem
 export const エリス: PLANET = placeMeanPlanet(太陽, MEAN_ASTRONOMY.Eris)
 
 const 太歳本体: BodyProfile = { kind: 'virtual', name: '太歳', derivedFrom: 木星 }
-const 太歳軌道 = transformOrbital(MEAN_ASTRONOMY.Jupiter.orbital, { direction: -1 })
-export const 太歳: PLANET = placeMeanPlanet(太陽, {
-  body: 太歳本体,
-  orbital: 太歳軌道,
-  rotation: MEAN_ASTRONOMY.Jupiter.rotation,
-})
+const 太歳配置 = placeMeanPlanet(
+  太陽,
+  { ...MEAN_ASTRONOMY.Jupiter, body: 太歳本体 },
+  { direction: -1 },
+)
+export const 太歳: PLANET = 太歳配置
 Object.defineProperties(太歳, {
   本体: { value: 太歳本体 },
-  軌道: { value: 太歳軌道 },
-  自転: { value: MEAN_ASTRONOMY.Jupiter.rotation },
+  軌道: { value: 太歳配置.orbital },
+  自転: { value: MEAN_ASTRONOMY.Jupiter.solarDay },
 })
 
 export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, {
@@ -71,12 +59,9 @@ export const 天文月: SATELLITE = EarthMoonOrbital.satellite(天文地球, {
 export const 月: SATELLITE = placeMeanSatellite(地球, MEAN_ASTRONOMY.Moon)
 export const 白分月: SATELLITE = 月
 
-export const 黒分月軌道 = transformOrbital(MEAN_ASTRONOMY.Moon.whiteOrbital, { phaseOffset: 0.5 })
-export const 黒分月: SATELLITE = placeMeanSatellite(地球, {
-  body: MEAN_ASTRONOMY.Moon.body,
-  orbital: 黒分月軌道,
-  rotation: MEAN_ASTRONOMY.Moon.rotation,
-})
+const 黒分月配置 = placeMeanSatellite(地球, MEAN_ASTRONOMY.Moon, { phaseOffset: 0.5 })
+export const 黒分月軌道 = 黒分月配置.orbital
+export const 黒分月: SATELLITE = 黒分月配置
 
 export const ガニメデ: SATELLITE = placeMeanSatellite(木星, MEAN_ASTRONOMY.Ganymede)
 export const カリスト: SATELLITE = placeMeanSatellite(木星, MEAN_ASTRONOMY.Callisto)

@@ -12,6 +12,7 @@ export {
   type JupiterSolarOrbitalOptions,
   type KeplerianSolarOrbitalOptions,
   type MeanPlanetSolarOrbitalOptions,
+  type MeanPlanetSolarOrbitalPlanetOptions,
   type MercurySolarOrbitalOptions,
   type NeptuneSolarOrbitalOptions,
   type PlutoSolarOrbitalOptions,

@@ -48,9 +48,14 @@ type MeanPlanetSolarOrbitalConstructor = new (
 ) => MeanPlanetSolarOrbital
 
 type MeanPlanetAstronomyEntry = {
+  readonly body: BodyProfile
   readonly orbital: readonly [periodMsec: number, epochMsec: number]
-  readonly rotation: readonly [dayMsec: number, epochMsec: number, axialTiltDeg: number]
+  readonly solarDay: readonly [dayMsec: number, epochMsec: number, axialTiltDeg: number]
 }
+
+export type MeanPlanetSolarOrbitalPlanetOptions =
+  | MeanPlanetSolarOrbitalOptions
+  | MeanPlanetAstronomyEntry
 
 export abstract class MeanPlanetSolarOrbital extends PlanetarySolarEventModel {
   protected constructor(
@@ -106,15 +111,24 @@ function planetOf(
   Orbital: MeanPlanetSolarOrbitalConstructor,
   profile: MeanPlanetSolarOrbitalProfile,
   center: STAR,
-  options: MeanPlanetSolarOrbitalOptions,
+  options: MeanPlanetSolarOrbitalPlanetOptions,
 ): PLANET {
-  const { body, ...orbitalOptions } = options
+  const { body, ...orbitalOptions } = planetOptionsOf(options)
   return placePlanet({
     body,
     center,
     orbital: new Orbital(orbitalOptions),
     rotation: rotationOf(profile),
   })
+}
+
+function planetOptionsOf(
+  options: MeanPlanetSolarOrbitalPlanetOptions,
+): MeanPlanetSolarOrbitalOptions {
+  if ('orbital' in options && 'solarDay' in options) {
+    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
+  }
+  return options
 }
 
 function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axialTiltDeg: number) {
@@ -125,14 +139,14 @@ function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axia
 
 function meanProfileOf({
   orbital,
-  rotation,
+  solarDay,
 }: MeanPlanetAstronomyEntry): MeanPlanetSolarOrbitalProfile {
   return {
     periodMsec: orbital[0],
     epochMsec: orbital[1],
-    meanSolarDayMsec: rotation[0],
-    rotationEpochMsec: rotation[1],
-    axialTiltDeg: rotation[2],
+    meanSolarDayMsec: solarDay[0],
+    rotationEpochMsec: solarDay[1],
+    axialTiltDeg: solarDay[2],
   }
 }
 
@@ -309,7 +323,7 @@ export class MercurySolarOrbital extends KeplerianSolarOrbital {
 
   static planet(
     center: STAR = MercurySolarOrbital.sun,
-    options: MercurySolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(MercurySolarOrbital, MERCURY_PROFILE, center, options)
   }
@@ -340,7 +354,7 @@ export class VenusSolarOrbital extends KeplerianSolarOrbital {
 
   static planet(
     center: STAR = VenusSolarOrbital.sun,
-    options: VenusSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(VenusSolarOrbital, VENUS_PROFILE, center, options)
   }
@@ -369,7 +383,7 @@ export class JupiterSolarOrbital extends MeanPlanetSolarOrbital {
 
   static planet(
     center: STAR = JupiterSolarOrbital.sun,
-    options: JupiterSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(JupiterSolarOrbital, JUPITER_PROFILE, center, options)
   }
@@ -398,7 +412,7 @@ export class SaturnSolarOrbital extends MeanPlanetSolarOrbital {
 
   static planet(
     center: STAR = SaturnSolarOrbital.sun,
-    options: SaturnSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(SaturnSolarOrbital, SATURN_PROFILE, center, options)
   }
@@ -427,7 +441,7 @@ export class UranusSolarOrbital extends MeanPlanetSolarOrbital {
 
   static planet(
     center: STAR = UranusSolarOrbital.sun,
-    options: UranusSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(UranusSolarOrbital, URANUS_PROFILE, center, options)
   }
@@ -456,7 +470,7 @@ export class NeptuneSolarOrbital extends MeanPlanetSolarOrbital {
 
   static planet(
     center: STAR = NeptuneSolarOrbital.sun,
-    options: NeptuneSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(NeptuneSolarOrbital, NEPTUNE_PROFILE, center, options)
   }
@@ -485,7 +499,7 @@ export class PlutoSolarOrbital extends KeplerianSolarOrbital {
 
   static planet(
     center: STAR = PlutoSolarOrbital.sun,
-    options: PlutoSolarOrbitalOptions = {},
+    options: MeanPlanetSolarOrbitalPlanetOptions = {},
   ): PLANET {
     return planetOf(PlutoSolarOrbital, PLUTO_PROFILE, center, options)
   }
