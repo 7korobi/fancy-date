@@ -4,6 +4,7 @@ export type MeanOrbital = readonly [periodMsec: number, epochMsec: number]
 export type MeanSolarDay = readonly [periodMsec: number, epochMsec: number, axialTiltDeg: number]
 
 const MSEC_PER_DAY = 86400000
+const HOURS_PER_DAY = 24
 const MEAN_SYNODIC_MONTH_MSEC = 2551442889
 const MEAN_NEW_MOON_EPOCH_MSEC = 1577310360000
 const MARS_SEASONAL_YEAR_MSEC = 59355048804
@@ -109,7 +110,7 @@ export const MEAN_MARS = {
 export const MEAN_JUPITER = {
   body: { kind: 'physical', name: 'Jupiter', radiusKm: 69911 } as BodyProfile,
   orbital: [374355399818, MEAN_SEASON_EPOCH_MSEC] as const, // 4332.817128d; epoch 2019/03/21 06:58 JST
-  solarDay: solarDay(9.9259 / 24, 4332.817127523, 0, 3.12), // 0.413619d; epoch 0
+  solarDay: solarDay(9.9259 / HOURS_PER_DAY, 4332.817127523, 0, 3.12), // 0.413619d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_GANYMEDE = {
@@ -125,7 +126,7 @@ export const MEAN_CALLISTO = {
 export const MEAN_SATURN = {
   body: { kind: 'physical', name: 'Saturn', radiusKm: 58232 } as BodyProfile,
   orbital: [929308406642, MEAN_SEASON_EPOCH_MSEC] as const, // 10755.884336d; epoch 2019/03/21 06:58 JST
-  solarDay: solarDay(10.7 / 24, 10755.884336, 0, 26.73), // 0.445833d; epoch 0
+  solarDay: solarDay(10.7 / HOURS_PER_DAY, 10755.884336, 0, 26.73), // 0.445833d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_TITAN = {
@@ -136,7 +137,7 @@ export const MEAN_TITAN = {
 export const MEAN_URANUS = {
   body: { kind: 'physical', name: 'Uranus', radiusKm: 25362 } as BodyProfile,
   orbital: [2651391484727, MEAN_SEASON_EPOCH_MSEC] as const, // 30687.401444d; epoch 2019/03/21 06:58 JST
-  solarDay: solarDay(-17.24 / 24, 30685.4, 0, -82.23), // 0.718317d; epoch 0
+  solarDay: solarDay(-17.24 / HOURS_PER_DAY, 30685.4, 0, -82.23), // 0.718317d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_TITANIA = {
@@ -147,7 +148,7 @@ export const MEAN_TITANIA = {
 export const MEAN_NEPTUNE = {
   body: { kind: 'physical', name: 'Neptune', radiusKm: 24622 } as BodyProfile,
   orbital: [5200386539006, MEAN_SEASON_EPOCH_MSEC] as const, // 60189.659016d; epoch 2019/03/21 06:58 JST
-  solarDay: solarDay(16.11 / 24, 60189, 0, 28.32), // 0.671257d; epoch 0
+  solarDay: solarDay(16.11 / HOURS_PER_DAY, 60189, 0, 28.32), // 0.671257d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_TRITON = {
@@ -169,7 +170,7 @@ export const MEAN_CHARON = {
 export const MEAN_CERES = {
   body: { kind: 'physical', name: 'Ceres', radiusKm: 469.7 } as BodyProfile,
   orbital: [145423814400, 0] as const, // 1683.146d; epoch 0
-  solarDay: solarDay(9.07417 / 24, 1683.146, 0, 4), // 0.378175d; epoch 0
+  solarDay: solarDay(9.07417 / HOURS_PER_DAY, 1683.146, 0, 4), // 0.378175d; epoch 0
 } as const satisfies MeanPlanetAstronomyEntry
 
 export const MEAN_HAUMEA = {
