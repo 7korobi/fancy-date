@@ -3,14 +3,14 @@ import type { BodyProfile } from './orbital-model'
 // 2019/03/21 06:58 JST
 export const MEAN_SEASON_EPOCH_MSEC = 1553119080000
 
-// `orbital` is the mean seasonal-year period seen by an observer on the body.
-// Mercury/Venus/Mars/Saturn/Uranus/Neptune are converted from JPL SSD mean longitude rates:
+// `orbital` は、その天体上の観測者が春分を迎える平均季節年の周期。
+// 水星・金星・火星・土星・天王星・海王星は JPL SSD の平均黄経変化率から換算する:
 //   periodDays = 360 / meanLongitudeDegPerCentury * 36525
-// Pluto uses the JPL SBDB osculating period for 134340 Pluto.
-// `solarDay` is the mean interval between local solar noons, not the physical sidereal rotation:
+// 冥王星は JPL SBDB の 134340 Pluto の osculating period を使う。
+// `solarDay` は物理恒星自転周期ではなく、地方太陽時の南中から次の南中までの平均周期:
 //   solarDay = abs(1 / (1 / signedSiderealRotation - 1 / seasonalYear))
-// Earth is intentionally fixed to the civil day, 86400000ms.
-// Moon uses the synodic month as the lunar solar day for calendar phase work.
+// 地球は暦上の1日として 86400000ms に固定する。
+// 月は暦・月相計算用に、朔望月を月面上の太陽日として扱う。
 
 export const MEAN_ASTRONOMY = {
   Sun: {
