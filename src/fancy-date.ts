@@ -2995,6 +2995,7 @@ export class FancyDate {
 
     let moon = NaN
     let year = NaN
+    let springNear = NaN
     let month = NaN
     let period = NaN
 
@@ -3002,6 +3003,7 @@ export class FancyDate {
       const year_size = Math.floor(this.calc.msec.day * this.table.range.year[this.calc.idx.y])
       month = day - (this.table.msec.month[year_size][this.calc.idx.M - 1] || 0)
       year = month - (this.table.msec.year[this.calc.idx.y - 1] || 0)
+      springNear = year
       period = year + zero_size('p', 'period')
     } else {
       if (this.is_table_month) {
@@ -3009,14 +3011,19 @@ export class FancyDate {
       } else {
         month = day + zero_size('M', 'moon')
       }
+      springNear = month + zero_size('y', 'year')
 
-      year = month + zero_size('y', 'year')
+      // 平均太陰太陽暦の月番号は中気から割り当てる暦上のラベルで、
+      // 朔望月の単純な通し番号ではない。年 zero に month offset まで
+      // 混ぜると、満月基準のプールニマンタのような月相シフト暦で
+      // anchor の月日を表示値に合わせた途端、年が1つ進んでしまう。
+      year = day + zero_size('y', 'year')
     }
 
     // 単純のため平気法。
     const sunny_epoch = this.dic.sunny.epochMsec
     const 啓蟄 = sunny_epoch - (1 / 6 - 1 / 8) * this.dic.Z.length * this.calc.msec.season
-    let { last_at } = to_tempo_bare(this.calc.msec.year, 啓蟄, period || year)
+    let { last_at } = to_tempo_bare(this.calc.msec.year, 啓蟄, period || springNear)
     // SeasonTable は month_divs で年内の月配置を明示する暦なので、年初は
     // calendar() の anchor から逆算した year を使う。ここを太陽年境界へ
     // 丸め直すと、Romulus のように anchor 月日が1日ずれる。

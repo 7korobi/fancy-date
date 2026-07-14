@@ -1077,9 +1077,11 @@ describe('Gregorian', () => {
     }
   })
 
-  test('Amanta mean lunisolar anchor formats back to its declared start value', () => {
-    const [source, format, epoch] = am.dic.start
-    expect(am.format(epoch, format)).toBe(source)
+  test('mean lunisolar anchors format back to their declared start values', () => {
+    for (const calendar of [am, pm]) {
+      const [source, format, epoch] = calendar.dic.start
+      expect(calendar.format(epoch, format)).toBe(source)
+    }
   })
 
   test('notation() is the expression API while algo() remains a compatibility alias', () => {

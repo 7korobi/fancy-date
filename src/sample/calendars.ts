@@ -157,7 +157,7 @@ const プールニマンタ = new FancyDate((c) =>
   baseCalendar(c)
     .spot(...Jaypore)
     .era('サカ歴', '紀元前')
-    .calendar(['1891-09-23(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
+    .calendar(['1891-12-10(木) 庚戌-辛巳 三碧木-七赤金', 'y-M-d(dC7) yC60-dC60 yC9-dC9', 0])
     .division({ H: 'solar' })
     .numeral_ruby(sanskrit.latin)
     .notation({
