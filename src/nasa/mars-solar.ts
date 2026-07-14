@@ -1,20 +1,10 @@
-import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
+import type { PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
+import { meanOrbitalOptionsOf, type MeanOrbitalInput } from '../astronomy-data'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
 
-export type MarsSolarOrbitalOptions = {
-  periodMsec?: number
-  epochMsec?: number
-  body?: BodyProfile
-}
-
-export type MarsSolarOrbitalPlanetOptions =
-  | MarsSolarOrbitalOptions
-  | {
-      body?: BodyProfile
-      orbital: readonly [periodMsec: number, epochMsec: number]
-    }
+export type MarsSolarOrbitalOptions = MeanOrbitalInput
 
 const MSEC_PER_DAY = 86400000
 
@@ -27,10 +17,11 @@ export class MarsSolarOrbital extends PlanetarySolarEventModel {
   static readonly meanTropicalYearMsec = 59355072000
   static readonly vernalEquinoxEpochMsec = Date.UTC(2018, 4, 22, 13, 54)
 
-  constructor({
-    periodMsec = MarsSolarOrbital.meanTropicalYearMsec,
-    epochMsec = MarsSolarOrbital.vernalEquinoxEpochMsec,
-  }: MarsSolarOrbitalOptions = {}) {
+  constructor(options: MarsSolarOrbitalOptions = {}) {
+    const {
+      periodMsec = MarsSolarOrbital.meanTropicalYearMsec,
+      epochMsec = MarsSolarOrbital.vernalEquinoxEpochMsec,
+    } = meanOrbitalOptionsOf(options)
     super({
       periodMsec,
       epochMsec,
@@ -51,13 +42,13 @@ export class MarsSolarOrbital extends PlanetarySolarEventModel {
 
   static planet(
     center: STAR = MarsSolarOrbital.sun,
-    options: MarsSolarOrbitalPlanetOptions = {},
+    options: MarsSolarOrbitalOptions = {},
   ): PLANET {
-    const { body, ...orbitalOptions } = marsSolarOrbitalOptionsOf(options)
+    const { body } = meanOrbitalOptionsOf(options)
     return placePlanet({
       body,
       center,
-      orbital: new MarsSolarOrbital(orbitalOptions),
+      orbital: new MarsSolarOrbital(options),
       rotation: MarsSolarOrbital.rotation(),
     })
   }
@@ -83,15 +74,6 @@ export class MarsSolarOrbital extends PlanetarySolarEventModel {
       pbsDeg
     return mod(alphaFmsDeg + equationOfCenterDeg, 360)
   }
-}
-
-function marsSolarOrbitalOptionsOf(
-  options: MarsSolarOrbitalPlanetOptions,
-): MarsSolarOrbitalOptions {
-  if ('orbital' in options) {
-    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
-  }
-  return options
 }
 
 function sinDeg(deg: number) {

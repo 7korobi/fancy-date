@@ -1,4 +1,4 @@
-import type { BodyProfile, PLANET, ROTATION, STAR } from '../orbital-model'
+import type { PLANET, ROTATION, STAR } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
 import {
   MEAN_JUPITER,
@@ -8,16 +8,15 @@ import {
   MEAN_SATURN,
   MEAN_URANUS,
   MEAN_VENUS,
+  meanOrbitalOptionsOf,
+  type MeanOrbitalInput,
+  type MeanPlanetAstronomyEntry,
 } from '../astronomy-data'
 import { atan2_deg, cos_deg, julian_day, sin_deg } from '../naoj/astro-math'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
 
-export type MeanPlanetSolarOrbitalOptions = {
-  periodMsec?: number
-  epochMsec?: number
-  body?: BodyProfile
-}
+export type MeanPlanetSolarOrbitalOptions = MeanOrbitalInput
 
 type MeanPlanetSolarOrbitalProfile = {
   periodMsec: number
@@ -55,25 +54,18 @@ type MeanPlanetSolarOrbitalConstructor = new (
   options?: MeanPlanetSolarOrbitalOptions,
 ) => MeanPlanetSolarOrbital
 
-type MeanPlanetAstronomyEntry = {
-  readonly body: BodyProfile
-  readonly orbital: readonly [periodMsec: number, epochMsec: number]
-  readonly solarDay: readonly [dayMsec: number, epochMsec: number, axialTiltDeg: number]
-}
-
-export type MeanPlanetSolarOrbitalPlanetOptions =
-  | MeanPlanetSolarOrbitalOptions
-  | MeanPlanetAstronomyEntry
+export type MeanPlanetSolarOrbitalPlanetOptions = MeanPlanetSolarOrbitalOptions
 
 export abstract class MeanPlanetSolarOrbital extends PlanetarySolarEventModel {
   protected constructor(
     profile: MeanPlanetSolarOrbitalProfile,
     options: MeanPlanetSolarOrbitalOptions = {},
   ) {
-    const periodMsec = options.periodMsec ?? profile.periodMsec
+    const { periodMsec = profile.periodMsec, epochMsec = profile.epochMsec } =
+      meanOrbitalOptionsOf(options)
     super({
       periodMsec,
-      epochMsec: options.epochMsec ?? profile.epochMsec,
+      epochMsec,
       dayMsec: profile.meanSolarDayMsec,
       siderealDayMsec:
         profile.siderealDayMsec ??
@@ -100,10 +92,8 @@ export abstract class KeplerianSolarOrbital extends MeanPlanetSolarOrbital {
   ) {
     super(profile, options)
     this.profile = profile
-    this.referenceLongitudeDeg = apparentSunLongitudeDeg(
-      options.epochMsec ?? profile.epochMsec,
-      profile,
-    )
+    const { epochMsec = profile.epochMsec } = meanOrbitalOptionsOf(options)
+    this.referenceLongitudeDeg = apparentSunLongitudeDeg(epochMsec, profile)
   }
 
   solarLongitudeDeg(utc: number) {
@@ -121,22 +111,13 @@ function planetOf(
   center: STAR,
   options: MeanPlanetSolarOrbitalPlanetOptions,
 ): PLANET {
-  const { body, ...orbitalOptions } = planetOptionsOf(options)
+  const { body } = meanOrbitalOptionsOf(options)
   return placePlanet({
     body,
     center,
-    orbital: new Orbital(orbitalOptions),
+    orbital: new Orbital(options),
     rotation: rotationOf(profile),
   })
-}
-
-function planetOptionsOf(
-  options: MeanPlanetSolarOrbitalPlanetOptions,
-): MeanPlanetSolarOrbitalOptions {
-  if ('orbital' in options && 'solarDay' in options) {
-    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
-  }
-  return options
 }
 
 function inferSiderealDayMsec(meanSolarDayMsec: number, periodMsec: number, axialTiltDeg: number) {

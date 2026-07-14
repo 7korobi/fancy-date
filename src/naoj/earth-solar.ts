@@ -1,5 +1,4 @@
 import type {
-  BodyProfile,
   PLANET,
   ROTATION,
   SolarEquatorialCoordinates,
@@ -10,6 +9,7 @@ import type {
   STAR,
 } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
+import { meanOrbitalOptionsOf, type MeanOrbitalInput } from '../astronomy-data'
 import { mod } from '../number'
 import {
   DEG_TO_RAD,
@@ -27,18 +27,7 @@ import {
   true_obliquity_deg,
 } from './astro-math'
 
-export type EarthSolarOrbitalOptions = {
-  periodMsec?: number
-  epochMsec?: number
-  body?: BodyProfile
-}
-
-export type EarthSolarOrbitalPlanetOptions =
-  | EarthSolarOrbitalOptions
-  | {
-      body?: BodyProfile
-      orbital: readonly [periodMsec: number, epochMsec: number]
-    }
+export type EarthSolarOrbitalOptions = MeanOrbitalInput
 
 const SOLAR_HOUR_ANGLE_DEG_PER_DAY = 360.98564736629
 
@@ -195,10 +184,11 @@ export class EarthSolarOrbital implements SolarEventModel {
   readonly periodMsec: number
   readonly epochMsec: number
 
-  constructor({
-    periodMsec = EarthSolarOrbital.meanTropicalYearMsec,
-    epochMsec = EarthSolarOrbital.vernalEquinoxEpochMsec,
-  }: EarthSolarOrbitalOptions = {}) {
+  constructor(options: EarthSolarOrbitalOptions = {}) {
+    const {
+      periodMsec = EarthSolarOrbital.meanTropicalYearMsec,
+      epochMsec = EarthSolarOrbital.vernalEquinoxEpochMsec,
+    } = meanOrbitalOptionsOf(options)
     this.periodMsec = periodMsec
     this.epochMsec = epochMsec
   }
@@ -213,13 +203,13 @@ export class EarthSolarOrbital implements SolarEventModel {
 
   static planet(
     center: STAR = EarthSolarOrbital.sun,
-    options: EarthSolarOrbitalPlanetOptions = {},
+    options: EarthSolarOrbitalOptions = {},
   ): PLANET {
-    const { body, ...orbitalOptions } = earthSolarOrbitalOptionsOf(options)
+    const { body } = meanOrbitalOptionsOf(options)
     return placePlanet({
       body,
       center,
-      orbital: new EarthSolarOrbital(orbitalOptions),
+      orbital: new EarthSolarOrbital(options),
       rotation: EarthSolarOrbital.rotation(),
     })
   }
@@ -386,13 +376,4 @@ export class EarthSolarOrbital implements SolarEventModel {
     }
     return Math.round(at)
   }
-}
-
-function earthSolarOrbitalOptionsOf(
-  options: EarthSolarOrbitalPlanetOptions,
-): EarthSolarOrbitalOptions {
-  if ('orbital' in options) {
-    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
-  }
-  return options
 }

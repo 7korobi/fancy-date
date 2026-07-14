@@ -83,11 +83,7 @@ export {
   MEAN_VENUS,
 } from './astronomy-data'
 export { EarthMoonOrbital, EarthSolarOrbital } from './naoj'
-export type {
-  EarthMoonOrbitalOptions,
-  EarthSolarOrbitalOptions,
-  EarthSolarOrbitalPlanetOptions,
-} from './naoj'
+export type { EarthMoonOrbitalOptions, EarthSolarOrbitalOptions } from './naoj'
 export {
   JupiterSolarOrbital,
   KeplerianSolarOrbital,
@@ -105,7 +101,6 @@ export type {
   JupiterSolarOrbitalOptions,
   KeplerianSolarOrbitalOptions,
   MarsSolarOrbitalOptions,
-  MarsSolarOrbitalPlanetOptions,
   MeanPlanetSolarOrbitalOptions,
   MeanPlanetSolarOrbitalPlanetOptions,
   MercurySolarOrbitalOptions,

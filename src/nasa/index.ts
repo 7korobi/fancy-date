@@ -1,8 +1,4 @@
-export {
-  MarsSolarOrbital,
-  type MarsSolarOrbitalOptions,
-  type MarsSolarOrbitalPlanetOptions,
-} from './mars-solar'
+export { MarsSolarOrbital, type MarsSolarOrbitalOptions } from './mars-solar'
 export {
   JupiterSolarOrbital,
   KeplerianSolarOrbital,
