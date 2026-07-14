@@ -25,9 +25,9 @@ export type TempoEnvelope = {
    */
   table?: readonly number[]
   /**
-   * EraAdjustedTempoRule が now_idx を元号内相対年へ書き換える前の、
-   * 調整前(通し番号)の now_idx。元号を持たない暦(EraAdjustedTempoRule を
-   * 経由しない envelope)では設定されない。
+   * 年区間の通し番号。元号年などの表示用識別子とは別に、年Tempo自体の
+   * now_idx と同じ基準を保持する。元号を持たない暦では未設定のままでも
+   * Tempo.raw_now_idx が now_idx にフォールバックする。
    *
    * fancy-date.ts の span_target()/find_span_year_start() は「目標の年へ
    * 何年分移動するか」を検算するため、ある年から別の年への距離を
@@ -40,6 +40,8 @@ export type TempoEnvelope = {
    * raw_now_idx は常に単調な通し番号を保つため、この距離計算に使う。
    */
   raw_now_idx?: number
+  /** 元号を持つ暦で、同じ年区間に対応する元号内相対年。 */
+  era_now_idx?: number
   /**
    * AssignmentRule が now_idx へ投影する前の、assignment 側の通し番号。
    * raw_now_idx は assignment 前の暦座標(civil day など)を保持する一方、
@@ -621,8 +623,8 @@ export class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
 }
 
 /**
- * EraAdjustedTempoRule: 内側の規則が返す「通し年」を、元号(のような
- * 紀年法)の開始年を1年とする相対年に変換する規則。
+ * EraAdjustedTempoRule: 内側の規則が返す「通し年」に、元号(のような
+ * 紀年法)の開始年を1年とする相対年を注釈する規則。
  *
  * 既存 to_tempos() は、内側の規則(FloorTempoRule 等、あるいは
  * lunisolar() 由来の素の Tempo)で年の envelope を作った後、
@@ -638,7 +640,7 @@ export class MeanLunisolarMonthRule implements TempoRule<TempoBase> {
  * 「年初に改元」はほぼ皆無)。そのため元号の解決は、必ず「実際に
  * 問い合わせている時刻」を基準にする必要がある。既存 G(元号ラベル)の
  * 解決も write_at(利用者が問い合わせた時刻そのもの)を基準にしており、
- * この規則の年番号も同じ基準で揃える。
+ * この規則の era_now_idx も同じ基準で揃える。
  *
  * at() は write_at をそのまま元号解決に使えばよいが、slide() は
  * 「year.last_at からの経過(since)」を保ったまま次の年の対応する
@@ -669,8 +671,8 @@ export class EraAdjustedTempoRule<Base extends TempoBase = TempoBase> implements
     const eraEnv = table_envelope(this.eraTable, this.eraZero, era_at)
     const era = this.eras[eraEnv.now_idx]
     if (!era?.[0]) return raw
-    const now_idx = raw.now_idx + 1 - era[2]
-    return { ...raw, now_idx, raw_now_idx: raw.now_idx }
+    const era_now_idx = raw.now_idx + 1 - era[2]
+    return { ...raw, raw_now_idx: raw.now_idx, era_now_idx }
   }
 
   at(write_at: number, base: Base): TempoEnvelope {
@@ -1323,6 +1325,10 @@ export class Tempo<Base extends TempoBase = TempoBase> implements TempoLike {
    */
   get raw_now_idx() {
     return this.envelope.raw_now_idx ?? this.envelope.now_idx
+  }
+  /** 同じ年区間に対応する元号内相対年。元号を持たない暦では undefined。 */
+  get era_now_idx() {
+    return this.envelope.era_now_idx
   }
   /** AssignmentRule が割り当てた現象側の通し番号。未設定なら undefined。 */
   get assignment_raw_now_idx() {

@@ -207,8 +207,8 @@ const 平気法 = new FancyDate((c) =>
     // development-notes.md参照)。真因を修正したので、anchor の dC は
     // 本来の(2629年12月7日の実際の日干支である)辛巳に戻す。
     .calendar([
-      '2629年12月7日 赤口-昴 己酉-辛巳 九紫火-七赤金',
-      'y年M月d日 R6-LM27 yC60-dC60 yC9-dC9',
+      '二千六百廿九年十一月廿五日 大安-心 己酉-辛巳 九紫火-七赤金',
+      'u年M月d日 R6-LM27 yC60-dC60 yC9-dC9',
       0,
     ])
     .division({ H: 'solar' })
@@ -254,8 +254,8 @@ const 定気法 = new FancyDate((c) =>
     // 参照)。真因を修正したので、anchor の dC は本来の(2629年11月24日の
     // 実際の日干支である)辛巳に戻す。
     .calendar([
-      '2629年11月24日 仏滅-房 己酉-辛巳 一白水-七赤金',
-      'y年M月d日 R6-LM27 yC60-dC60 yC9-dC9',
+      '千九百六十九年十一月廿四日 仏滅-房 己酉-辛巳 七赤金-七赤金',
+      'u年M月d日 R6-LM27 yC60-dC60 yC9-dC9',
       0,
     ])
     .division({ H: 'solar' })

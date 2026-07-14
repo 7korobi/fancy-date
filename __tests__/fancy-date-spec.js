@@ -748,6 +748,21 @@ describe('平気法 calculate', () => {
     expect(Calendar.定気法.format(0, 'a')).toEqual('己酉')
   })
 
+  test('年Tempoの区間は一種類で、uは通年、yは元号年ビューとして扱う', () => {
+    const heiki = 平気法.to_tempos(0)
+    expect(heiki.u.last_at).toBe(heiki.y.last_at)
+    expect(heiki.u.next_at).toBe(heiki.y.next_at)
+    expect(heiki.u.now_idx).toBe(2629)
+    expect(heiki.y.now_idx).toBe(44)
+    expect(平気法.format(0, 'u / y / Gy')).toBe('二千六百廿九 / 卌四 / 昭和卌四')
+
+    const teiki = Calendar.定気法.to_tempos(0)
+    expect(teiki.u.last_at).toBe(teiki.y.last_at)
+    expect(teiki.u.next_at).toBe(teiki.y.next_at)
+    expect(teiki.u.now_idx).toBe(1969)
+    expect(teiki.y.now_idx).toBe(44)
+  })
+
   test('日干支(A)はグレゴリオ暦・平気法・定気法の間で実日付について一致する', () => {
     // 日干支は暦の計算方式に依存しない実日の事実(60日周期の連続カウント)
     // なので、同じ実日を指していれば暦システムが違っても一致するはず。
@@ -1080,6 +1095,14 @@ describe('Gregorian', () => {
   test('mean lunisolar anchors format back to their declared start values', () => {
     for (const calendar of [am, pm]) {
       const [source, format, epoch] = calendar.dic.start
+      expect(calendar.format(epoch, format)).toBe(source)
+    }
+  })
+
+  test('Japanese lunisolar anchors use the raw year token for calibration', () => {
+    for (const calendar of [平気法, Calendar.定気法]) {
+      const [source, format, epoch] = calendar.dic.start
+      expect(format.startsWith('u年')).toBe(true)
       expect(calendar.format(epoch, format)).toBe(source)
     }
   })

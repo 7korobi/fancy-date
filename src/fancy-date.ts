@@ -758,6 +758,9 @@ function cloneValue<T>(value: T): T {
   if (value instanceof Date) {
     return new Date(value.getTime()) as T
   }
+  if (value instanceof Map) {
+    return new Map(value) as T
+  }
   if (value && 'object' === typeof value) {
     const clone = Object.create(Object.getPrototypeOf(value))
     for (const key of Reflect.ownKeys(value)) {
@@ -2957,6 +2960,12 @@ export class FancyDate {
     }
 
     const o = this.index(...this.dic.start)
+    const parsedTokens = new Set(
+      (this.dic.start?.[1]?.match(reg_token) ?? []).map((token) => format_token_parts(token)?.top),
+    )
+    if (parsedTokens.has('u') && !parsedTokens.has('y')) {
+      o.y = o.u
+    }
     o.Z = (this.dic.Z.length * 1) / 8
     const year = (period || 0) * o.p + o.y
     const yearCycleZeros: Partial<Record<ZERO_CALC, number>> = {}
@@ -3738,8 +3747,8 @@ K   = @dic.earthy[2] / 360
       })
       const era = this.calc.eras[G.now_idx]
       if (era?.[0]) {
-        // u(年)の元号調整自体は、u を構築した EraAdjustedTempoRule が
-        // 内部で行っている(observed-lunisolar/mean-lunisolar 分岐)。
+        // u(年)の区間自体は通年のままにし、元号年は
+        // EraAdjustedTempoRule が era_now_idx として注釈する。
         // is_table_leap/is_table_month 分岐には元号を持つサンプル暦が
         // 存在しないため、u 側の調整は未実装のまま(現状は常に
         // this.calc.eras が空でこの if 自体に入らない)。ここでは
@@ -3749,13 +3758,16 @@ K   = @dic.earthy[2] / 360
     }
 
     const y = u.copy()
+    if (u.era_now_idx != null) {
+      y.now_idx = u.era_now_idx
+    }
     if (y.now_idx < 1) {
       G.label = this.dic.G.list[0] || '紀元前'
       y.now_idx = 1 - y.now_idx
     }
     const x = this.dic.x.tempo
 
-    // u はここまでで確定している(era 調整含む)ので、以降 u の実区間を
+    // u はここまでで確定しているので、以降 u の実区間を
     // 参照する箇所(D/Y/yC60/yC12/yC10/yC9)はすべてこの envelope を使い回す。
     const uEnvelope = envelope_of(u)
 
