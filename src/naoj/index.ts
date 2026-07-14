@@ -19,4 +19,5 @@ export type {
 // 静的な named export 解析に依存するバンドラで再エクスポート名が undefined になる
 // 不具合があった(development-notes.md 参照)。明示的な named export に置き換える。
 export { EarthSolarOrbital, type EarthSolarOrbitalOptions } from './earth-solar'
+export type { EarthSolarOrbitalPlanetOptions } from './earth-solar'
 export { EarthMoonOrbital, type EarthMoonOrbitalOptions } from './earth-moon'

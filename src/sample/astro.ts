@@ -42,9 +42,9 @@ import { placeMeanPlanet, placeMeanSatellite } from '../preset'
 export const 太陽: STAR = placeStar(MEAN_SUN.body)
 
 export const 天文水星: PLANET = MercurySolarOrbital.planet(太陽, MEAN_MERCURY)
-export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, { body: MEAN_EARTH.body })
+export const 天文地球: PLANET = EarthSolarOrbital.planet(太陽, MEAN_EARTH)
 export const 天文金星: PLANET = VenusSolarOrbital.planet(太陽, MEAN_VENUS)
-export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, { body: MEAN_MARS.body })
+export const 天文火星: PLANET = MarsSolarOrbital.planet(太陽, MEAN_MARS)
 export const 天文木星: PLANET = JupiterSolarOrbital.planet(太陽, MEAN_JUPITER)
 export const 天文土星: PLANET = SaturnSolarOrbital.planet(太陽, MEAN_SATURN)
 export const 天文天王星: PLANET = UranusSolarOrbital.planet(太陽, MEAN_URANUS)

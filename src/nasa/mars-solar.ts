@@ -9,6 +9,13 @@ export type MarsSolarOrbitalOptions = {
   body?: BodyProfile
 }
 
+export type MarsSolarOrbitalPlanetOptions =
+  | MarsSolarOrbitalOptions
+  | {
+      body?: BodyProfile
+      orbital: readonly [periodMsec: number, epochMsec: number]
+    }
+
 const MSEC_PER_DAY = 86400000
 
 export class MarsSolarOrbital extends PlanetarySolarEventModel {
@@ -44,9 +51,9 @@ export class MarsSolarOrbital extends PlanetarySolarEventModel {
 
   static planet(
     center: STAR = MarsSolarOrbital.sun,
-    options: MarsSolarOrbitalOptions = {},
+    options: MarsSolarOrbitalPlanetOptions = {},
   ): PLANET {
-    const { body, ...orbitalOptions } = options
+    const { body, ...orbitalOptions } = marsSolarOrbitalOptionsOf(options)
     return placePlanet({
       body,
       center,
@@ -76,6 +83,15 @@ export class MarsSolarOrbital extends PlanetarySolarEventModel {
       pbsDeg
     return mod(alphaFmsDeg + equationOfCenterDeg, 360)
   }
+}
+
+function marsSolarOrbitalOptionsOf(
+  options: MarsSolarOrbitalPlanetOptions,
+): MarsSolarOrbitalOptions {
+  if ('orbital' in options) {
+    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
+  }
+  return options
 }
 
 function sinDeg(deg: number) {

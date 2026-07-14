@@ -33,6 +33,13 @@ export type EarthSolarOrbitalOptions = {
   body?: BodyProfile
 }
 
+export type EarthSolarOrbitalPlanetOptions =
+  | EarthSolarOrbitalOptions
+  | {
+      body?: BodyProfile
+      orbital: readonly [periodMsec: number, epochMsec: number]
+    }
+
 const SOLAR_HOUR_ANGLE_DEG_PER_DAY = 360.98564736629
 
 const EARTH_L_TERMS = [
@@ -206,9 +213,9 @@ export class EarthSolarOrbital implements SolarEventModel {
 
   static planet(
     center: STAR = EarthSolarOrbital.sun,
-    options: EarthSolarOrbitalOptions = {},
+    options: EarthSolarOrbitalPlanetOptions = {},
   ): PLANET {
-    const { body, ...orbitalOptions } = options
+    const { body, ...orbitalOptions } = earthSolarOrbitalOptionsOf(options)
     return placePlanet({
       body,
       center,
@@ -379,4 +386,13 @@ export class EarthSolarOrbital implements SolarEventModel {
     }
     return Math.round(at)
   }
+}
+
+function earthSolarOrbitalOptionsOf(
+  options: EarthSolarOrbitalPlanetOptions,
+): EarthSolarOrbitalOptions {
+  if ('orbital' in options) {
+    return { body: options.body, periodMsec: options.orbital[0], epochMsec: options.orbital[1] }
+  }
+  return options
 }

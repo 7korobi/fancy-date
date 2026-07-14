@@ -216,6 +216,7 @@ export type {
   JupiterSolarOrbitalOptions,
   KeplerianSolarOrbitalOptions,
   MarsSolarOrbitalOptions,
+  MarsSolarOrbitalPlanetOptions,
   MeanPlanetSolarOrbitalOptions,
   MeanPlanetSolarOrbitalPlanetOptions,
   MercurySolarOrbitalOptions,
