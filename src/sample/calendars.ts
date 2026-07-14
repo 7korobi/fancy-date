@@ -7,6 +7,8 @@ import { setMayaLongCountBase } from './derived/maya'
 import {
   バビロニア月名,
   バビロニア月名かな,
+  タイ太陰月名,
+  タイ太陰月名RTGS,
   ロムルス月ラベル数値,
   ロムルス月ラベルラテン語,
   ローマ時法分,
@@ -19,6 +21,7 @@ import {
 import {
   Alexandria,
   Babylon,
+  Bangkok,
   Cairo,
   Istanbul,
   London,
@@ -182,6 +185,20 @@ const アマンタティティ = new FancyDate(アマンタ, (c) =>
 )
 const プールニマンタティティ = new FancyDate(プールニマンタ, (c) =>
   c.spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3]).dayStart('sunrise').assign({ d: tithi() }),
+)
+
+// タイ太陰太陽暦の近似サンプル。
+// 実際のタイ暦は、7月への加日(อธิกวาร)や8月の重複(อธิกมาส)を
+// 年ごとの規則/表で扱う必要がある。ここでは既存の平均太陰太陽モデルに
+// Bangkok 地点・仏暦年・タイ式の太陰月名を載せる初期サポートに留める。
+const タイ太陰太陽暦 = new FancyDate(アマンタ, (c) =>
+  c
+    .spot(...Bangkok)
+    .era('พ.ศ.', 'ก่อน พ.ศ.')
+    .calendar(['2513-11-25', 'y-M-d', 0])
+    .notation({
+      M: [タイ太陰月名, タイ太陰月名RTGS],
+    }),
 )
 
 // 和暦の日付(d)は最大30日(旧暦の大の月)。漢字表現(do)・日付のふりがな
@@ -587,6 +604,7 @@ export const Calendar = {
   プールニマンタ,
   アマンタティティ,
   プールニマンタティティ,
+  タイ太陰太陽暦,
   平気法,
   定気法,
   Romulus,

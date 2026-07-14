@@ -6,6 +6,8 @@
 export {
   エジプト月名,
   コプト月名,
+  タイ太陰月名,
+  タイ太陰月名RTGS,
   マヤツォルキン,
   マヤハアブ,
   マヤハアブ日,
@@ -66,6 +68,7 @@ export {
 
 export {
   Alexandria,
+  Bangkok,
   Cairo,
   Jaypore,
   London,

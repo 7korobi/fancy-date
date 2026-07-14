@@ -69,6 +69,7 @@ const am = Calendar.アマンタ
 const pm = Calendar.プールニマンタ
 const amTithi = Calendar.アマンタティティ
 const pmTithi = Calendar.プールニマンタティティ
+const thai = Calendar.タイ太陰太陽暦
 const b = Calendar.Beat
 const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
@@ -1097,6 +1098,12 @@ describe('Gregorian', () => {
       const [source, format, epoch] = calendar.dic.start
       expect(calendar.format(epoch, format)).toBe(source)
     }
+  })
+
+  test('Thai lunisolar sample uses Buddhist Era year and Thai lunar month labels', () => {
+    const [source, format, epoch] = thai.dic.start
+    expect(thai.format(epoch, format)).toBe(source)
+    expect(thai.format(Date.UTC(2024, 0, 1), 'Gy年Mo d日(dC7)')).toContain('พ.ศ.2567年เดือน')
   })
 
   test('Japanese lunisolar anchors use the raw year token for calibration', () => {

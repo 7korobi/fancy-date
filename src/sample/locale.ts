@@ -224,6 +224,36 @@ export const 時鐘かな = [
   'よるよつ',
 ] as const
 
+export const タイ太陰月名 = [
+  'เดือนอ้าย',
+  'เดือนยี่',
+  'เดือน ๓',
+  'เดือน ๔',
+  'เดือน ๕',
+  'เดือน ๖',
+  'เดือน ๗',
+  'เดือน ๘',
+  'เดือน ๙',
+  'เดือน ๑๐',
+  'เดือน ๑๑',
+  'เดือน ๑๒',
+] as const
+
+export const タイ太陰月名RTGS = [
+  'duean ai',
+  'duean yi',
+  'duean sam',
+  'duean si',
+  'duean ha',
+  'duean hok',
+  'duean chet',
+  'duean paet',
+  'duean kao',
+  'duean sip',
+  'duean sip et',
+  'duean sip song',
+] as const
+
 /**
  * ロムルス暦の月ラベル。伝統的なロムルス暦は10ヶ月(304日)だけを暦月とし、
  * 残りの約61日は暦に属さない「冬籠もりのための暦外期間」だったとされる
