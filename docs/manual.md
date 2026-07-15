@@ -34,6 +34,7 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
 | `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
 | `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
+| `periods([from, to], { step })`          | 指定 step の `Tempo` 範囲を列挙する       |
 | `labels(labels)`                         | span の fallback 単位表記を差し替える     |
 | `numeral(numeral)`                       | 数値表記辞書を差し替える                  |
 

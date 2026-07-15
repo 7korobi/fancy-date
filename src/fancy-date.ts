@@ -294,6 +294,8 @@ export type SteppableTempoKey = {
   [K in keyof Tempos]: Tempos[K] extends TempoLike | undefined ? K : never
 }[keyof Tempos]
 export type FindOptions = { step?: SteppableTempoKey; order?: FindOrder; limit?: number }
+export type PeriodsOptions = Required<Pick<FindOptions, 'step'>> &
+  Pick<FindOptions, 'order' | 'limit'>
 export type SpanPart = {
   token: Token
   unit: Unit
@@ -2070,7 +2072,7 @@ export class FancyDate {
     return interval.last_at + Math.min(Math.max(0, since), Math.max(0, interval.size - 1))
   }
 
-  find(between: FindBetween, conditions: readonly FindCondition[], options: FindOptions = {}) {
+  private find_range(between: FindBetween) {
     const [fromLike, toLike] = between
     const from = this.to_utc(fromLike)
     const to = this.to_utc(toLike)
@@ -2082,17 +2084,37 @@ export class FancyDate {
     if (from == null || to == null || Number.isNaN(from) || Number.isNaN(to) || from >= to) {
       throw new Error(`invalid range ${from}..${to}`)
     }
+    return [from, to] as const
+  }
+
+  find(between: FindBetween, conditions: readonly FindCondition[], options: FindOptions = {}) {
+    this.find_range(between)
     if (!conditions.length) {
       throw new Error('find requires conditions')
     }
+    const unit = options.step ?? this.infer_find_step(conditions)
+    return this.find_tempos(between, { ...options, step: unit }, (tempo) =>
+      conditions.every((condition) => this.match_find_condition(tempo.last_at, condition)),
+    ).map((tempo) => tempo.last_at)
+  }
+
+  periods(between: FindBetween, options: PeriodsOptions) {
+    return this.find_tempos(between, options)
+  }
+
+  private find_tempos(
+    between: FindBetween,
+    options: PeriodsOptions,
+    accept: (tempo: TempoLike) => boolean = () => true,
+  ) {
+    const [from, to] = this.find_range(between)
     if (options.limit != null && (!Number.isInteger(options.limit) || options.limit < 0)) {
       throw new Error(`invalid limit ${options.limit}`)
     }
     if (!Number.isFinite(to - from) && options.limit == null) {
       throw new Error('unbounded find requires limit')
     }
-
-    const unit = options.step ?? this.infer_find_step(conditions)
+    const unit = options.step
     const order = options.order ?? 1
     if (order !== 1 && order !== -1) {
       throw new Error(`invalid order ${order}`)
@@ -2107,15 +2129,15 @@ export class FancyDate {
       throw new Error(`invalid unit ${String(unit)}`)
     }
 
-    const list: number[] = []
+    const list: TempoLike[] = []
     if (order === 1) {
       let tempo = first
       if (tempo.last_at < from) {
         tempo = tempo.succ()
       }
       while (tempo.last_at < to && list.length < limit) {
-        if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
-          list.push(tempo.last_at)
+        if (accept(tempo)) {
+          list.push(tempo)
         }
         tempo = tempo.succ()
       }
@@ -2125,8 +2147,8 @@ export class FancyDate {
         tempo = tempo.back()
       }
       while (from <= tempo.last_at && list.length < limit) {
-        if (conditions.every((condition) => this.match_find_condition(tempo.last_at, condition))) {
-          list.push(tempo.last_at)
+        if (accept(tempo)) {
+          list.push(tempo)
         }
         tempo = tempo.back()
       }

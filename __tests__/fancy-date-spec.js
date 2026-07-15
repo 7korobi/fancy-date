@@ -502,6 +502,47 @@ describe('Gregorio calculate', () => {
     ])
   })
 
+  test('periods enumerates tempo ranges with the same stepping rules as find', () => {
+    const month = g.to_tempos(g.parse('2020年3月15日')).M
+    const days = g.periods([month.last_at, month.next_at], { step: 'd' })
+    expect(days.map((day) => g.format(day.last_at, 'yyyy年MM月dd日'))).toEqual([
+      '2020年03月01日',
+      '2020年03月02日',
+      '2020年03月03日',
+      '2020年03月04日',
+      '2020年03月05日',
+      '2020年03月06日',
+      '2020年03月07日',
+      '2020年03月08日',
+      '2020年03月09日',
+      '2020年03月10日',
+      '2020年03月11日',
+      '2020年03月12日',
+      '2020年03月13日',
+      '2020年03月14日',
+      '2020年03月15日',
+      '2020年03月16日',
+      '2020年03月17日',
+      '2020年03月18日',
+      '2020年03月19日',
+      '2020年03月20日',
+      '2020年03月21日',
+      '2020年03月22日',
+      '2020年03月23日',
+      '2020年03月24日',
+      '2020年03月25日',
+      '2020年03月26日',
+      '2020年03月27日',
+      '2020年03月28日',
+      '2020年03月29日',
+      '2020年03月30日',
+      '2020年03月31日',
+    ])
+
+    const found = g.find([month.last_at, month.next_at], [{ d: /\d+/ }], { step: 'd' })
+    expect(days.map((day) => day.last_at)).toEqual(found)
+  })
+
   // is_table_leap(SolarTable)の u は table.msec.year.length === dic.p.length
   // という不変条件により、絶対原点(calc.zero.period)を直接 zero にすれば
   // TableTempoRule 自身の周期またぎ処理だけで絶対年が求まる。以前は

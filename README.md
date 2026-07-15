@@ -73,12 +73,16 @@ g.sub(to, '1年2ヶ月9日4時間5分後')
 ### find
 
 `find([from, to], conditions)` は範囲内で条件に合う暦境界を探す。探索 step は条件から推定される。
+`periods([from, to], { step })` は同じ探索規則で、指定 step の `Tempo` 範囲を列挙する。
 
 ```ts
 const between = [g.parse('2020年1月1日'), g.parse('2020年3月1日')]
 
 g.find(between, [{ dC60o: '甲子' }]).map((utc) => g.format(utc, 'yyyy年MM月dd日 dC60o'))
 // ['2020年01月22日 甲子']
+
+g.periods(between, { step: 'M' }).map((month) => g.format(month.last_at, 'yyyy年MM月'))
+// ['2020年01月', '2020年02月']
 ```
 
 `note` 条件は `note()` の表示名から探す。正規表現も使える。
