@@ -70,6 +70,9 @@ type FormatPart = {
   text: string
   ruby?: string
 }
+
+type RichPart = { text: string; ruby?: string }
+type RichText<Part extends RichPart = RichPart> = readonly Part[]
 ```
 
 入力は `format(utc, fmt)` と同じ `DateLike` と format 文字列。`format` を省略した場合は
@@ -89,6 +92,9 @@ part として返るが、`token` は `''` になる。
 `ruby` は「この token の本文に添える読み」がある場合だけ入る。`dC60r` や `Er` のような
 `r` suffix は、読みそのものを表示する token なので、`{ token: 'dC60r', text: '...' }` となり
 `ruby` は付かない。
+
+`Span.parts` も `RichText<SpanPart>` として扱える。`SpanPart` は既存互換の `label` に加えて
+共通描画用の `text` を持ち、通常は `text === label` になる。
 
 ```ts
 g.format_parts(utc, 'Gy年MM月dd日(E) dC60o dC60r')

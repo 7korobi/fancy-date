@@ -70,6 +70,7 @@ const pm = Calendar.プールニマンタ
 const amTithi = Calendar.アマンタティティ
 const pmTithi = Calendar.プールニマンタティティ
 const thai = Calendar.タイ太陰太陽暦
+const thaiAstro = Calendar.タイ太陰太陽暦天文
 const b = Calendar.Beat
 const mg = Calendar.MarsGregorian
 const jg = Calendar.Jupiter
@@ -412,8 +413,15 @@ describe('Gregorio calculate', () => {
     )
     expect(span.label).toBe('2年3ヶ月後')
     expect(span.parts).toEqual([
-      { token: 'y', unit: 'year', value: -2, label: '2年', ruby: 'にねん' },
-      { token: 'M', unit: 'month', value: -3, label: '3ヶ月', ruby: 'さんかげつ' },
+      { token: 'y', unit: 'year', value: -2, label: '2年', text: '2年', ruby: 'にねん' },
+      {
+        token: 'M',
+        unit: 'month',
+        value: -3,
+        label: '3ヶ月',
+        text: '3ヶ月',
+        ruby: 'さんかげつ',
+      },
     ])
   })
 
@@ -1160,6 +1168,14 @@ describe('Gregorian', () => {
     const [source, format, epoch] = thai.dic.start
     expect(thai.format(epoch, format)).toBe(source)
     expect(thai.format(Date.UTC(2024, 0, 1), 'Gy年Mo d日(dC7)')).toContain('พ.ศ.2567年เดือน')
+  })
+
+  test('Thai astronomical lunisolar variant uses Bangkok true moon and custom BE year resolver', () => {
+    const [source, format, epoch] = thaiAstro.dic.start
+    expect(thaiAstro.format(epoch, format)).toBe(source)
+    expect(thaiAstro.dic.observed_lunisolar).toBe(true)
+    expect(thaiAstro.format(epoch, format)).not.toBe(thai.format(epoch, format))
+    expect(thaiAstro.format(Date.UTC(2024, 6, 15), 'Gy年Mo d日(dC7)')).toContain('พ.ศ.2567年เดือน')
   })
 
   test('Japanese lunisolar anchors use the raw year token for calibration', () => {

@@ -187,15 +187,35 @@ const プールニマンタティティ = new FancyDate(プールニマンタ, (
   c.spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3]).dayStart('sunrise').assign({ d: tithi() }),
 )
 
-// タイ太陰太陽暦の近似サンプル。
-// 実際のタイ暦は、7月への加日(อธิกวาร)や8月の重複(อธิกมาส)を
-// 年ごとの規則/表で扱う必要がある。ここでは既存の平均太陰太陽モデルに
-// Bangkok 地点・仏暦年・タイ式の太陰月名を載せる初期サポートに留める。
+const BangkokTimezoneMsec = (Bangkok[3] / 360) * 24 * 60 * 60 * 1000
+const thai_lunar_buddhist_year = (at: number) => {
+  const local = new Date(at + BangkokTimezoneMsec)
+  return local.getUTCFullYear() + (10 <= local.getUTCMonth() ? 544 : 543)
+}
+
+// タイ太陰太陽暦の平均モデルサンプル。
+// 実際の官暦では7月への加日(อธิกวาร)や8月の重複(อธิกมาส)を年ごとの
+// 規則/表で扱う必要がある。既存名は互換のため平均モデルとして残し、
+// Bangkok/天文月へ寄せた精密版は下の タイ太陰太陽暦天文 に分ける。
 const タイ太陰太陽暦 = new FancyDate(アマンタ, (c) =>
   c
     .spot(...Bangkok)
     .era('พ.ศ.', 'ก่อน พ.ศ.')
     .calendar(['2513-11-25', 'y-M-d', 0])
+    .notation({
+      M: [タイ太陰月名, タイ太陰月名RTGS],
+    }),
+)
+
+// タイ太陰太陽暦の天文近似サンプル。
+// 月境界と中気を Bangkok 地点の天文月へ寄せる。タイ官暦の不規則な
+// 閏月/加日表そのものではなく、観測太陰太陽暦としての精密化を試す版。
+const タイ太陰太陽暦天文 = new FancyDate(アマンタ, (c) =>
+  c
+    .spot(天文月, Bangkok[1], Bangkok[2], Bangkok[3])
+    .era('พ.ศ.', 'ก่อน พ.ศ.')
+    .calendar(['2512-11-24', 'y-M-d', 0])
+    .observedLunisolar({ solarYear: thai_lunar_buddhist_year })
     .notation({
       M: [タイ太陰月名, タイ太陰月名RTGS],
     }),
@@ -605,6 +625,7 @@ export const Calendar = {
   アマンタティティ,
   プールニマンタティティ,
   タイ太陰太陽暦,
+  タイ太陰太陽暦天文,
   平気法,
   定気法,
   Romulus,

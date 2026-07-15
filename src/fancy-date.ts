@@ -296,23 +296,27 @@ export type SteppableTempoKey = {
 export type FindOptions = { step?: SteppableTempoKey; order?: FindOrder; limit?: number }
 export type PeriodsOptions = Required<Pick<FindOptions, 'step'>> &
   Pick<FindOptions, 'order' | 'limit'>
-export type SpanPart = {
+export type RichPart = {
+  text: string
+  ruby?: string
+}
+export type RichText<Part extends RichPart = RichPart> = readonly Part[]
+export type SpanPart = RichPart & {
   token: Token
   unit: Unit
   value: number
   label: string
-  ruby?: string
 }
-export type SpanPartLike = SpanPart | Omit<SpanPart, 'token'>
+export type SpanPartLike = SpanPart | (Omit<SpanPart, 'token' | 'text'> & { text?: string })
 export type Span = {
   unit: Unit
   value: number
   label: string
-  parts?: readonly SpanPart[]
+  parts?: RichText<SpanPart>
   next_at?: number
   timeout?: number
 }
-export type FormatPart = {
+export type FormatPart = RichPart & {
   /** 元の format token。リテラル片は空文字。例: 'yyyy', 'E', 'dC60o', ''。 */
   token: string
   /** この part が `format()` の出力へ寄与する文字列。全 part の text 連結は format() と一致する。 */
@@ -637,9 +641,14 @@ type IDIC = IIDX & {
   assignments: AssignmentOptions
   is_dusk: boolean
   observed_lunisolar?: boolean
+  observed_lunisolar_solar_year?: LunisolarYearResolver
 }
 export type DivisionOptions = {
   H?: false | 'equal' | 'solar'
+}
+export type LunisolarYearResolver = (at: number) => number
+export type ObservedLunisolarOptions = {
+  solarYear?: LunisolarYearResolver
 }
 type LocaleNumeralRef = Numeral | NumeralPurpose | null | undefined
 export type LocaleApplyOptions = {
@@ -1182,8 +1191,11 @@ export class FancyDate {
     return this
   }
 
-  observedLunisolar(enabled = true) {
+  observedLunisolar(options: boolean | ObservedLunisolarOptions = true) {
+    const enabled = typeof options === 'boolean' ? options : true
     this.dic.observed_lunisolar = enabled
+    this.dic.observed_lunisolar_solar_year =
+      enabled && typeof options === 'object' ? options.solarYear : undefined
     this._lunisolar_cache.length = 0
     return this
   }
@@ -1417,9 +1429,11 @@ export class FancyDate {
         moony: this.dic.moony,
         solarPeriodMsec: this.dic.sunny.periodMsec,
         principalTermCount: this.dic.M.length || 12,
-        solarYear: this.dic.observed_lunisolar
-          ? (at) => to_tempo_bare(this.calc.msec.year, this.calc.zero.season, at).now_idx
-          : undefined,
+        solarYear:
+          this.dic.observed_lunisolar_solar_year ??
+          (this.dic.observed_lunisolar
+            ? (at) => to_tempo_bare(this.calc.msec.year, this.calc.zero.season, at).now_idx
+            : undefined),
         geo: this.dic.geo,
         dayMsec: this.calc.msec.day,
         dayZero: this.calc.zero.day,
@@ -1581,19 +1595,23 @@ export class FancyDate {
   private format_span_parts(parts: readonly SpanPart[], direction?: SpanDirection): Span {
     const activeParts = parts
       .filter(({ value }) => value)
-      .map((part) => ({
-        ...part,
-        label: this.span_part_label(
+      .map((part) => {
+        const label = this.span_part_label(
           part.token,
           Math.abs(part.value),
           this.span_part_fallback_unit(part.token),
-        ),
-        ruby: this.span_part_ruby(
-          part.token,
-          Math.abs(part.value),
-          this.span_part_fallback_unit(part.token),
-        ),
-      }))
+        )
+        return {
+          ...part,
+          label,
+          text: label,
+          ruby: this.span_part_ruby(
+            part.token,
+            Math.abs(part.value),
+            this.span_part_fallback_unit(part.token),
+          ),
+        }
+      })
     if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
     const primary = activeParts[0]
     const signs = new Set(activeParts.map(({ value }) => (value < 0 ? '後' : '前')))
@@ -1619,7 +1637,8 @@ export class FancyDate {
   }
 
   private normalize_span_part(part: SpanPartLike): SpanPart {
-    return 'token' in part ? part : { ...part, token: span_unit_token(part.unit) }
+    const normalized = 'token' in part ? part : { ...part, token: span_unit_token(part.unit) }
+    return { ...normalized, text: normalized.text ?? normalized.label }
   }
 
   private invert_span(span: SpanLike): readonly SpanPart[] {
@@ -1628,6 +1647,7 @@ export class FancyDate {
       unit,
       value: 0 - value,
       label,
+      text: label,
     }))
   }
 
@@ -1643,6 +1663,7 @@ export class FancyDate {
         unit: this.span_part_unit(token),
         value: (current?.value ?? 0) + part.value,
         label: '',
+        text: '',
       })
     }
     let index = 0
@@ -1678,7 +1699,7 @@ export class FancyDate {
     const accept = (token: Token, unit: Unit, count: number, label: string) => {
       if (!label) return
       if (best && best.label.length >= label.length) return
-      best = { token, unit, value: count * sign, label }
+      best = { token, unit, value: count * sign, label, text: label }
     }
     const rows = this.span_parse_rows()
     for (const [token, unit, fallbackUnit] of rows) {
@@ -2344,11 +2365,13 @@ export class FancyDate {
       .map(([token, unit, fallbackUnit], index) => {
         const count = Math.abs(diffs[index])
         const unitLabel = this.dic.labels[token] ?? fallbackUnit
+        const label = this.span_part_label(token, count, unitLabel)
         return {
           token,
           unit,
           value: diffs[index] * sign,
-          label: this.span_part_label(token, count, unitLabel),
+          label,
+          text: label,
         }
       })
       .filter(({ value }) => value)
@@ -2420,7 +2443,9 @@ export class FancyDate {
         value,
         label: this.span_part_label(token, Math.abs(value), this.span_part_fallback_unit(token)),
       },
-    ].filter(({ value }) => value)
+    ]
+      .map((part) => ({ ...part, text: part.label }))
+      .filter(({ value }) => value)
   }
 
   private span_part_unit(token: Token): Unit {
