@@ -32,6 +32,7 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `span_add(left, right)`                  | span 同士を token ごとに足す              |
 | `span_sub(left, right)`                  | span 同士を token ごとに引く              |
 | `span_neg(span)`                         | span の向きを反転する                     |
+| `span_from_labels(token, from, to)`      | 連続cycleのラベル差をSpanへ変換する       |
 | `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
 | `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
 | `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
@@ -291,9 +292,19 @@ g.span_add('1ヶ月後', '31日前').label
 
 custom.format_span_parts({ y: 1, M: 2 })
 // [{ text: '1年' }, { text: '2ヶ月' }, { text: '後' }]
+
+custom.span_from_labels('dC60', '甲子', '乙丑')
+// { d: 1, label: '1日後' }
 ```
 
 `span_add()` / `span_sub()` は symbolic な演算で、同じtokenだけを相殺する。月と日のような異なるtoken間の繰り上げ・相殺は行わない。演算後のspanは `msec` anchorを失い、`at` が残っていれば `span_msec()` がその時点から再計算する。
+
+`span_from_labels()` は `yC<number>` / `dC<number>` とそのaliasのような不断cycleだけを受ける。
+ラベル差をcycle上の順方向の非負ステップとして計算し、年cycleは `y`、日cycleは `d` の
+代表Spanへ変換する。これは実時刻差を測定するAPIではないため、結果にanchorは付かない。
+同じラベルは `今` (差分0) になる。実際の次回・前回の一致時刻や、閏月・不定時法を含む
+厳密な差分が必要な場合は `find_span()` を使う。`R6` / `LM27` / `Q` のような不断でない
+ラベルは、ラベル差だけからSpanへ変換できないためinvalidになる。
 
 循環token・暦注tokenを `precise` に指定した `span_obj()` は、再適用できない `SpanMeasure` を返す。
 

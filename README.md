@@ -139,6 +139,9 @@ g.span_add('1ヶ月後', '31日前').label
 
 custom.format_span_parts({ y: 1, M: 2 })
 // [{ text: '1年' }, { text: '2ヶ月' }, { text: '後' }]
+
+custom.span_from_labels('dC60', '甲子', '乙丑')
+// { d: 1, label: '1日後' }
 ```
 
 `labels()` は fallback の単位表記を差し替える。`notation()` の第3要素で token ごとの相対表現を定義している場合は、そちらが優先される。`algo()` は互換 alias として残している。

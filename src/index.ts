@@ -201,6 +201,7 @@ export type {
   Precision,
   SpanLabels,
   SpanDirection,
+  ContinuousSpanToken,
   FindOrder,
   FindSpanOrder,
   FindSpanBase,

@@ -643,6 +643,24 @@ describe('Gregorio calculate', () => {
     }
   })
 
+  test('span_from_labels makes positive symbolic spans only for continuous cycles', () => {
+    const next = g.span_from_labels('dC60', '甲子', '乙丑')
+    expect(next).toMatchObject({ d: 1, label: '1日後' })
+    const jiazi = g.parse('2020年1月22日')
+    expect(g.format(g.add(jiazi, next), 'dC60o')).toBe('乙丑')
+
+    const wrapped = g.span_from_labels('dC60', '乙丑', '甲子')
+    expect(wrapped).toMatchObject({ d: 59, label: '59日後' })
+
+    expect(g.span_from_labels('dC60', '甲子', '甲子')).toMatchObject({ label: '今' })
+    expect(() => g.span_from_labels('R6', '先勝', '友引')).toThrow(
+      /invalid continuous span token R6/,
+    )
+    expect(() => g.span_from_labels('LM27', '張', '角')).toThrow(
+      /invalid continuous span token LM27/,
+    )
+  })
+
   // cyclic_label() が親の実区間(last_at/next_at)をそのまま流用していることを確認する
   // (now_idx だけを差し替えたラベルであり、独自の区間を持つわけではない)。
   test('cyclic label tokens (Y/yC60/yC12/yC10/yC9/Q) honestly expose the parent envelope span', () => {

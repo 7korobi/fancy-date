@@ -277,6 +277,22 @@ const legacy_token_aliases = {
 } as const
 type LegacyTokenAlias = keyof typeof legacy_token_aliases
 type AnyDicToken = ALL_DIC | LegacyTokenAlias
+export type ContinuousSpanToken =
+  | YearCycleToken
+  | DayCycleToken
+  | 'yC'
+  | 'yCS'
+  | 'yCB'
+  | 'dC'
+  | 'dCS'
+  | 'dCB'
+  | 'a'
+  | 'c'
+  | 'b'
+  | 'A'
+  | 'C'
+  | 'B'
+  | 'dCLM'
 export type Token = ALL_DIC | 'Zz' | LegacyTokenAlias
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
@@ -484,6 +500,10 @@ function is_day_cycle_token(token: string): token is DayCycleToken {
 
 function is_calendar_note_token(token: string): token is CalendarNoteToken {
   return (calendar_note_tokens as readonly string[]).includes(token)
+}
+
+function is_continuous_cycle_token(token: string): token is YearCycleToken | DayCycleToken {
+  return is_year_cycle_token(token) || is_day_cycle_token(token)
 }
 
 function token_base(token: Token): ALL_DIC | 'Zz' {
@@ -1584,6 +1604,32 @@ export class FancyDate {
     const result = this.format_span_diff(this.merge_span_diff(left, this.invert_span_diff(right)))
     const at = this.merge_span_anchor_at(left, right)
     return at == null ? result : this.with_span_anchor_at(at, result)
+  }
+
+  /**
+   * 連続cycleの2ラベル間を順方向に進む代表Spanを返す。
+   * 実時刻差ではなく、cycleの1ステップを対応する年/日の1単位として扱う。
+   */
+  span_from_labels(token: ContinuousSpanToken, from: string, to: string): Span {
+    const canonical = canonical_token(token)
+    if (!is_continuous_cycle_token(canonical)) {
+      throw new Error(`invalid continuous span token ${token}`)
+    }
+    const indexer = this.dic[canonical]
+    const length = indexer.length
+    if (!Number.isInteger(length) || length <= 0) {
+      throw new Error(`invalid continuous span token ${token}`)
+    }
+    const index_of = (label: string) => {
+      const index = indexer.to_idx(label)
+      if (!Number.isInteger(index) || index < 0 || length <= index) {
+        throw new Error(`invalid ${token} label ${label}`)
+      }
+      return index
+    }
+    const value = mod(index_of(to) - index_of(from), length)
+    const base: SpanToken = is_year_cycle_token(canonical) ? 'y' : 'd'
+    return this.format_span_diff({ [base]: value })
   }
 
   span_msec(span: SpanLike, options: SpanMsecOptions = {}) {
