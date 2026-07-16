@@ -301,7 +301,7 @@ export type RichPart = {
   ruby?: string
 }
 export type RichText<Part extends RichPart = RichPart> = readonly Part[]
-const span_tokens = ['y', 'M', 'd', 'H', 'm', 's', 'S', 'w', 'D'] as const
+const span_tokens = ['y', 'M', 'w', 'd', 'H', 'm', 's', 'S'] as const
 export type SpanToken = (typeof span_tokens)[number]
 export type SpanDiff = Partial<Record<SpanToken, number>>
 type SpanDisplay = {
@@ -329,12 +329,12 @@ export type SpanOptions = {
   precise?: boolean | Precision
   at?: DateLike
 }
-export type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y'>
+export type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y' | 'D'>
 export type SpanMeasureOptions = Omit<SpanOptions, 'precise'> & {
   precise: SpanMeasurePrecision
 }
 export type SpanAddOptions = Omit<SpanOptions, 'precise'> & {
-  precise?: boolean | SpanToken | 'Y'
+  precise?: boolean | SpanToken | 'Y' | 'D'
 }
 export type ParseSpanOptions = {
   at?: DateLike
@@ -370,7 +370,6 @@ type SpanTarget = {
   changedRank: number
   near: number
   week?: number
-  sourceDayOfYear: number
   sourceWeekSince: number
   sourceDaySince: number
   sourceHourSince: number
@@ -1616,18 +1615,7 @@ export class FancyDate {
       components.push(component)
       rest = rest.slice(component.length)
     }
-    return {
-      diff: this.components_to_span_diff(this.disambiguate_span_components(components)),
-      direction,
-    }
-  }
-
-  private disambiguate_span_components<Part extends SpanComponent>(parts: Part[]): Part[] {
-    if (this.span_part_fallback_unit('d') !== this.span_part_fallback_unit('D')) return parts
-    const hasYear = parts.some(({ token }) => token === 'y')
-    const hasMonth = parts.some(({ token }) => token === 'M')
-    if (!hasYear || hasMonth) return parts
-    return parts.map((part) => (part.token === 'd' ? { ...part, token: 'D' } : part)) as Part[]
+    return { diff: this.components_to_span_diff(components), direction }
   }
 
   private components_to_span_diff(parts: readonly SpanComponent[]): SpanDiff {
@@ -1698,7 +1686,7 @@ export class FancyDate {
   }
 
   private format_span_measure(
-    precision: Exclude<Precision, SpanToken | 'Y'>,
+    precision: SpanMeasurePrecision,
     value: number,
     direction?: SpanDirection,
   ): SpanMeasure {
@@ -1792,22 +1780,19 @@ export class FancyDate {
       M_is_leap: source.M.is_leap,
       changedRank: -1,
       near: utc,
-      sourceDayOfYear: source.D.now_idx,
       sourceWeekSince: source.w.since,
       sourceDaySince: source.d.since,
       sourceHourSince: source.H.since,
       sourceMinuteSince: source.m.since,
       sourceSecondSince: source.s.since,
     }
+    const resolvePendingWeek = () => {
+      if (target.week == null) return
+      this.resolve_span_week_target(target)
+      delete target.week
+    }
     for (const { token, value: amount } of this.span_diff_entries(diff)) {
-      if ('D' === token) {
-        target.M = 0
-        target.M_is_leap = false
-        target.d = target.sourceDayOfYear + amount
-        target.changedRank = Math.max(target.changedRank, span_rank('d'))
-        target.near += amount * this.unit_msec('day')
-        continue
-      }
+      if (target.week != null && token !== 'w') resolvePendingWeek()
       if ('w' === token) {
         target.week = (target.week ?? source.w.now_idx) + amount
         target.changedRank = Math.max(target.changedRank, span_rank('d'))
@@ -1842,7 +1827,7 @@ export class FancyDate {
       target.near += amount * this.unit_msec(this.span_part_unit(token))
     }
     this.normalize_span_target(target)
-    this.resolve_span_week_target(target)
+    resolvePendingWeek()
     return target
   }
 
@@ -2352,8 +2337,8 @@ export class FancyDate {
     )
   }
 
-  private is_addable_span_precision(precision: Precision): precision is SpanToken | 'Y' {
-    return precision === 'Y' || is_span_token(precision)
+  private is_addable_span_precision(precision: Precision): precision is SpanToken | 'Y' | 'D' {
+    return precision === 'Y' || precision === 'D' || is_span_token(precision)
   }
 
   private next_precise_span_at(at: number, precision: Precision) {
@@ -2365,7 +2350,7 @@ export class FancyDate {
     return token ? this.to_tempos(at)[token]?.next_at : undefined
   }
 
-  private span_diff(from: number, to: number, precision: SpanToken | 'Y'): SpanDiff {
+  private span_diff(from: number, to: number, precision: SpanToken | 'Y' | 'D'): SpanDiff {
     const [earlier, later] = from <= to ? [from, to] : [to, from]
     const sign = from <= to ? -1 : 1
     const earlierTempos = this.to_tempos(earlier)
@@ -2378,6 +2363,12 @@ export class FancyDate {
       if (0 <= diffs[index] || !Number.isFinite(rows[index][5])) continue
       diffs[index] += rows[index][5]
       diffs[index - 1]--
+    }
+    if (precision === 'D') {
+      const y = diffs[0] * sign
+      const shifted = y ? this.add_span(to, { y }) : to
+      const d = this.to_tempos(from).D.now_idx - this.to_tempos(shifted).D.now_idx
+      return this.normalize_span_diff({ y, d })
     }
     return this.components_to_span_diff(
       rows
@@ -2445,7 +2436,7 @@ export class FancyDate {
     return undefined
   }
 
-  private span_measure_value(from: number, to: number, token: Exclude<Precision, SpanToken | 'Y'>) {
+  private span_measure_value(from: number, to: number, token: SpanMeasurePrecision) {
     const base = token_base(token)
     const fromTempo = this.to_tempos(from)[base]
     const toTempo = this.to_tempos(to)[base]

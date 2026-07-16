@@ -388,6 +388,25 @@ describe('Gregorio calculate', () => {
     ])
   })
 
+  test('Span labels use descending earth-like units and normalize D precision to d', () => {
+    expect(g.format_span({ s: 3, w: 2 }).label).toBe('2週3秒後')
+    const weekBase = g.parse('2024年1月1日')
+    expect(g.add(weekBase, { w: 2, d: 3 })).toBe(g.add(weekBase, { d: 17 }))
+
+    const from = g.parse('2024年3月15日 0時0分0秒', 'y年M月d日 H時m分s秒')
+    const to = g.parse('2025年6月20日 0時0分0秒', 'y年M月d日 H時m分s秒')
+    const span = g.span_obj(to, from, { precise: 'D' })
+    expect(span).toMatchObject({ y: 1 })
+    expect('d' in span).toBe(true)
+    expect('D' in span).toBe(false)
+    expect(g.add(from, span)).toBe(to)
+    expect(() => g.add(from, { D: 1 })).toThrow(/invalid span token D/)
+
+    const backward = g.span_obj(from, to, { precise: 'D' })
+    expect('D' in backward).toBe(false)
+    expect(g.add(to, backward)).toBe(from)
+  })
+
   test('span anchors preserve at/msec for msec conversion', () => {
     const from = g.parse('2024年1月31日')
     const to = g.parse('2024年3月1日')
@@ -1373,7 +1392,8 @@ describe('Gregorian', () => {
   // 上の 'span precise supports week-year and day-of-year hierarchy' は
   // from が1月1日固定のため、日番号(day-of-month)と年内通日(day-of-year)の基準が
   // たまたま一致しており、month をまたいで year もまたぐケースの不具合を検出できていなかった。
-  // D/w 精度は年初基準の座標なので、from の月に関係なく year をまたぐ span を正しく再構成する。
+  // D精度は年初基準で測定してSpanDiffではdへ正規化し、w精度は週年座標を使う。
+  // from の月に関係なくyearをまたぐspanを正しく再構成する。
   test('span add reconstructs D/w precise spans across a year boundary from a non-January source', () => {
     const from = g.parse('2024年3月15日 0時0分0秒', 'y年M月d日 H時m分s秒')
     const to = g.parse('2025年6月20日 0時0分0秒', 'y年M月d日 H時m分s秒')

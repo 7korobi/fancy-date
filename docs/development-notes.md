@@ -6,7 +6,7 @@ fancy-date の開発者向け検討メモ・調査結果・実装ログ。エン
 
 ### format / token / span
 
-- 実装済み: `SpanLike = string | SpanDiff` は加算可能token (`y/M/d/H/m/s/S/w/D`) のみを受ける。`parse_span()` は文字列を正数=未来方向の差分mapへ正規化し、`format_span()` はそこから `label` を導出する。ruby用の列は `Span` に保持せず `format_span_parts()` が `RichText` として都度導出する。`Precision = CorePrecision | Token` なので、`precise` には不断tokenも指定できる。
+- 実装済み: `SpanLike = string | SpanDiff` は加算可能token (`y/M/w/d/H/m/s/S`) のみを受ける。表示順もこの地球的な期間の大きさ順に固定する。`D` は年初通日を使う測定精度として残すが、結果の `SpanDiff` では通常の日数 `d` へ正規化する。`parse_span()` は文字列を正数=未来方向の差分mapへ正規化し、`format_span()` はそこから `label` を導出する。ruby用の列は `Span` に保持せず `format_span_parts()` が `RichText` として都度導出する。`Precision = CorePrecision | Token` なので、`precise` には不断tokenも指定できる。
 - 実装済み: 不断token・暦注tokenを `precise` に指定した `span_obj()` は、再適用不能な `SpanMeasure` (`precision/value/label`) を返す。`add()`/`sub()` は `SpanLike` に含まれないため受け付けない。「次の甲子日」などの探索は、周期差の加算ではなく別のfind系APIで扱う。
 - 部分実装: span 同士の symbolic 演算は `span_neg()` / `span_add()` / `span_sub()` で実装済み。同じ token だけを相殺し、異なる token 間の繰り上げ・相殺はしない。残課題は、平均サイズによる lossy な `span_approx()`、anchor 時刻の実暦境界に基づく `span_normalize()`、cyclic token span をどこまで演算対象に含めるかの整理。
 - 採用済み token 命名: `dC<number>` は「日不断の number-cycle」、`yC<number>` は「年不断の number-cycle」を表す正本 token とする。干支系は `dC60/dC10/dC12`・`yC60/yC10/yC12` が正本で、既存の `dC/dCS/dCB`・`yC/yCS/yCB` と `A/C/B/a/c/b` は文化的 alias として残す。ルビは `dC60r` / `dC10r` / `dC12r` / `yC60r` など数値付き token に付く。同じ multi-character token registry で `Ha`=午前午後、`da`=paksha のような派生 token も扱える。

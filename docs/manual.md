@@ -256,15 +256,15 @@ g.sub(from, { M: 1 })
 ```
 
 ```ts
-type SpanToken = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S' | 'w' | 'D'
+type SpanToken = 'y' | 'M' | 'w' | 'd' | 'H' | 'm' | 's' | 'S'
 type SpanDiff = Partial<Record<SpanToken, number>>
 type SpanLike = string | SpanDiff
 type Span = SpanDiff & { label: string; next_at?: number; timeout?: number }
-type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y'>
+type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y' | 'D'>
 type SpanMeasure = { precision: SpanMeasurePrecision; value: number; label: string }
 ```
 
-`w` は週年座標、`D` は年初通日座標として解決する。`Y` はspan計測時には `y` へ正規化される。循環token・暦注tokenは日時加算として曖昧なため、`SpanLike` と `add()` / `sub()` には入らない。
+ラベルは地球的な期間の大きさを受け入れ、`y → M → w → d → H → m → s → S` の順で表示する。`w` は週数。`Y` はspan計測時に `y` へ、`D` は年初通日を使って測定した後に通常の日数 `d` へ正規化される。したがって `D` は `SpanToken` には入らない。循環token・暦注tokenは日時加算として曖昧なため、`SpanLike` と `add()` / `sub()` には入らない。
 
 ## parse_span / format_span / labels
 

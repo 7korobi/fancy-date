@@ -58,7 +58,7 @@ g.span([from, to], { precise: 'w' })
 // '1年10週後'
 ```
 
-`precise` の階層 token は `y/M/d/H/m/s/S` と `Y/w/D`。`w` は週年 `Y` と組になり、`D` は年初からの日番号として `y` と組になる。
+`precise` の階層 token は `y/M/d/H/m/s/S` と `Y/w/D`。`w` は週年 `Y` と組になり、`D` は年初からの日番号として `y` と組になる。ただし `SpanDiff` の表示順は地球的な大きさ順 `y/M/w/d/H/m/s/S` に固定し、`D` 精度の測定結果も通常の日数 `d` へ正規化する。
 
 ```ts
 g.add(from, '1年2ヶ月9日4時間5分後')
