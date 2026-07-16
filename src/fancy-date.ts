@@ -284,6 +284,9 @@ export type Precision = CorePrecision | Token
 export type SpanLabels = Partial<Record<Token, string>>
 export type SpanDirection = '前' | '後'
 export type FindOrder = 1 | -1
+export type FindSpanOrder = FindOrder | 0
+export type FindSpanBase = 'at' | 'match'
+export type FindSpanCondition = FindCondition | readonly FindCondition[]
 /**
  * SteppableTempoKey: Tempos の中で succ()/back() 等の遷移操作を実際に
  * 持つフィールドのキーだけを絞り込んだ型。Y/yC/yCB/yCS/Q は TempoLabelLike
@@ -294,6 +297,11 @@ export type SteppableTempoKey = {
   [K in keyof Tempos]: Tempos[K] extends TempoLike | undefined ? K : never
 }[keyof Tempos]
 export type FindOptions = { step?: SteppableTempoKey; order?: FindOrder; limit?: number }
+export type FindSpanOptions = {
+  step?: SteppableTempoKey
+  order?: FindSpanOrder
+  base?: FindSpanBase
+}
 export type PeriodsOptions = Required<Pick<FindOptions, 'step'>> &
   Pick<FindOptions, 'order' | 'limit'>
 export type RichPart = {
@@ -2114,6 +2122,56 @@ export class FancyDate {
     return this.find_tempos(between, { ...options, step: unit }, (tempo) =>
       conditions.every((condition) => this.match_find_condition(tempo.last_at, condition)),
     ).map((tempo) => tempo.last_at)
+  }
+
+  find_span(
+    at: DateLike,
+    conditions: FindSpanCondition,
+    options: FindSpanOptions = {},
+  ): Span | undefined {
+    const atUtc = this.to_utc(at)
+    if (!Number.isFinite(atUtc)) throw new Error(`invalid timestamp ${atUtc}`)
+    const normalizedConditions = Array.isArray(conditions) ? conditions : [conditions]
+    if (!normalizedConditions.length) throw new Error('find_span requires conditions')
+
+    const order = options.order ?? 1
+    if (order !== -1 && order !== 0 && order !== 1) {
+      throw new Error(`invalid order ${order}`)
+    }
+    const base = options.base ?? 'at'
+    if (base !== 'at' && base !== 'match') {
+      throw new Error(`invalid span base ${String(base)}`)
+    }
+    const step = options.step ?? this.infer_find_step(normalizedConditions)
+    const current = this.to_tempos(atUtc)[step] as TempoLike | undefined
+    if (!current || typeof current.next_at !== 'number' || typeof current.last_at !== 'number') {
+      throw new Error(`invalid unit ${String(step)}`)
+    }
+
+    const findSide = (side: FindOrder) => {
+      const range: FindBetween =
+        side === 1 ? [current.next_at, Infinity] : [-Infinity, current.last_at]
+      return this.find(range, normalizedConditions, { step, order: side, limit: 1 })[0]
+    }
+    const future = order === -1 ? undefined : findSide(1)
+    const past = order === 1 ? undefined : findSide(-1)
+    const match =
+      order === 1
+        ? future
+        : order === -1
+          ? past
+          : future == null
+            ? past
+            : past == null
+              ? future
+              : future - atUtc <= atUtc - past
+                ? future
+                : past
+    if (match == null) return undefined
+
+    const target = base === 'at' ? match : atUtc
+    const anchor = base === 'at' ? atUtc : match
+    return this.span_obj(target, anchor) as Span
   }
 
   periods(between: FindBetween, options: PeriodsOptions) {

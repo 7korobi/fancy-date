@@ -35,6 +35,7 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
 | `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
 | `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
+| `find_span(at, condition, options?)`     | 条件に合う次/前の時刻までをSpanで返す     |
 | `periods([from, to], { step })`          | 指定 step の `Tempo` 範囲を列挙する       |
 | `labels(labels)`                         | span の fallback 単位表記を差し替える     |
 | `numeral(numeral)`                       | 数値表記辞書を差し替える                  |
@@ -355,3 +356,32 @@ g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
 | `H/m/s/S`                              | 同じ token |
 
 `note` は現状では日単位で走査する。将来、`note` の辞書から天文現象や節句を直接解釈する場合は、内部でより適した探索方法を選べる。
+
+### find_span
+
+`find_span(at, condition, options?)` は、基準時刻 `at` から条件に合う暦境界を探し、
+その時刻との差を `Span` として返す。条件は `find()` と同じ形式で、単一条件または条件配列を渡せる。
+現在の一致を含めず、次または前の境界を探す。
+
+```ts
+const condition = { dC60o: '甲子' }
+
+const next = g.find_span(g.parse('2020年1月23日'), condition)
+// add(at, next) が次の甲子日になる
+
+const previous = g.find_span(g.parse('2020年1月23日'), condition, { order: -1 })
+// add(at, previous) が前の甲子日になる
+```
+
+`order` は `1` が未来側、`-1` が過去側、`0` が両側を調べた近い側。`order: 0` の距離比較は
+実際のUTCミリ秒差で行い、同距離なら未来側を選ぶ。`base` は `at` が既定で、`match` にすると
+一致時刻をSpanの基準にする。
+
+```ts
+const elapsed = g.find_span(at, condition, { order: -1, base: 'match' })
+// add(previousMatch, elapsed) === at
+```
+
+`base: 'at'` は `add(at, span) === match`、`base: 'match'` は
+`add(match, span) === at` になる。`R6` / `LM27` のような暦注や不断ラベルも、日境界を
+走査して一致時刻を求めるため、同じAPIで扱える。

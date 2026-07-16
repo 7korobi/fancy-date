@@ -605,6 +605,44 @@ describe('Gregorio calculate', () => {
     expect(() => g.find(between, [{ note: /春分|秋分/ }], { step: 'a' })).toThrow(/invalid unit a/)
   })
 
+  test('find_span returns anchored spans for future, past, and nearest matches', () => {
+    const at = g.parse('2020年1月23日')
+    const condition = { dC60o: '甲子' }
+    const futureAt = g.find([at, Infinity], [condition], { step: 'd', limit: 1 })[0]
+    const pastAt = g.find([-Infinity, at], [condition], { step: 'd', order: -1, limit: 1 })[0]
+
+    const future = g.find_span(at, condition)
+    expect(future).toBeDefined()
+    expect(g.add(at, future)).toBe(futureAt)
+
+    const past = g.find_span(at, condition, { order: -1 })
+    expect(past).toBeDefined()
+    expect(g.add(at, past)).toBe(pastAt)
+
+    const fromFuture = g.find_span(at, condition, { base: 'match' })
+    expect(fromFuture).toBeDefined()
+    expect(g.add(futureAt, fromFuture)).toBe(at)
+
+    const fromPast = g.find_span(at, condition, { order: -1, base: 'match' })
+    expect(fromPast).toBeDefined()
+    expect(g.add(pastAt, fromPast)).toBe(at)
+
+    const nearPast = pastAt + Math.floor((futureAt - pastAt) / 4)
+    const nearest = g.find_span(nearPast, condition, { order: 0 })
+    expect(nearest).toBeDefined()
+    expect(g.add(nearPast, nearest)).toBe(pastAt)
+  })
+
+  test('find_span searches derived calendar labels such as R6 and LM27', () => {
+    const at = 平気法.parse('明治9年文月1日 暁九ツ')
+    for (const token of ['R6o', 'LM27o']) {
+      const condition = { [token]: 平気法.format(at, token) }
+      const target = 平気法.find_span(at, condition, { order: 1 })
+      expect(target).toBeDefined()
+      expect(平気法.format(平気法.add(at, target), token)).toBe(condition[token])
+    }
+  })
+
   // cyclic_label() が親の実区間(last_at/next_at)をそのまま流用していることを確認する
   // (now_idx だけを差し替えたラベルであり、独自の区間を持つわけではない)。
   test('cyclic label tokens (Y/yC60/yC12/yC10/yC9/Q) honestly expose the parent envelope span', () => {
