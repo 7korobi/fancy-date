@@ -301,21 +301,22 @@ export type RichPart = {
   ruby?: string
 }
 export type RichText<Part extends RichPart = RichPart> = readonly Part[]
-export type SpanPart = RichPart & {
-  token: Token
-  unit: Unit
-  value: number
+const span_tokens = ['y', 'M', 'd', 'H', 'm', 's', 'S', 'w', 'D'] as const
+export type SpanToken = (typeof span_tokens)[number]
+export type SpanDiff = Partial<Record<SpanToken, number>>
+type SpanDisplay = {
   label: string
-}
-export type SpanPartLike = SpanPart | (Omit<SpanPart, 'token' | 'text'> & { text?: string })
-export type Span = {
-  unit: Unit
-  value: number
-  label: string
-  parts?: RichText<SpanPart>
   next_at?: number
   timeout?: number
 }
+/** add()/sub() へ渡せる、暦座標上の差分と表示結果。正数は未来方向。 */
+export type Span = SpanDiff & SpanDisplay
+/** 加算不能な周期・暦注tokenを precise span として測定した表示結果。 */
+export type SpanMeasure = SpanDisplay & {
+  precision: SpanMeasurePrecision
+  value: number
+}
+export type SpanResult = Span | SpanMeasure
 export type FormatPart = RichPart & {
   /** 元の format token。リテラル片は空文字。例: 'yyyy', 'E', 'dC60o', ''。 */
   token: string
@@ -328,13 +329,24 @@ export type SpanOptions = {
   precise?: boolean | Precision
   at?: DateLike
 }
+export type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y'>
+export type SpanMeasureOptions = Omit<SpanOptions, 'precise'> & {
+  precise: SpanMeasurePrecision
+}
+export type SpanAddOptions = Omit<SpanOptions, 'precise'> & {
+  precise?: boolean | SpanToken | 'Y'
+}
 export type ParseSpanOptions = {
   at?: DateLike
 }
 export type SpanMsecOptions = {
   at?: DateLike
 }
-export type SpanLike = string | Span | SpanPartLike | readonly SpanPartLike[]
+/**
+ * 相対日時加算の入力。文字列表現は parse_span() と同じ文法で解釈され、
+ * オブジェクトは正数を未来方向とする加算可能tokenの差分だけを持つ。
+ */
+export type SpanLike = string | SpanDiff
 const span_anchor = Symbol('span_anchor')
 type SpanAnchor = {
   calendar: FancyDate
@@ -344,6 +356,7 @@ type SpanAnchor = {
 type AnchoredSpan = Span & {
   [span_anchor]?: SpanAnchor
 }
+type SpanComponent = { token: SpanToken; value: number }
 type SpanTarget = {
   u: number
   y: number
@@ -468,6 +481,10 @@ function is_calendar_note_token(token: string): token is CalendarNoteToken {
 
 function token_base(token: Token): ALL_DIC | 'Zz' {
   return canonical_token(token) as ALL_DIC | 'Zz'
+}
+
+function is_span_token(token: string): token is SpanToken {
+  return (span_tokens as readonly string[]).includes(token)
 }
 
 function define_token_alias<T extends Partial<Record<string, unknown>>>(
@@ -1488,7 +1505,7 @@ export class FancyDate {
     return this.to_tempos(this.add(utc, span))
   }
   sub(utc: DateLike, span: SpanLike) {
-    return this.add_span(this.to_utc(utc), this.invert_span(span))
+    return this.add_span(this.to_utc(utc), this.invert_span_diff(span))
   }
   sub_obj(utc: DateLike, span: SpanLike) {
     return this.to_tempos(this.sub(utc, span))
@@ -1496,7 +1513,28 @@ export class FancyDate {
   span(to: DateLike | DateRange, from?: DateLike | SpanOptions, options?: SpanOptions) {
     return this.span_obj(to, from, options).label
   }
-  span_obj(to: DateLike | DateRange, from?: DateLike | SpanOptions, options: SpanOptions = {}) {
+  span_obj(to: string, from?: SpanOptions): Span
+  span_obj(to: DateLike | DateRange, from: SpanMeasureOptions): SpanMeasure
+  span_obj(
+    to: DateLike | DateRange,
+    from: DateLike | SpanOptions | undefined,
+    options: SpanMeasureOptions,
+  ): SpanMeasure
+  span_obj(
+    to: DateLike | DateRange,
+    from?: DateLike | SpanAddOptions,
+    options?: SpanAddOptions,
+  ): Span
+  span_obj(
+    to: DateLike | DateRange,
+    from?: DateLike | SpanOptions,
+    options?: SpanOptions,
+  ): SpanResult
+  span_obj(
+    to: DateLike | DateRange,
+    from?: DateLike | SpanOptions,
+    options: SpanOptions = {},
+  ): SpanResult {
     if (this.is_date_range(to)) {
       const spanOptions = this.is_span_options(from) ? from : options
       return this.span_between(this.to_utc(to[1]), this.to_utc(to[0]), spanOptions)
@@ -1509,33 +1547,34 @@ export class FancyDate {
   }
 
   parse_span(text: string, options: ParseSpanOptions = {}): Span {
-    const { parts, direction } = this.parse_span_parts(text)
-    const span = this.format_span_parts(parts, direction)
+    const { diff, direction } = this.parse_span_diff(text)
+    const span = this.format_span_diff(diff, direction)
     if (options.at != null) this.with_span_anchor_at(this.to_utc(options.at), span)
     return span
   }
 
   format_span(span: SpanLike, direction?: SpanDirection): Span {
-    const parts = this.span_parts_of(span)
-    const activeParts = parts.filter(({ value }) => value)
-    const spanDirection = direction ?? (activeParts[0]?.value < 0 ? '後' : '前')
-    return this.format_span_parts(parts, spanDirection)
+    return this.format_span_diff(this.span_diff_of(span), direction)
+  }
+
+  format_span_parts(span: SpanLike, direction?: SpanDirection): RichText {
+    return this.format_span_render(this.span_diff_of(span), direction).parts
   }
 
   span_neg(span: SpanLike) {
-    const result = this.format_span_parts(this.invert_span(span))
+    const result = this.format_span_diff(this.invert_span_diff(span))
     const at = this.span_anchor_at(span)
     return at == null ? result : this.with_span_anchor_at(at, result)
   }
 
   span_add(left: SpanLike, right: SpanLike) {
-    const result = this.format_span_parts(this.merge_span_parts(left, right))
+    const result = this.format_span_diff(this.merge_span_diff(left, right))
     const at = this.merge_span_anchor_at(left, right)
     return at == null ? result : this.with_span_anchor_at(at, result)
   }
 
   span_sub(left: SpanLike, right: SpanLike) {
-    const result = this.format_span_parts(this.merge_span_parts(left, this.invert_span(right)))
+    const result = this.format_span_diff(this.merge_span_diff(left, this.invert_span_diff(right)))
     const at = this.merge_span_anchor_at(left, right)
     return at == null ? result : this.with_span_anchor_at(at, result)
   }
@@ -1554,134 +1593,143 @@ export class FancyDate {
   }
 
   private add_span(utc: number, span: SpanLike) {
-    const anchor = (span as AnchoredSpan)[span_anchor]
+    const anchor = 'string' === typeof span ? undefined : (span as AnchoredSpan)[span_anchor]
     if (anchor?.calendar === this && anchor.at === utc && anchor.msec != null)
       return utc + anchor.msec
-    const parts = this.span_parts_of(span)
-    const target = this.span_target(utc, parts)
+    const target = this.span_target(utc, this.span_diff_of(span))
     return this.find_span_time(target, utc)
   }
 
-  private parse_span_parts(text: string): { parts: SpanPart[]; direction: SpanDirection } {
+  private parse_span_diff(text: string): { diff: SpanDiff; direction: SpanDirection } {
     const source = text.trim()
-    if (source === '今') return { parts: [], direction: '前' }
-    // 前/後 のない表現(例: '1年2ヶ月')は、方向を明示しない「後」扱いとする
-    // (README「今後の検討メモ」の文法拡張)。前/後 が付いている場合は
-    // 従来通りそちらを解釈する。
+    if (source === '今') return { diff: {}, direction: '前' }
     const match = source.match(/^(.*)(前|後)$/)
     const body = match ? match[1] : source
     const direction = (match ? match[2] : '後') as SpanDirection
     if (!body) throw new Error(`invalid relative time ${text}`)
-    const sign = direction === '後' ? -1 : 1
+    const sign = direction === '後' ? 1 : -1
     let rest = body
-    const parts: SpanPart[] = []
+    const components: (SpanComponent & { length: number })[] = []
     while (rest) {
-      const part = this.parse_span_part(rest, sign)
-      if (!part) throw new Error(`invalid relative time ${text}`)
-      parts.push(part)
-      rest = rest.slice(part.label.length)
+      const component = this.parse_span_component(rest, sign)
+      if (!component) throw new Error(`invalid relative time ${text}`)
+      components.push(component)
+      rest = rest.slice(component.length)
     }
-    return { parts: this.disambiguate_span_parts(parts), direction }
+    return {
+      diff: this.components_to_span_diff(this.disambiguate_span_components(components)),
+      direction,
+    }
   }
 
-  private disambiguate_span_parts(parts: SpanPart[]): SpanPart[] {
+  private disambiguate_span_components<Part extends SpanComponent>(parts: Part[]): Part[] {
     if (this.span_part_fallback_unit('d') !== this.span_part_fallback_unit('D')) return parts
-    const hasYear = parts.some(({ token }) => token === 'y' || token === 'Y')
+    const hasYear = parts.some(({ token }) => token === 'y')
     const hasMonth = parts.some(({ token }) => token === 'M')
     if (!hasYear || hasMonth) return parts
-    return parts.map((part) => (part.token === 'd' ? { ...part, token: 'D' as Token } : part))
+    return parts.map((part) => (part.token === 'd' ? { ...part, token: 'D' } : part)) as Part[]
   }
 
-  private format_span_parts(parts: readonly SpanPart[], direction?: SpanDirection): Span {
-    const activeParts = parts
-      .filter(({ value }) => value)
-      .map((part) => {
-        const label = this.span_part_label(
-          part.token,
-          Math.abs(part.value),
-          this.span_part_fallback_unit(part.token),
-        )
-        return {
-          ...part,
-          label,
-          text: label,
-          ruby: this.span_part_ruby(
-            part.token,
-            Math.abs(part.value),
-            this.span_part_fallback_unit(part.token),
-          ),
-        }
-      })
-    if (!activeParts.length) return { unit: 'second', value: 0, label: '今', parts: [] }
-    const primary = activeParts[0]
-    const signs = new Set(activeParts.map(({ value }) => (value < 0 ? '後' : '前')))
-    const label =
-      direction || signs.size === 1
-        ? `${activeParts.map(({ label }) => label).join('')}${direction ?? signs.values().next().value}`
-        : activeParts.map((part) => `${part.label}${part.value < 0 ? '後' : '前'}`).join('')
-    return {
-      unit: primary.unit,
-      value: primary.value,
-      label,
-      parts: activeParts,
+  private components_to_span_diff(parts: readonly SpanComponent[]): SpanDiff {
+    const diff: SpanDiff = {}
+    for (const { token, value } of parts) {
+      diff[token] = (diff[token] ?? 0) + value
     }
+    return this.normalize_span_diff(diff)
   }
 
-  private span_parts_of(span: SpanLike): readonly SpanPart[] {
-    const parts = (() => {
-      if ('string' === typeof span) return this.parse_span(span).parts ?? []
-      if (Array.isArray(span)) return span
-      return 'parts' in span ? (span.parts ?? [span]) : [span]
-    })()
-    return parts.map((part) => this.normalize_span_part(part))
-  }
-
-  private normalize_span_part(part: SpanPartLike): SpanPart {
-    const normalized = 'token' in part ? part : { ...part, token: span_unit_token(part.unit) }
-    return { ...normalized, text: normalized.text ?? normalized.label }
-  }
-
-  private invert_span(span: SpanLike): readonly SpanPart[] {
-    return this.span_parts_of(span).map(({ token, unit, value, label }) => ({
-      token,
-      unit,
-      value: 0 - value,
-      label,
-      text: label,
-    }))
-  }
-
-  private merge_span_parts(left: SpanLike, right: SpanLike) {
-    const merged = new Map<Token, SpanPart>()
-    const seen = new Map<Token, number>()
-    const addPart = (part: SpanPart, index: number) => {
-      const token = part.token
-      const current = merged.get(token)
-      if (!seen.has(token)) seen.set(token, index)
-      merged.set(token, {
-        token,
-        unit: this.span_part_unit(token),
-        value: (current?.value ?? 0) + part.value,
-        label: '',
-        text: '',
-      })
+  private span_diff_of(span: SpanLike): SpanDiff {
+    if ('string' === typeof span) return this.parse_span_diff(span).diff
+    const diff: SpanDiff = {}
+    for (const [token, value] of Object.entries(span)) {
+      if (token === 'label' || token === 'next_at' || token === 'timeout') continue
+      if (!is_span_token(token)) throw new Error(`invalid span token ${token}`)
+      if (!Number.isInteger(value)) throw new Error(`invalid span value ${token}=${value}`)
+      diff[token] = value
     }
-    let index = 0
-    for (const part of this.span_parts_of(left)) addPart(part, index++)
-    for (const part of this.span_parts_of(right)) addPart(part, index++)
-    const order = new Map(this.span_parse_rows().map(([token], rowIndex) => [token, rowIndex]))
-    return [...merged.values()].sort((a, b) => {
-      const orderA = order.get(a.token)
-      const orderB = order.get(b.token)
-      if (orderA != null && orderB != null && orderA !== orderB) return orderA - orderB
-      if (orderA != null && orderB == null) return -1
-      if (orderA == null && orderB != null) return 1
-      return (seen.get(a.token) ?? 0) - (seen.get(b.token) ?? 0)
+    return this.normalize_span_diff(diff)
+  }
+
+  private normalize_span_diff(diff: SpanDiff): SpanDiff {
+    const normalized: SpanDiff = {}
+    for (const token of span_tokens) {
+      const value = diff[token]
+      if (value == null || value === 0) continue
+      if (!Number.isInteger(value)) throw new Error(`invalid span value ${token}=${value}`)
+      normalized[token] = value
+    }
+    return normalized
+  }
+
+  private span_diff_entries(diff: SpanDiff): SpanComponent[] {
+    return span_tokens.flatMap((token) => {
+      const value = diff[token]
+      return value == null || value === 0 ? [] : [{ token, value }]
     })
   }
 
+  private format_span_diff(diff: SpanDiff, direction?: SpanDirection): Span {
+    const normalized = this.normalize_span_diff(diff)
+    return { ...normalized, label: this.format_span_render(normalized, direction).label }
+  }
+
+  private format_span_render(
+    diff: SpanDiff,
+    direction?: SpanDirection,
+  ): { label: string; parts: RichText } {
+    const entries = this.span_diff_entries(diff)
+    if (!entries.length) return { label: '今', parts: [{ text: '今' }] }
+    const parts = entries.map(({ token, value }) => {
+      const text = this.span_part_label(token, Math.abs(value), this.span_part_fallback_unit(token))
+      const ruby = this.span_part_ruby(token, Math.abs(value), this.span_part_fallback_unit(token))
+      return ruby ? { text, ruby } : { text }
+    })
+    const signs = new Set(entries.map(({ value }) => (value < 0 ? '前' : '後')))
+    if (direction || signs.size === 1) {
+      const suffix = direction ?? signs.values().next().value!
+      const fullParts = [...parts, { text: suffix }]
+      return { label: fullParts.map(({ text }) => text).join(''), parts: fullParts }
+    }
+    const fullParts = entries.flatMap(({ value }, index) => [
+      parts[index],
+      { text: value < 0 ? '前' : '後' },
+    ])
+    return { label: fullParts.map(({ text }) => text).join(''), parts: fullParts }
+  }
+
+  private format_span_measure(
+    precision: Exclude<Precision, SpanToken | 'Y'>,
+    value: number,
+    direction?: SpanDirection,
+  ): SpanMeasure {
+    if (!value) return { precision, value: 0, label: '今' }
+    const token = precision as Token
+    const text = this.span_part_label(token, Math.abs(value), this.span_part_fallback_unit(token))
+    return {
+      precision,
+      value,
+      label: `${text}${direction ?? (value < 0 ? '前' : '後')}`,
+    }
+  }
+
+  private invert_span_diff(span: SpanLike): SpanDiff {
+    return this.components_to_span_diff(
+      this.span_diff_entries(this.span_diff_of(span)).map(({ token, value }) => ({
+        token,
+        value: 0 - value,
+      })),
+    )
+  }
+
+  private merge_span_diff(left: SpanLike, right: SpanLike): SpanDiff {
+    return this.components_to_span_diff([
+      ...this.span_diff_entries(this.span_diff_of(left)),
+      ...this.span_diff_entries(this.span_diff_of(right)),
+    ])
+  }
+
   private span_anchor_at(span: SpanLike) {
-    if ('string' === typeof span || Array.isArray(span)) return undefined
+    if ('string' === typeof span) return undefined
     const anchor = (span as AnchoredSpan)[span_anchor]
     return anchor?.calendar === this ? anchor.at : undefined
   }
@@ -1694,72 +1742,39 @@ export class FancyDate {
     return undefined
   }
 
-  private parse_span_part(text: string, sign: number) {
-    let best: SpanPart | undefined
-    const accept = (token: Token, unit: Unit, count: number, label: string) => {
+  private parse_span_component(text: string, sign: number) {
+    let best: (SpanComponent & { length: number }) | undefined
+    const accept = (token: SpanToken, count: number, label: string) => {
       if (!label) return
-      if (best && best.label.length >= label.length) return
-      best = { token, unit, value: count * sign, label, text: label }
+      if (best && best.length >= label.length) return
+      best = { token, value: count * sign, length: label.length }
     }
-    const rows = this.span_parse_rows()
-    for (const [token, unit, fallbackUnit] of rows) {
+    for (const [token, _unit, fallbackUnit] of this.span_parse_rows()) {
       const relatives = this.dic[token]?.relatives
       if ('string' === typeof relatives) {
         const match = text.match(new RegExp(`^(\\d+)${escape_regexp(relatives)}`))
-        if (match) accept(token, unit, Number(match[1]), match[0])
+        if (match) accept(token, Number(match[1]), match[0])
       }
       if (relatives instanceof Array) {
         relatives.forEach((label, count) => {
-          if (label && text.startsWith(label)) accept(token, unit, count, label)
+          if (label && text.startsWith(label)) accept(token, count, label)
         })
       }
       const match = text.match(new RegExp(`^(\\d+)${escape_regexp(fallbackUnit)}`))
-      if (match) accept(token, unit, Number(match[1]), match[0])
+      if (match) accept(token, Number(match[1]), match[0])
     }
     return best
   }
 
-  private span_parse_rows(): [Token, Unit, string][] {
-    return [
-      'y',
-      'M',
-      'd',
-      'H',
-      'm',
-      's',
-      'S',
-      'Y',
-      'w',
-      'D',
-      ...year_cycle_tokens,
-      ...day_cycle_tokens,
-      ...calendar_note_tokens,
-      'N',
-      'Q',
-      'Z',
-      'Zz',
-      'u',
-      'yC',
-      'yCB',
-      'yCS',
-      'dC',
-      'dCB',
-      'dCS',
-      'E',
-      'a',
-      'b',
-      'c',
-      'A',
-      'B',
-      'C',
-    ].map((token) => [
-      token as Token,
-      this.span_part_unit(token as Token),
-      this.span_part_fallback_unit(token as Token),
+  private span_parse_rows(): [SpanToken, Unit, string][] {
+    return span_tokens.map((token) => [
+      token,
+      this.span_part_unit(token),
+      this.span_part_fallback_unit(token),
     ])
   }
 
-  private span_target(utc: number, parts: readonly SpanPart[]) {
+  private span_target(utc: number, diff: SpanDiff) {
     const source = this.to_tempos(utc)
     const target: SpanTarget = {
       // u は元号内相対年(now_idx)ではなく raw_now_idx(単調な通し番号)で
@@ -1784,10 +1799,7 @@ export class FancyDate {
       sourceMinuteSince: source.m.since,
       sourceSecondSince: source.s.since,
     }
-    for (const { token: spanToken, unit, value } of parts) {
-      let token = (spanToken ?? span_unit_token(unit)) as Token
-      const amount = 0 - value
-      if ('Y' === token) token = 'y'
+    for (const { token, value: amount } of this.span_diff_entries(diff)) {
       if ('D' === token) {
         target.M = 0
         target.M_is_leap = false
@@ -1822,12 +1834,12 @@ export class FancyDate {
         continue
       }
       if (!is_core_precision(token)) {
-        throw new Error(`cannot add cyclic span token ${token}`)
+        throw new Error(`cannot add span token ${token}`)
       }
       target[token] += amount
       if (token === 'y') target.u += amount
       target.changedRank = Math.max(target.changedRank, span_rank(token))
-      target.near += amount * this.unit_msec(unit)
+      target.near += amount * this.unit_msec(this.span_part_unit(token))
     }
     this.normalize_span_target(target)
     this.resolve_span_week_target(target)
@@ -2264,9 +2276,9 @@ export class FancyDate {
     from: number,
     to: number = Date.now(),
     { precise = false }: SpanOptions = {},
-  ): Span {
+  ): SpanResult {
     if (!Number.isFinite(to - from)) {
-      return this.with_span_anchor(from, to, { unit: 'year', value: NaN, label: '？？？' })
+      return this.with_span_anchor(from, to, { label: '？？？' })
     }
     if (precise) {
       const precision = precise === true ? 's' : precise
@@ -2280,38 +2292,36 @@ export class FancyDate {
     const fromTempos = this.to_tempos(from)
     const toTempos = this.to_tempos(to)
     if (fromTempos.m.last_at === toTempos.m.last_at) {
-      const span = this.precise_span(from, to, 's')
+      const span = this.format_span_diff(this.span_diff(from, to, 's'))
       return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
     if (fromTempos.H.last_at === toTempos.H.last_at) {
-      const span = this.precise_span(from, to, 'm')
+      const span = this.format_span_diff(this.span_diff(from, to, 'm'))
       return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
     if (fromTempos.d.last_at === toTempos.d.last_at) {
-      const span = this.precise_span(from, to, 'H')
+      const span = this.format_span_diff(this.span_diff(from, to, 'H'))
       return this.with_span_anchor(from, to, span, this.next_span_at(to, span))
     }
 
-    const parts = this.span_parts(from, to, 'd')
-    for (const part of parts) {
-      if (part.value) {
-        return this.with_span_anchor(
-          from,
-          to,
-          this.format_span_parts([part], part.value < 0 ? '後' : '前'),
-          toTempos.d.next_at,
-        )
-      }
+    const first = this.span_diff_entries(this.span_diff(from, to, 'd'))[0]
+    if (first) {
+      return this.with_span_anchor(
+        from,
+        to,
+        this.format_span_diff({ [first.token]: first.value }),
+        toTempos.d.next_at,
+      )
     }
-    return this.with_span_anchor(
-      from,
-      to,
-      { unit: 'day', value: 0, label: '今', parts: [] },
-      toTempos.s.next_at,
-    )
+    return this.with_span_anchor(from, to, { label: '今' }, toTempos.s.next_at)
   }
 
-  private with_span_anchor(target: number, at: number, span: Span, next_at?: number) {
+  private with_span_anchor<T extends SpanResult>(
+    target: number,
+    at: number,
+    span: T,
+    next_at?: number,
+  ) {
     if (Number.isFinite(next_at) && at < next_at!) {
       span.next_at = next_at
       span.timeout = next_at! - at
@@ -2331,10 +2341,19 @@ export class FancyDate {
     return span
   }
 
-  private precise_span(from: number, to: number, precision: Precision): Span {
-    const parts = this.span_parts(from, to, precision)
+  private precise_span(from: number, to: number, precision: Precision): SpanResult {
+    if (this.is_addable_span_precision(precision)) {
+      return this.format_span_diff(this.span_diff(from, to, precision), to < from ? '後' : '前')
+    }
+    return this.format_span_measure(
+      precision,
+      this.span_measure_value(from, to, precision),
+      to < from ? '後' : '前',
+    )
+  }
 
-    return this.format_span_parts(parts, to < from ? '後' : '前')
+  private is_addable_span_precision(precision: Precision): precision is SpanToken | 'Y' {
+    return precision === 'Y' || is_span_token(precision)
   }
 
   private next_precise_span_at(at: number, precision: Precision) {
@@ -2342,17 +2361,17 @@ export class FancyDate {
   }
 
   private next_span_at(at: number, span: Span) {
-    const token = span.parts?.[0]?.token
+    const token = this.span_diff_entries(span)[0]?.token
     return token ? this.to_tempos(at)[token]?.next_at : undefined
   }
 
-  private span_parts(from: number, to: number, precision: Precision) {
+  private span_diff(from: number, to: number, precision: SpanToken | 'Y'): SpanDiff {
     const [earlier, later] = from <= to ? [from, to] : [to, from]
-    const sign = from <= to ? 1 : -1
+    const sign = from <= to ? -1 : 1
     const earlierTempos = this.to_tempos(earlier)
     const laterTempos = this.to_tempos(later)
     const rows = this.hierarchical_span_rows(precision, earlierTempos, laterTempos)
-    if (!rows) return this.token_span_parts(from, to, precision)
+    if (!rows) throw new Error(`invalid span precision ${precision}`)
     const rank = rows.findIndex(([token]) => token === precision)
     const diffs = rows.map(([, , , start, end]) => end - start)
     for (let index = Math.min(rank, rows.length - 1); 0 < index; index--) {
@@ -2360,21 +2379,17 @@ export class FancyDate {
       diffs[index] += rows[index][5]
       diffs[index - 1]--
     }
-    return rows
-      .slice(0, rank + 1)
-      .map(([token, unit, fallbackUnit], index) => {
-        const count = Math.abs(diffs[index])
-        const unitLabel = this.dic.labels[token] ?? fallbackUnit
-        const label = this.span_part_label(token, count, unitLabel)
-        return {
-          token,
-          unit,
-          value: diffs[index] * sign,
-          label,
-          text: label,
-        }
-      })
-      .filter(({ value }) => value)
+    return this.components_to_span_diff(
+      rows
+        .slice(0, rank + 1)
+        .map(([token], index) => {
+          return {
+            token: token === 'Y' ? 'y' : (token as SpanToken),
+            value: diffs[index] * sign,
+          }
+        })
+        .filter(({ value }) => value),
+    )
   }
 
   private hierarchical_span_rows(precision: Precision, earlierTempos: Tempos, laterTempos: Tempos) {
@@ -2430,22 +2445,17 @@ export class FancyDate {
     return undefined
   }
 
-  private token_span_parts(from: number, to: number, token: Token) {
+  private span_measure_value(from: number, to: number, token: Exclude<Precision, SpanToken | 'Y'>) {
     const base = token_base(token)
     const fromTempo = this.to_tempos(from)[base]
     const toTempo = this.to_tempos(to)[base]
-    if (!fromTempo || !toTempo) return []
-    const value = toTempo.now_idx - fromTempo.now_idx
-    return [
-      {
-        token,
-        unit: this.span_part_unit(token),
-        value,
-        label: this.span_part_label(token, Math.abs(value), this.span_part_fallback_unit(token)),
-      },
-    ]
-      .map((part) => ({ ...part, text: part.label }))
-      .filter(({ value }) => value)
+    if (!fromTempo || !toTempo) return 0
+    const raw = fromTempo.now_idx - toTempo.now_idx
+    if (!is_year_cycle_token(base) && !is_day_cycle_token(base) && !is_calendar_note_token(base)) {
+      return raw
+    }
+    const direction = from < to ? -1 : 1
+    return direction * mod(direction * raw, this.dic[base].length)
   }
 
   private span_part_unit(token: Token): Unit {
@@ -4484,23 +4494,4 @@ function span_rank(precision: Precision) {
 
 function is_core_precision(precision: Precision): precision is CorePrecision {
   return 0 <= span_rank(precision)
-}
-
-function span_unit_token(unit: Unit): keyof TempoDiff {
-  switch (unit) {
-    case 'year':
-      return 'y'
-    case 'month':
-      return 'M'
-    case 'day':
-      return 'd'
-    case 'hour':
-      return 'H'
-    case 'minute':
-      return 'm'
-    case 'second':
-      return 's'
-    case 'msec':
-      return 'S'
-  }
 }

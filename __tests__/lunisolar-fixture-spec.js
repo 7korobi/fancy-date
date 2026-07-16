@@ -100,18 +100,15 @@ describe('NAOJ lunisolar fixtures', () => {
     const at = (date) => Calendar.GregorianAstronomical.parse(date)
 
     expect(Calendar.定気法.span_obj(at('2024年3月9日'), base)).toMatchObject({
-      unit: 'day',
-      value: 1,
+      d: -1,
       label: '1日前',
     })
     expect(Calendar.定気法.span_obj(at('2024年4月9日'), base)).toMatchObject({
-      unit: 'month',
-      value: -1,
+      M: 1,
       label: '1ヶ月後',
     })
     expect(Calendar.定気法.span_obj(at('2025年3月10日'), base)).toMatchObject({
-      unit: 'year',
-      value: -1,
+      y: 1,
       label: '1年後',
     })
     const nextYear = at('2025年2月28日')
@@ -120,13 +117,9 @@ describe('NAOJ lunisolar fixtures', () => {
         precise: 'H',
       }),
     ).toMatchObject({
-      unit: 'year',
-      value: -1,
+      y: 1,
+      H: 1,
       label: '1年1刻後',
-      parts: [
-        { unit: 'year', value: -1, label: '1年' },
-        { unit: 'hour', value: -1, label: '1刻' },
-      ],
     })
     const nextYearTempos = Calendar.定気法.to_tempos(nextYear)
     expect(
@@ -134,13 +127,9 @@ describe('NAOJ lunisolar fixtures', () => {
         precise: 'm',
       }),
     ).toMatchObject({
-      unit: 'year',
-      value: -1,
+      y: 1,
+      m: 1,
       label: '1年半後',
-      parts: [
-        { unit: 'year', value: -1, label: '1年' },
-        { unit: 'minute', value: -1, label: '半' },
-      ],
     })
     expect(
       Calendar.定気法.span_obj(
@@ -149,14 +138,12 @@ describe('NAOJ lunisolar fixtures', () => {
         { precise: 'S' },
       ),
     ).toMatchObject({
+      y: 1,
+      H: 1,
+      m: 1,
+      s: 1112,
+      S: 154,
       label: '1年1刻半1112秒154ミリ秒後',
-      parts: [
-        { unit: 'year', value: -1, label: '1年' },
-        { unit: 'hour', value: -1, label: '1刻' },
-        { unit: 'minute', value: -1, label: '半' },
-        { unit: 'second', value: -1112, label: '1112秒' },
-        { unit: 'msec', value: -154, label: '154ミリ秒' },
-      ],
     })
   })
 
@@ -190,10 +177,8 @@ describe('NAOJ lunisolar fixtures', () => {
       345
 
     expect(Calendar.定気法.span_obj('20刻後')).toMatchObject({
-      unit: 'hour',
-      value: -20,
+      H: 20,
       label: '20刻後',
-      parts: [{ unit: 'hour', value: -20, label: '20刻' }],
     })
     const twentyHoursLater = Calendar.定気法.add(base, '20刻後')
     expect(Calendar.定気法.span(twentyHoursLater, base, { precise: 'H' })).toBe('1日8刻後')
@@ -241,28 +226,25 @@ describe('NAOJ lunisolar fixtures', () => {
 
     for (const token of ['dC60', 'dC12', 'dC10', 'dC9', 'R6', 'LM27']) {
       const span = Calendar.定気法.span_obj(nextDay, base, { precise: token })
-      expect(span.parts?.[0]).toMatchObject({ token })
+      expect(span).toMatchObject({ precision: token, value: 1 })
       expect(span.label).toMatch(/(?:前|後)$/)
     }
 
     for (const token of ['yC60', 'yC12', 'yC10', 'yC9']) {
       const span = Calendar.定気法.span_obj(nextYear, base, { precise: token })
-      expect(span.parts?.[0]).toMatchObject({ token })
+      expect(span).toMatchObject({ precision: token, value: 1 })
       expect(span.label).toMatch(/(?:前|後)$/)
     }
 
-    expect(Calendar.定気法.span_obj(nextYear, base, { precise: 'yC60' }).parts?.[0]).toMatchObject({
-      token: 'yC60',
-      unit: 'year',
-      value: -1,
-      label: '1年干支',
+    expect(Calendar.定気法.span_obj(nextYear, base, { precise: 'yC60' })).toMatchObject({
+      precision: 'yC60',
+      value: 1,
+      label: '1年干支後',
     })
-
-    expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'dC60' }).parts?.[0]).toMatchObject({
-      token: 'dC60',
-      unit: 'day',
-      value: -1,
-      label: '1日干支',
+    expect(Calendar.定気法.span_obj(nextDay, base, { precise: 'dC60' })).toMatchObject({
+      precision: 'dC60',
+      value: 1,
+      label: '1日干支後',
     })
   })
 })

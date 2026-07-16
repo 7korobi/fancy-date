@@ -374,6 +374,20 @@ describe('Gregorio calculate', () => {
     expect(withMae).not.toEqual(bare)
   })
 
+  test('SpanLike uses canonical addable token differences instead of display parts', () => {
+    const msec = g.parse('2年2月2日')
+    const span = g.parse_span('1年2ヶ月後')
+    expect(span).toMatchObject({ y: 1, M: 2, label: '1年2ヶ月後' })
+    expect('parts' in span).toBe(false)
+    expect(g.format(g.add(msec, { y: 1, M: 2 }))).toBe('西暦3年4月2日(水) 00:00')
+    expect(g.format(g.sub(msec, { y: 1, M: 2 }))).toBe('紀元前1年12月2日(土) 00:00')
+    expect(平気法.format_span_parts({ y: 2, M: 3 })).toEqual([
+      { text: '2年', ruby: 'にねん' },
+      { text: '3ヶ月', ruby: 'さんかげつ' },
+      { text: '後' },
+    ])
+  })
+
   test('span anchors preserve at/msec for msec conversion', () => {
     const from = g.parse('2024年1月31日')
     const to = g.parse('2024年3月1日')
@@ -403,25 +417,15 @@ describe('Gregorio calculate', () => {
     expect(g.span_msec(doubled)).not.toBe(g.span_msec(anchoredMonth))
   })
 
-  test('span parts expose ruby when the calendar has numeral ruby settings', () => {
-    const span = 平気法.format_span(
-      [
-        { unit: 'year', value: -2 },
-        { unit: 'month', value: -3 },
-      ],
-      '後',
-    )
+  test('format_span_parts exposes ruby without storing display parts in Span', () => {
+    const span = 平気法.format_span({ y: 2, M: 3 })
     expect(span.label).toBe('2年3ヶ月後')
-    expect(span.parts).toEqual([
-      { token: 'y', unit: 'year', value: -2, label: '2年', text: '2年', ruby: 'にねん' },
-      {
-        token: 'M',
-        unit: 'month',
-        value: -3,
-        label: '3ヶ月',
-        text: '3ヶ月',
-        ruby: 'さんかげつ',
-      },
+    expect(span).toMatchObject({ y: 2, M: 3 })
+    expect('parts' in span).toBe(false)
+    expect(平気法.format_span_parts(span)).toEqual([
+      { text: '2年', ruby: 'にねん' },
+      { text: '3ヶ月', ruby: 'さんかげつ' },
+      { text: '後' },
     ])
   })
 
@@ -1356,17 +1360,14 @@ describe('Gregorian', () => {
     expect(custom.span([from, to], { precise: 'w' })).toBe('1年10週目後')
     expect(custom.span(g.parse('2024年1月2日'), from, { precise: 'dC60' })).toBe('1日巡り後')
     expect(legacy.span(g.parse('2024年1月2日'), from, { precise: 'A' })).toBe('1旧日巡り後')
-    expect(custom.parse_span('1日巡り後').parts?.[0]).toMatchObject({
-      token: 'dC60',
-      unit: 'day',
-      value: -1,
-      label: '1日巡り',
+    expect(custom.span_obj(g.parse('2024年1月2日'), from, { precise: 'dC60' })).toMatchObject({
+      precision: 'dC60',
+      value: 1,
+      label: '1日巡り後',
     })
-    expect(
-      custom.format_span({ token: 'dC60', unit: 'day', value: -1, label: '1dC60' }).label,
-    ).toBe('1日巡り後')
-    expect(custom.add(from, '1週目後')).toBe(g.parse('2024年1月8日'))
-    expect(() => custom.add(from, '1日巡り後')).toThrow(/cyclic span token dC60/)
+    expect(() => custom.parse_span('1日巡り後')).toThrow(/invalid relative time/)
+    expect(() => custom.add(from, '1日巡り後')).toThrow(/invalid relative time/)
+    expect(() => custom.add(from, { dC60: 1 })).toThrow(/invalid span token dC60/)
   })
 
   // 上の 'span precise supports week-year and day-of-year hierarchy' は

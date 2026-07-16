@@ -6,8 +6,8 @@ fancy-date の開発者向け検討メモ・調査結果・実装ログ。エン
 
 ### format / token / span
 
-- 実装済み: `SpanPart` は `token` を持つ。`parse_span()` と `format_span()` は分離済みで、`parse_span()` は現在の `labels()` / `notation(..., relatives)` から文字列を `SpanPart[]` へ戻し、`format_span()` は同じ parts を現在のラベル設定で再表示できる。`Precision = CorePrecision | Token` なので、`precise` には不断 token も指定できる。`format_parts()` / `format_parts_by()` も実装済みで、HTML ruby 用に `{ token, text, ruby? }[]` を返す。
-- 部分実装: 不断 token の span は「循環上の差分」として parse/format/find できるが、`add()`/`sub()` では意図的に例外にしている。暦上の実日付移動として解釈できるのは `y/M/d/H/m/s/S` と `Y/w/D` の階層 token だけ。不断 token の加算を許すなら、「次の甲子日」なのか「周期差だけを足す」のか、別の探索 semantics が必要。
+- 実装済み: `SpanLike = string | SpanDiff` は加算可能token (`y/M/d/H/m/s/S/w/D`) のみを受ける。`parse_span()` は文字列を正数=未来方向の差分mapへ正規化し、`format_span()` はそこから `label` を導出する。ruby用の列は `Span` に保持せず `format_span_parts()` が `RichText` として都度導出する。`Precision = CorePrecision | Token` なので、`precise` には不断tokenも指定できる。
+- 実装済み: 不断token・暦注tokenを `precise` に指定した `span_obj()` は、再適用不能な `SpanMeasure` (`precision/value/label`) を返す。`add()`/`sub()` は `SpanLike` に含まれないため受け付けない。「次の甲子日」などの探索は、周期差の加算ではなく別のfind系APIで扱う。
 - 部分実装: span 同士の symbolic 演算は `span_neg()` / `span_add()` / `span_sub()` で実装済み。同じ token だけを相殺し、異なる token 間の繰り上げ・相殺はしない。残課題は、平均サイズによる lossy な `span_approx()`、anchor 時刻の実暦境界に基づく `span_normalize()`、cyclic token span をどこまで演算対象に含めるかの整理。
 - 採用済み token 命名: `dC<number>` は「日不断の number-cycle」、`yC<number>` は「年不断の number-cycle」を表す正本 token とする。干支系は `dC60/dC10/dC12`・`yC60/yC10/yC12` が正本で、既存の `dC/dCS/dCB`・`yC/yCS/yCB` と `A/C/B/a/c/b` は文化的 alias として残す。ルビは `dC60r` / `dC10r` / `dC12r` / `yC60r` など数値付き token に付く。同じ multi-character token registry で `Ha`=午前午後、`da`=paksha のような派生 token も扱える。
 - 周期・暦注 token 方針: 九星は `yC9`=年九星、`dC9`=日九星。`E` は一般的な weekday token として、暦ごとの週相当 cycle (`dC7` / `dC8` / `dC10`) を指す。二十八宿のような日不断の宿は `dC28`。六曜は天文現象や lunar mansion ではなく旧暦月日から決まる暦注なので、固有 token `R6`(rokuyo 6)にする。二十七宿は lunar mansion ではあるが日不断ではなく旧暦月日由来なので `LM27` とし、`dC28` と分ける。旧 `f/F/V` alias は廃止し、それぞれ `yC9` / `dC9` / `dC28` または `LM27` を明示する。これらは format/find 表示・検索条件には使うが、通常 parse では日時座標の決定に使わない。干支などの周期 token から候補日時を推定する用途は、parse ではなく将来の find/候補探索 API 拡張で扱う。
@@ -57,7 +57,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `labels()` と `parse_span()` / `format_span()` を追加し、span の表記を暦ごとに調整できるようにした。
 - `Span` の内部 anchor を `{ calendar, at?, msec? }` に整理した。`span_obj(to, from)` 由来の span は `at=from` と `msec=to-from` を持ち、`parse_span(text, { at })` は msec なしの基準時刻だけを持つ。`span_msec(span, { at? })` は anchor の msec を使うか、基準時刻から `add()` して実ミリ秒へ変換する。span 同士の演算後は msec を喪失させる方針。
 - `span_neg()` / `span_add()` / `span_sub()` を追加した。これは symbolic な span 演算で、同 token の値だけを足し引きし、異 token 間の繰り上げ・相殺は行わない。混合方向は `1ヶ月後31日前` のように part ごとに方向を表示する。演算後は msec を保持せず、anchor の `at` だけ条件付きで残す。
-- `precise` に不断 token を指定できるようにし、SpanPart に token を持たせた。
+- `precise` に不断tokenを指定できる。加算可能tokenの測定結果は `SpanDiff` へ正規化し、不動の周期・暦注tokenは `SpanMeasure` として分離する。表示時のruby列は `format_span_parts()` が `RichText` として導出し、計算値には保持しない。
 - 非 `precise` の span も、固定時間ではなく暦の秒・分・時・日境界に基づいて判定するようにした。
 - SpanLike の `前` / `後` 省略表現(例: `1年2ヶ月`)を `後` として解釈するようにした。
 - `.assign(...)` の受け皿を追加し、最初の具体例として `tithi()` を `assign({ d: tithi() })` に接続した。`tithi()` は `dayStart()` が決めた暦日境界時刻(`context.at`)で月相を30分割し、`d.now_idx` に割り当てる。`d.succ()`/`back()` が壊れないよう、assignment 前の civil day index は `raw_now_idx` に残し、遷移時はそれを使う。tithi 現象側の通し番号は `assignment_raw_now_idx` に分けて保持し、前後の raw tithi と比較して `assignment_flags` に `skipped`/`repeated` を付ける。assignment は token index の決定、`notation()` は表記、`division()` は時間分割、`dayStart()` は civil day 境界、という責務分離を維持する。サンプルとして `アマンタティティ` / `プールニマンタティティ` を追加し、既存の `アマンタ` / `プールニマンタ` は比較用に残した。tithi サンプルは観測に寄る暦として `天文月` / 満月基準の `天文黒分月` を使い、日の出境界も `hasSolarEvents` を持つ太陽モデルで解決する。

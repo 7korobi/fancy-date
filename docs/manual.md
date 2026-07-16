@@ -24,9 +24,10 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `parse_obj(text, format?)`               | 暦表現を token 値のオブジェクトへ変換する |
 | `format(utc, format?)`                   | UTC ミリ秒や `Tempos` を暦表現へ変換する  |
 | `span([from, to], options?)`             | 範囲の相対表現を文字列で返す              |
-| `span_obj([from, to], options?)`         | 相対表現を `Span` オブジェクトで返す      |
-| `parse_span(text, options?)`             | 相対表現を `Span` に変換する              |
+| `span_obj([from, to], options?)`         | 相対表現を `Span` / `SpanMeasure` で返す  |
+| `parse_span(text, options?)`             | 相対表現を正規化した `Span` に変換する    |
 | `format_span(span, direction?)`          | `SpanLike` を現在の暦の表記へ整える       |
+| `format_span_parts(span, direction?)`    | span表示を `RichText` として返す          |
 | `span_msec(span, options?)`              | anchor 付き span を実ミリ秒へ変換する     |
 | `span_add(left, right)`                  | span 同士を token ごとに足す              |
 | `span_sub(left, right)`                  | span 同士を token ごとに引く              |
@@ -93,8 +94,8 @@ part として返るが、`token` は `''` になる。
 `r` suffix は、読みそのものを表示する token なので、`{ token: 'dC60r', text: '...' }` となり
 `ruby` は付かない。
 
-`Span.parts` も `RichText<SpanPart>` として扱える。`SpanPart` は既存互換の `label` に加えて
-共通描画用の `text` を持ち、通常は `text === label` になる。
+spanのruby表示は `format_span_parts()` で必要時に導出する。`Span` 自体は表示用part列を保持せず、
+`RichText` の `text` 連結は `format_span(...).label` と一致する。
 
 ```ts
 g.format_parts(utc, 'Gy年MM月dd日(E) dC60o dC60r')
@@ -243,14 +244,27 @@ g.span([from, to], { precise: 'dC' })
 
 ## add / sub
 
-`add(utc, span)` / `sub(utc, span)` は、階層 span を日時へ適用する。
+`add(utc, span)` / `sub(utc, span)` は、階層spanを日時へ適用する。`SpanLike` は文字列または
+正規化済みの `SpanDiff` で、正数は `add()` で未来へ進む量を表す。
 
 ```ts
 g.add(from, '1年2ヶ月9日4時間5分後')
 // 2025年3月10日 4時5分
+
+g.add(from, { y: 1, M: 2, d: 9, H: 4, m: 5 })
+g.sub(from, { M: 1 })
 ```
 
-`Y` は `y`、`D` は `d`、`w` は 7 日分として扱う。循環 token は日時加算として曖昧なため、`add()` / `sub()` ではエラーにする。
+```ts
+type SpanToken = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S' | 'w' | 'D'
+type SpanDiff = Partial<Record<SpanToken, number>>
+type SpanLike = string | SpanDiff
+type Span = SpanDiff & { label: string; next_at?: number; timeout?: number }
+type SpanMeasurePrecision = Exclude<Precision, SpanToken | 'Y'>
+type SpanMeasure = { precision: SpanMeasurePrecision; value: number; label: string }
+```
+
+`w` は週年座標、`D` は年初通日座標として解決する。`Y` はspan計測時には `y` へ正規化される。循環token・暦注tokenは日時加算として曖昧なため、`SpanLike` と `add()` / `sub()` には入らない。
 
 ## parse_span / format_span / labels
 
@@ -259,8 +273,10 @@ g.add(from, '1年2ヶ月9日4時間5分後')
 ```ts
 const custom = new FancyDate(g).labels({ w: '週目', dC: '日巡り' }).init()
 
-custom.parse_span('1日巡り後')
-// { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
+custom.parse_span('1年2ヶ月後')
+// { y: 1, M: 2, label: '1年2ヶ月後' }
+
+custom.add(from, { y: 1, M: 2 })
 
 const parsed = g.parse_span('1ヶ月後', { at: g.parse('2024年1月31日') })
 g.span_msec(parsed)
@@ -272,11 +288,18 @@ g.span_add('3日後', '1日前').label
 g.span_add('1ヶ月後', '31日前').label
 // '1ヶ月後31日前'
 
-custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
-// '1日巡り後'
+custom.format_span_parts({ y: 1, M: 2 })
+// [{ text: '1年' }, { text: '2ヶ月' }, { text: '後' }]
 ```
 
-`span_add()` / `span_sub()` は symbolic な演算で、同じ token だけを相殺する。月と日のような異なる token 間の繰り上げ・相殺は行わない。演算後の span は `msec` anchor を失い、`at` が残っていれば `span_msec()` がその時点から再計算する。
+`span_add()` / `span_sub()` は symbolic な演算で、同じtokenだけを相殺する。月と日のような異なるtoken間の繰り上げ・相殺は行わない。演算後のspanは `msec` anchorを失い、`at` が残っていれば `span_msec()` がその時点から再計算する。
+
+循環token・暦注tokenを `precise` に指定した `span_obj()` は、再適用できない `SpanMeasure` を返す。
+
+```ts
+custom.span_obj(g.parse('2024年1月2日'), from, { precise: 'dC60' })
+// { precision: 'dC60', value: 1, label: '1日巡り後' }
+```
 
 `labels()` は fallback の単位表記を差し替える。`notation()` の第3要素に relatives がある場合は、そちらが優先される。
 

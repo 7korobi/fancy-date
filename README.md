@@ -45,7 +45,7 @@ Calendar.Julian.format(nabonassar, 'y年M月d日')
 
 ### span / add / sub
 
-`span([from, to])` は相対表現を返す。`span_obj()` は `parts`、`next_at`、`timeout` を含むオブジェクトを返す。`span_msec()` は anchor 付き span を実ミリ秒へ戻す。
+`span([from, to])` は相対表現を返す。`span_obj()` は再適用可能な `Span` (差分mapと `label`、`next_at`、`timeout`)を返す。周期・暦注tokenを `precise` に指定した場合だけは、加算不能な `SpanMeasure` を返す。`span_msec()` は anchor 付き `Span` を実ミリ秒へ戻す。
 
 ```ts
 const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')
@@ -111,7 +111,7 @@ g.find([-Infinity, g.parse('2020年3月1日')], [{ dC60o: '甲子' }], {
 
 ### parse_span / format_span / labels
 
-`parse_span()` は相対表現を `Span` にし、`format_span()` は `SpanLike` を現在の暦の表記へ整える。
+`parse_span()` は相対表現を正規化した `Span` にし、`format_span()` は `SpanLike` を現在の暦の表記へ整える。`SpanLike` は文字列または加算可能tokenの差分mapで、正数は未来方向を表す。
 
 ```ts
 const custom = new FancyDate(g).labels({ w: '週目', dC: '日巡り' }).init()
@@ -119,8 +119,13 @@ const custom = new FancyDate(g).labels({ w: '週目', dC: '日巡り' }).init()
 custom.span([from, to], { precise: 'w' })
 // '1年10週目後'
 
-custom.parse_span('1日巡り後')
-// { unit: 'day', value: -1, label: '1日巡り後', parts: [...] }
+const span = custom.parse_span('1年2ヶ月後')
+// { y: 1, M: 2, label: '1年2ヶ月後' }
+
+custom.add(from, { y: 1, M: 2 })
+
+custom.span_obj(g.parse('2024年1月2日'), from, { precise: 'dC60' })
+// { precision: 'dC60', value: 1, label: '1日巡り後' }
 
 const anchored = g.parse_span('1ヶ月後', { at: from })
 g.span_msec(anchored)
@@ -132,8 +137,8 @@ g.span_add('3日後', '1日前').label
 g.span_add('1ヶ月後', '31日前').label
 // '1ヶ月後31日前'
 
-custom.format_span({ token: 'dC', unit: 'day', value: -1, label: '1dC' }).label
-// '1日巡り後'
+custom.format_span_parts({ y: 1, M: 2 })
+// [{ text: '1年' }, { text: '2ヶ月' }, { text: '後' }]
 ```
 
 `labels()` は fallback の単位表記を差し替える。`notation()` の第3要素で token ごとの相対表現を定義している場合は、そちらが優先される。`algo()` は互換 alias として残している。
