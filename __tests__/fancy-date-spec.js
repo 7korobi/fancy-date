@@ -661,6 +661,21 @@ describe('Gregorio calculate', () => {
     )
   })
 
+  test('span_sub accepts same-cycle continuous label operands', () => {
+    expect(g.span_sub({ yC60: '乙丑' }, { yC60: '甲子' })).toMatchObject({
+      y: 1,
+      label: '1年後',
+    })
+    expect(g.span_sub({ dC60: '甲子' }, { dC60: '乙丑' })).toMatchObject({
+      d: 59,
+      label: '59日後',
+    })
+    expect(() => g.span_sub({ R6: '先勝' }, { R6: '友引' })).toThrow(
+      /invalid continuous span token R6/,
+    )
+    expect(() => g.span_sub({ yC60: '乙丑' }, { dC60: '甲子' })).toThrow(/same continuous cycle/)
+  })
+
   // cyclic_label() が親の実区間(last_at/next_at)をそのまま流用していることを確認する
   // (now_idx だけを差し替えたラベルであり、独自の区間を持つわけではない)。
   test('cyclic label tokens (Y/yC60/yC12/yC10/yC9/Q) honestly expose the parent envelope span', () => {

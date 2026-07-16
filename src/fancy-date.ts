@@ -293,6 +293,9 @@ export type ContinuousSpanToken =
   | 'C'
   | 'B'
   | 'dCLM'
+export type ContinuousSpanLabel = {
+  [Token in ContinuousSpanToken]: { [Key in Token]: string }
+}[ContinuousSpanToken]
 export type Token = ALL_DIC | 'Zz' | LegacyTokenAlias
 export type Unit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'msec'
 type CorePrecision = 'y' | 'M' | 'd' | 'H' | 'm' | 's' | 'S'
@@ -371,6 +374,7 @@ export type SpanMsecOptions = {
  * オブジェクトは正数を未来方向とする加算可能tokenの差分だけを持つ。
  */
 export type SpanLike = string | SpanDiff
+export type SpanSubOperand = SpanLike | ContinuousSpanLabel
 const span_anchor = Symbol('span_anchor')
 type SpanAnchor = {
   calendar: FancyDate
@@ -504,6 +508,14 @@ function is_calendar_note_token(token: string): token is CalendarNoteToken {
 
 function is_continuous_cycle_token(token: string): token is YearCycleToken | DayCycleToken {
   return is_year_cycle_token(token) || is_day_cycle_token(token)
+}
+
+function is_continuous_span_token(token: string): token is ContinuousSpanToken {
+  return is_continuous_cycle_token(canonical_token(token))
+}
+
+function is_span_label_token(token: string) {
+  return (all_dic_tokens as readonly string[]).includes(canonical_token(token))
 }
 
 function token_base(token: Token): ALL_DIC | 'Zz' {
@@ -1600,9 +1612,27 @@ export class FancyDate {
     return at == null ? result : this.with_span_anchor_at(at, result)
   }
 
-  span_sub(left: SpanLike, right: SpanLike) {
-    const result = this.format_span_diff(this.merge_span_diff(left, this.invert_span_diff(right)))
-    const at = this.merge_span_anchor_at(left, right)
+  span_sub(left: SpanLike, right: SpanLike): Span
+  span_sub(left: ContinuousSpanLabel, right: ContinuousSpanLabel): Span
+  span_sub(left: SpanSubOperand, right: SpanSubOperand): Span
+  span_sub(left: SpanSubOperand, right: SpanSubOperand): Span {
+    if (this.is_span_label_operand(left) || this.is_span_label_operand(right)) {
+      if (!this.is_span_label_operand(left) || !this.is_span_label_operand(right)) {
+        throw new Error('span_sub label operands must use the same continuous cycle')
+      }
+      const leftLabel = this.continuous_span_label_entry(left)
+      const rightLabel = this.continuous_span_label_entry(right)
+      if (leftLabel.token !== rightLabel.token) {
+        throw new Error('span_sub label operands must use the same continuous cycle')
+      }
+      return this.span_from_label_values(leftLabel.token, leftLabel.label, rightLabel.label)
+    }
+    const numericLeft = left as SpanLike
+    const numericRight = right as SpanLike
+    const result = this.format_span_diff(
+      this.merge_span_diff(numericLeft, this.invert_span_diff(numericRight)),
+    )
+    const at = this.merge_span_anchor_at(numericLeft, numericRight)
     return at == null ? result : this.with_span_anchor_at(at, result)
   }
 
@@ -1611,6 +1641,14 @@ export class FancyDate {
    * 実時刻差ではなく、cycleの1ステップを対応する年/日の1単位として扱う。
    */
   span_from_labels(token: ContinuousSpanToken, from: string, to: string): Span {
+    return this.span_from_label_values(token, to, from)
+  }
+
+  private span_from_label_values(
+    token: ContinuousSpanToken,
+    leftLabel: string,
+    rightLabel: string,
+  ): Span {
     const canonical = canonical_token(token)
     if (!is_continuous_cycle_token(canonical)) {
       throw new Error(`invalid continuous span token ${token}`)
@@ -1627,9 +1665,31 @@ export class FancyDate {
       }
       return index
     }
-    const value = mod(index_of(to) - index_of(from), length)
+    const value = mod(index_of(leftLabel) - index_of(rightLabel), length)
     const base: SpanToken = is_year_cycle_token(canonical) ? 'y' : 'd'
     return this.format_span_diff({ [base]: value })
+  }
+
+  private is_span_label_operand(value: SpanSubOperand) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    return Object.entries(value).some(
+      ([token, label]) => is_span_label_token(token) && typeof label === 'string',
+    )
+  }
+
+  private continuous_span_label_entry(value: SpanSubOperand) {
+    const entries = Object.entries(value).filter(
+      ([token, label]) => is_span_label_token(token) && typeof label === 'string',
+    ) as [string, string][]
+    if (entries.length !== 1) {
+      throw new Error('continuous span label must contain exactly one cycle')
+    }
+    const [entry] = entries
+    const token = canonical_token(entry[0])
+    if (!is_continuous_span_token(token)) {
+      throw new Error(`invalid continuous span token ${entry[0]}`)
+    }
+    return { token, label: entry[1] }
   }
 
   span_msec(span: SpanLike, options: SpanMsecOptions = {}) {

@@ -140,7 +140,7 @@ g.span_add('1ヶ月後', '31日前').label
 custom.format_span_parts({ y: 1, M: 2 })
 // [{ text: '1年' }, { text: '2ヶ月' }, { text: '後' }]
 
-custom.span_from_labels('dC60', '甲子', '乙丑')
+custom.span_sub({ dC60: '乙丑' }, { dC60: '甲子' })
 // { d: 1, label: '1日後' }
 ```
 

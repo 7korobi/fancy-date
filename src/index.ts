@@ -214,6 +214,8 @@ export type {
   FormatPart,
   SpanToken,
   SpanDiff,
+  ContinuousSpanLabel,
+  SpanSubOperand,
   Span,
   SpanMeasure,
   SpanResult,
