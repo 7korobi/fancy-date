@@ -1,9 +1,78 @@
 import type { OrbitalModel, RotationModel, TIMEZONE } from '../orbital-model'
 import { mod } from '../number'
 import { hasSolarEvents } from '../orbital-model'
-import type { TempoLike } from '../tempo'
+import type { TempoBase, TempoLike } from '../tempo'
 import { CyclicDayTempoRule, FixedTempoRule, join, Tempo } from '../tempo'
 import { to_tempo_by, to_tempo_bare } from '../time'
+import type { CalendarNotePolicy } from './calendar-policy'
+import type { SeasonalNoteMap } from './calendar-notes'
+
+export const SOLAR_TERM_PHASES = {
+  立春: 1 / 8,
+  入梅: 80 / 360,
+  春分: 2 / 8,
+  半夏生: 100 / 360,
+  夏土用: 13 / 40,
+  立夏: 3 / 8,
+  夏至: 4 / 8,
+  秋土用: 23 / 40,
+  立秋: 5 / 8,
+  秋分: 6 / 8,
+  冬土用: 33 / 40,
+  立冬: 7 / 8,
+  冬至: 8 / 8,
+  春土用: 43 / 40,
+  次立春: 9 / 8,
+} as const
+
+export type SolarTermName = keyof typeof SOLAR_TERM_PHASES
+export type SolarTerms = { [Name in SolarTermName]: Tempo<TempoBase> }
+
+export type SolarTermPolicyContext =
+  | {
+      kind: 'observed'
+      sunny: OrbitalModel
+      dayMsec: number
+      dayZero: number
+      utc: number
+    }
+  | {
+      kind: 'mean'
+      Zz: TempoLike
+      d: TempoLike
+    }
+
+export class SolarTermPolicy implements CalendarNotePolicy<SolarTermPolicyContext, SolarTerms> {
+  constructor(readonly kind: SolarTermPolicyContext['kind']) {}
+
+  resolve(context: SolarTermPolicyContext): SolarTerms {
+    if (this.kind === 'observed') {
+      if (context.kind !== 'observed')
+        throw new Error('observed solar term policy requires observed context')
+      return resolve_observed_solar_terms(
+        context.sunny,
+        context.dayMsec,
+        context.dayZero,
+        context.utc,
+      )
+    }
+    if (context.kind !== 'mean') throw new Error('mean solar term policy requires mean context')
+    return resolve_mean_solar_terms(context.Zz, context.d)
+  }
+}
+
+export type ZassetsuPolicyContext = {
+  terms: SolarTerms
+  dayMsec: number
+  day10Zero: number
+  stemLength: number
+}
+
+export class ZassetsuPolicy implements CalendarNotePolicy<ZassetsuPolicyContext, SeasonalNoteMap> {
+  resolve({ terms, dayMsec, day10Zero, stemLength }: ZassetsuPolicyContext): SeasonalNoteMap {
+    return resolve_zassetsu_from_terms(dayMsec, day10Zero, stemLength, terms)
+  }
+}
 
 export function solar_phase(sunny: OrbitalModel, phase: number, near: number) {
   return sunny.timeOfPhase(mod(phase, 1), near)
@@ -28,24 +97,13 @@ export function solar_phase_before(sunny: OrbitalModel, phase: number, utc: numb
   return at
 }
 
-export function solar_terms(sunny: OrbitalModel, dayMsec: number, dayZero: number, utc: number) {
-  const phases = {
-    立春: 1 / 8,
-    入梅: 80 / 360,
-    春分: 2 / 8,
-    半夏生: 100 / 360,
-    夏土用: 13 / 40,
-    立夏: 3 / 8,
-    夏至: 4 / 8,
-    秋土用: 23 / 40,
-    立秋: 5 / 8,
-    秋分: 6 / 8,
-    冬土用: 33 / 40,
-    立冬: 7 / 8,
-    冬至: 8 / 8,
-    春土用: 43 / 40,
-    次立春: 9 / 8,
-  }
+function resolve_observed_solar_terms(
+  sunny: OrbitalModel,
+  dayMsec: number,
+  dayZero: number,
+  utc: number,
+): SolarTerms {
+  const phases = SOLAR_TERM_PHASES
   const springEquinoxPhase = 2 / 8
   const basePhase = phases.立春
   const baseAt = solar_phase_before(sunny, basePhase - springEquinoxPhase, utc)
@@ -179,36 +237,18 @@ export function solor(
   }
 }
 
-type SolarTerms = ReturnType<typeof solar_terms>
-
 /**
- * solar_terms_mean: 平気法(等角分割)版の二十四節気+雑節の基準15項目。
- * solar_terms() が実軌道(sunny.timeOfPhase())で求めるのに対し、
+ * mean SolarTermPolicy: 平気法(等角分割)版の二十四節気+雑節の基準15項目。
+ * observed SolarTermPolicy が実軌道(sunny.timeOfPhase())で求めるのに対し、
  * こちらは Zz(平均太陽年)の span を比例配分するだけで求める。
  * 既存 FancyDate.雑節() が内部で行っていた計算をそのまま抽出したもの。
  *
  * Zz/d は呼び出し側の to_tempos() が解決した Tempo をそのまま渡すこと
  * (暦によって d の zero 基準が異なる場合があるため、ここで作り直さない)。
  */
-export function solar_terms_mean(Zz: TempoLike, d: TempoLike): SolarTerms {
+function resolve_mean_solar_terms(Zz: TempoLike, d: TempoLike): SolarTerms {
   const d0 = d.reset(Zz.zero)
-  const phases = {
-    立春: 1 / 8,
-    入梅: 80 / 360,
-    春分: 2 / 8,
-    半夏生: 100 / 360,
-    夏土用: 13 / 40,
-    立夏: 3 / 8,
-    夏至: 4 / 8,
-    秋土用: 23 / 40,
-    立秋: 5 / 8,
-    秋分: 6 / 8,
-    冬土用: 33 / 40,
-    立冬: 7 / 8,
-    冬至: 8 / 8,
-    春土用: 43 / 40,
-    次立春: 9 / 8,
-  }
+  const phases = SOLAR_TERM_PHASES
   const term = (phase: number) => {
     const now = Zz.last_at + (phase - phases.立春) * Zz.size
     return Tempo.at(new FixedTempoRule(d.size, d0.last_at), { write_at: now })
@@ -233,12 +273,12 @@ export function solar_terms_mean(Zz: TempoLike, d: TempoLike): SolarTerms {
 }
 
 /**
- * 雑節_from_terms: 二十四節気+雑節の基準15項目から、八十八夜・二百十日・
+ * ZassetsuPolicyの内部合成: 二十四節気+雑節の基準15項目から、八十八夜・二百十日・
  * 二百二十日・彼岸・社日・土用・節分などの雑節一式を組み立てる共通部分。
- * 基準15項目を実軌道(solar_terms)で求めるか平気法(solar_terms_mean)で
- * 求めるかだけが 雑節_by_phase / 雑節_by_mean の違いになる。
+ * 基準15項目をobserved／meanのSolarTermPolicyで求めるかだけが
+ * 雑節の解決contextの違いになる。
  */
-export function 雑節_from_terms(
+function resolve_zassetsu_from_terms(
   dayMsec: number,
   day10Zero: number,
   stemLength: number,
@@ -337,30 +377,9 @@ export function 雑節_from_terms(
 }
 
 /**
- * 雑節_by_mean: 平気法(等角分割)版。solar_terms_mean() で基準項目を求め、
- * 雑節_from_terms() で残りを組み立てる。既存 FancyDate.雑節() と同じ結果になる。
+ * ZassetsuPolicy: SolarTermPolicyで基準項目を求め、残りの雑節を組み立てる。
+ * mean／observedのどちらを使うかはtermsを渡す側の責務とする。
  */
-export function 雑節_by_mean(
-  Zz: TempoLike,
-  d: TempoLike,
-  dayMsec: number,
-  day10Zero: number,
-  stemLength: number,
-) {
-  return 雑節_from_terms(dayMsec, day10Zero, stemLength, solar_terms_mean(Zz, d))
-}
-
-export function 雑節_by_phase(
-  sunny: OrbitalModel,
-  dayMsec: number,
-  dayZero: number,
-  day10Zero: number,
-  stemLength: number,
-  utc: number,
-) {
-  return 雑節_from_terms(dayMsec, day10Zero, stemLength, solar_terms(sunny, dayMsec, dayZero, utc))
-}
-
 export function solar_hour_table(
   sunny: OrbitalModel,
   earthy: RotationModel,

@@ -73,6 +73,8 @@ Phase 11では、Thai近代太陰太陽暦を基礎にした`ThaiBuddhistFeastPo
 
 Phase 12では、`ThaiBuddhistFeastPolicy`の結果をsampleのlabel／notes APIへ投影する。`thaiBuddhistFeastDates()`は計算済みのlocal civil dateを再計算せず表示labelを付け、`thaiBuddhistFeastNotes()`は指定した暦日の境界と行事の`utc`を照合する。政府休日の振替日や、宗派・地域ごとの表示名はこのadapterへ固定せず、別のnotation／override層で差し替えられる形を保つ。
 
+季節現象・暦注は、天体イベントを直接返す関数群として増やさず、`CalendarNotePolicy`の実装へ集約する。`SolarTermPolicy`はmean／observedのterm setを返し、`ZassetsuPolicy`はそのterm setから雑節を合成し、`JapaneseFixedDateNotePolicy`は節句・風習、`ReligiousFixedDateNotePolicy`はカトリック・仏教の固定日noteを返す。`FancyDate.solar_terms()`、`雑節()`、`節句()`は公開投影APIとして残すが、内部計算は各policyを通る。
+
 localeの責務は、tokenのfallback label、span unitのruby、季節注の表示名など、言語へ依存する一般語彙を提供することとする。教会暦やThai feastのID labelのようにfeature固有の語彙は、各sample derived adapterがlabel overrideとともに管理し、core localeへ混ぜない。
 
 ### 2.3 座標・表示層

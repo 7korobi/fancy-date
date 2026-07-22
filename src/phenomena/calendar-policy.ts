@@ -97,6 +97,10 @@ export type FeastPolicy<
   resolve(context: Context): readonly Feast[]
 }
 
+export type CalendarNotePolicy<Context, Result> = {
+  resolve(context: Context): Result
+}
+
 export type LunisolarPrincipalTermLike = {
   index: number
   longitudeDeg: number

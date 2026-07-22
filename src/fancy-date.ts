@@ -1,6 +1,12 @@
 import { mod, parseNumeral, type Numeral } from './number'
 import type { LocaleEntry, NumeralPurpose } from './locale-registry'
 import { JA_LABELS, JA_SEASONAL_NOTE_LABELS, JA_SPAN_UNIT_RUBY } from './locale/labels'
+import {
+  JapaneseFixedDateNotePolicy,
+  ReligiousFixedDateNotePolicy,
+  type DateNoteGroups,
+  type SeasonalNoteMap,
+} from './phenomena/calendar-notes'
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import type {
   LunarApsisKind,
@@ -32,10 +38,9 @@ import {
   solar_phase as resolveSolarPhase,
   solar_phase_before as resolveSolarPhaseBefore,
   solar_term as resolveSolarTerm,
-  solar_terms as resolveSolarTerms,
+  SolarTermPolicy,
+  ZassetsuPolicy,
   to_tempo_by_solor as resolveTempoBySolor,
-  雑節_by_mean as resolve雑節ByMean,
-  雑節_by_phase as resolve雑節ByPhase,
 } from './phenomena/solar'
 import { prepareSpot } from './prepare'
 import {
@@ -68,6 +73,12 @@ import type {
   TempoRule,
 } from './tempo'
 import { to_tempo_bare } from './time'
+
+const observed_solar_term_policy = new SolarTermPolicy('observed')
+const mean_solar_term_policy = new SolarTermPolicy('mean')
+const zassetsu_policy = new ZassetsuPolicy()
+const japanese_fixed_date_note_policy = new JapaneseFixedDateNotePolicy()
+const religious_fixed_date_note_policy = new ReligiousFixedDateNotePolicy()
 
 export {
   MEAN_ASTRONOMY,
@@ -133,6 +144,7 @@ export type {
   CalendarYearLayout,
   CalendarYearPolicyContext,
   CalendarYearPolicy,
+  CalendarNotePolicy,
   DayBoundaryPolicy,
   DayBoundaryEvent,
   DayAssignmentContext,
@@ -161,6 +173,23 @@ export type {
   LunisolarPrincipalTermLike,
   PrincipalTermLunisolarMonth,
 } from './phenomena/calendar-policy'
+export {
+  JapaneseFixedDateNotePolicy,
+  ReligiousFixedDateNotePolicy,
+} from './phenomena/calendar-notes'
+export type {
+  DateNoteGroups,
+  DateNoteRule,
+  SeasonalNote,
+  SeasonalNoteMap,
+} from './phenomena/calendar-notes'
+export { SOLAR_TERM_PHASES, SolarTermPolicy, ZassetsuPolicy } from './phenomena/solar'
+export type {
+  SolarTermName,
+  SolarTerms,
+  SolarTermPolicyContext,
+  ZassetsuPolicyContext,
+} from './phenomena/solar'
 export {
   ChurchFeastPolicy,
   add_civil_days,
@@ -660,13 +689,12 @@ export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatc
 type FindBetween = DateRange
 const seasonal_note_label_map = Symbol('seasonal_note_label_map')
 type SeasonalNoteLabels = Record<string, string>
-type SeasonalNoteMap = Record<string, { is_cover(at: number): boolean }> & {
+type SeasonalNoteMapWithLabels = SeasonalNoteMap & {
   [seasonal_note_label_map]?: SeasonalNoteLabels
 }
-type DateNoteGroups = Record<string, Record<string, readonly (number | undefined)[]>>
 type NoteProvider = (utc: number, tempos: Tempos) => readonly string[]
 
-function with_seasonal_note_labels<T extends SeasonalNoteMap>(
+function with_seasonal_note_labels<T extends SeasonalNoteMapWithLabels>(
   notes: T,
   labels: SeasonalNoteLabels,
 ): T {
@@ -1580,7 +1608,13 @@ export class FancyDate {
   }
 
   solar_terms(utc: number) {
-    return resolveSolarTerms(this.dic.sunny, this.calc.msec.day, this.calc.zero.day, utc)
+    return observed_solar_term_policy.resolve({
+      kind: 'observed',
+      sunny: this.dic.sunny,
+      dayMsec: this.calc.msec.day,
+      dayZero: this.calc.zero.day,
+      utc,
+    })
   }
 
   succ(utc: DateLike, diff: SpanLike) {
@@ -3576,53 +3610,44 @@ K   = @dic.earthy[2] / 360
     return this.dic.moony.lunarNode(kind, near)
   }
 
-  節句(_utc: number, _tempos = this.to_tempos(_utc)) {
-    // M,d,B,E
+  節句(): DateNoteGroups {
+    const japanese = japanese_fixed_date_note_policy.resolve(undefined)
+    const religious = religious_fixed_date_note_policy.resolve(undefined)
     return {
-      カトリック: {
-        万聖節: [11, 1],
-        万霊節: [11, 2],
-      },
-      節句: {
-        人日: [1, 7],
-        初午: [2, , 7],
-        上巳: [3, 3],
-        端午: [5, 5],
-        七夕: [7, 7],
-        重陽: [9, 9],
-      },
-      仏教: {
-        灌仏会: [4, 8],
-        盂蘭盆会: [7, 15],
-      },
-      風習: {
-        小正月: [1, 15],
-        十五夜: [8, 15],
-        十三夜: [9, 13],
-        七五三: [11, 15],
-        正月事始め: [12, 13],
-      },
+      カトリック: religious.カトリック,
+      節句: japanese.節句,
+      仏教: religious.仏教,
+      風習: japanese.風習,
     }
   }
 
   雑節(utc: number, { Zz, d } = this.to_tempos(utc)) {
     if (hasSolarEvents(this.dic.sunny)) return this.雑節_by_phase(utc)
     return with_seasonal_note_labels(
-      resolve雑節ByMean(Zz, d, this.calc.msec.day, this.calc.zero.day10, this.dic.dCS.length),
+      zassetsu_policy.resolve({
+        terms: mean_solar_term_policy.resolve({ kind: 'mean', Zz, d }),
+        dayMsec: this.calc.msec.day,
+        day10Zero: this.calc.zero.day10,
+        stemLength: this.dic.dCS.length,
+      }),
       this.dic.seasonal_note_labels,
     )
   }
 
   雑節_by_phase(utc: number) {
     return with_seasonal_note_labels(
-      resolve雑節ByPhase(
-        this.dic.sunny,
-        this.calc.msec.day,
-        this.calc.zero.day,
-        this.calc.zero.day10,
-        this.dic.dCS.length,
-        utc,
-      ),
+      zassetsu_policy.resolve({
+        terms: observed_solar_term_policy.resolve({
+          kind: 'observed',
+          sunny: this.dic.sunny,
+          dayMsec: this.calc.msec.day,
+          dayZero: this.calc.zero.day,
+          utc,
+        }),
+        dayMsec: this.calc.msec.day,
+        day10Zero: this.calc.zero.day10,
+        stemLength: this.dic.dCS.length,
+      }),
       this.dic.seasonal_note_labels,
     )
   }
@@ -3820,7 +3845,7 @@ K   = @dic.earthy[2] / 360
     utc: number,
     tempos = this.to_tempos(utc),
     arg1 = this.雑節(utc, tempos),
-    arg2 = this.節句(utc, tempos),
+    arg2 = this.節句(),
   ) {
     const list: string[] = []
     for (const provider of this.note_providers(arg1, arg2)) {
@@ -3830,7 +3855,7 @@ K   = @dic.earthy[2] / 360
   }
 
   private note_providers(
-    seasonalNotes: SeasonalNoteMap,
+    seasonalNotes: SeasonalNoteMapWithLabels,
     dateNoteGroups: DateNoteGroups,
   ): NoteProvider[] {
     return [
@@ -3839,7 +3864,7 @@ K   = @dic.earthy[2] / 360
     ]
   }
 
-  private seasonal_note_labels(notes: SeasonalNoteMap, tempos: Tempos) {
+  private seasonal_note_labels(notes: SeasonalNoteMapWithLabels, tempos: Tempos) {
     const list: string[] = []
     const labels = notes[seasonal_note_label_map]
     for (const name in notes) {
@@ -4406,7 +4431,7 @@ K   = @dic.earthy[2] / 360
     const indexer: Indexer = this.dic[ik]
     let o = this.to_tempos(utc)
     const arg1 = this.雑節(utc, o)
-    const arg2 = this.節句(utc, o)
+    const arg2 = this.節句()
     let { last_at } = o[bk]
 
     o = this.to_tempos(last_at)

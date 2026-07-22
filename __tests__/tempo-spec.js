@@ -1,7 +1,7 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { to_tempo_bare, to_tempo_by } = require('../lib/time')
-const { to_tempo_by_solor, solar_terms } = require('../lib/phenomena/solar')
+const { SolarTermPolicy, to_tempo_by_solor } = require('../lib/phenomena/solar')
 const { lunisolar } = require('../lib/phenomena/lunisolar')
 const { mod } = require('../lib/number')
 const {
@@ -123,7 +123,7 @@ describe('tempo', () => {
   describe('join', () => {
     // 旧 time.ts の静的 Tempo.join(a, b)(Tempo への統合に伴いクラスごと
     // 削除済み)と数値的に一致することを確認していた式を、その場でインライン
-    // 計算して検証する(phenomena/solar.ts の 雑節_from_terms() が彼岸・
+    // 計算して検証する(phenomena/solar.ts の ZassetsuPolicy が彼岸・
     // 土用・四季の区間を求めるのに使う)。
     test('at() matches the historical Tempo.join() formula for non-adjacent TempoLike intervals sharing the same zero', () => {
       const a = to_tempo_bare(DAY, ZERO, ZERO + 5.5 * DAY)
@@ -570,7 +570,7 @@ describe('tempo', () => {
   })
 
   describe('CyclicDayTempoRule for the 社日-style "read wrapped now_idx, then slide()" pattern', () => {
-    // phenomena/solar.ts の 雑節_from_terms() 社日計算(C移行前、現状のまま):
+    // phenomena/solar.ts の ZassetsuPolicy 社日計算(C移行前、現状のまま):
     //   const C = to_tempo_bare(dayMsec, zero, write_at)
     //   C.now_idx = mod(C.now_idx, stemLength)
     //   return C.slide(stemLength / 2 - C.now_idx - 1)
@@ -849,17 +849,17 @@ describe('tempo', () => {
   })
 
   describe('OrbitalPhaseTempoRule', () => {
-    // 既存 solar_terms()/雑節_by_phase() と同じ solar_phase()(= sunny.timeOfPhase())
-    // を使う。referencePhaseOffset = 2/8 は既存実装と同じ「春分基準のズレ」。
+    // observed SolarTermPolicy と同じ solar_phase()(= sunny.timeOfPhase())を使う。
+    // referencePhaseOffset = 2/8 は既存実装と同じ「春分基準のズレ」。
     const g = Calendar.平気法
     const sunny = g.dic.sunny
     const dayMsec = g.calc.msec.day
     const dayZero = g.calc.zero.day
     const rule = new OrbitalPhaseTempoRule(sunny, g.dic.Z.length, 2 / 8)
 
-    // solar_terms() の代表的な二十四節気の項目(雑節ではないもの)と、日単位で完全一致することを確認する。
+    // SolarTermPolicyの代表的な二十四節気の項目(雑節ではないもの)と、日単位で完全一致することを確認する。
     // 入梅・半夏生・土用は24等分の目盛りに乗らない雑節なので除外する。
-    test('at() matches solar_terms() for the 24 sekki (excluding non-24 雑節)', () => {
+    test('at() matches SolarTermPolicy for the 24 sekki (excluding non-24 雑節)', () => {
       const sekkiPhase = {
         立春: 1 / 8,
         春分: 2 / 8,
@@ -871,7 +871,13 @@ describe('tempo', () => {
         次立春: 9 / 8,
       }
       const utc = Date.UTC(2024, 5, 1)
-      const terms = solar_terms(sunny, dayMsec, dayZero, utc)
+      const terms = new SolarTermPolicy('observed').resolve({
+        kind: 'observed',
+        sunny,
+        dayMsec,
+        dayZero,
+        utc,
+      })
       for (const [name, phase] of Object.entries(sekkiPhase)) {
         const tempo = terms[name]
         const env = rule.at(tempo.write_at)

@@ -1096,7 +1096,7 @@ describe('Gregorian', () => {
   })
 
   // 社日(春社日/秋社日)は「十干『戊』に最も近い日」という独立した定義を
-  // 持つ(雑節_from_terms() 内部では、春分/秋分の瞬間の十干日から
+  // 持つ(ZassetsuPolicy 内部では、春分/秋分の瞬間の十干日から
   // now_idx = mod(rawNowIdx, 10) で「戊からの経過日数」を求め、
   // dCS.slide(stemLength/2 - now_idx - 1) で戊の日へずらすという、
   // 一度構築した Tempo の now_idx を書き換えてから slide() する
@@ -1578,7 +1578,7 @@ describe('Gregorian', () => {
 
   // Z (Tempos.Z) は sunny が solarEvents を持つ(=hasSolarEvents)場合、
   // 等角分割(平気法相当)ではなく実軌道(定気法)の二十四節気で解決される。
-  // GregorianAstronomical(ga)は天文東京を使うため対象になり、solar_terms()の
+  // GregorianAstronomical(ga)は天文東京を使うため対象になり、SolarTermPolicyの
   // 8つの主要な節気(立春/春分/立夏/夏至/立秋/秋分/立冬/冬至)とラベルが一致する。
   test('Z resolves true solar terms (定気法) once sunny exposes solarEvents precision', () => {
     const terms = ga.solar_terms(g.parse('2020年6月1日'))
