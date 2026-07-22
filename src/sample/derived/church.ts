@@ -1,6 +1,6 @@
 import type { FancyDate } from '../../fancy-date'
 import {
-  church_feasts as resolveChurchFeasts,
+  ChurchFeastPolicy,
   convert_civil_date,
   type ChurchFeast,
   type ChurchFeastId,
@@ -47,7 +47,7 @@ export function churchFeastDates(
   const system = options.system ?? 'gregorian'
   const calendarSystem = options.calendarSystem ?? system
   const labels = { ...CHURCH_FEAST_LABELS, ...options.labels }
-  return resolveChurchFeasts(year, system).map((feast) => {
+  return new ChurchFeastPolicy(system).resolve({ year }).map((feast) => {
     const date = convert_civil_date(feast.date, system, calendarSystem)
     return {
       ...feast,

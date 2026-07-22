@@ -70,6 +70,8 @@ Phase 7では、暦日の開始方法を`DayBoundaryPolicy`へ正規化する。
 
 Phase 8では、天体現象をcivil dayへ投影する`DayAssignmentPolicy`を追加する。tithiのような現象は、day boundaryを決めるpolicyでも、月番号を決めるlunisolar policyでもなく、各civil dayへ現象indexを割り当てる第三の軸である。既存の`AssignmentRule`は互換adapterとして残し、raw連続indexと表示用`now_idx`、`repeated`/`skipped` flagsを保持する。
 
+Phase 9では、年ごとの宗教行事を基礎暦へ投影する`FeastPolicy`を追加する。policyは`{ year }`を受けてcivil date付きの行事列を返し、Computusのような計算伝統を基礎暦の天体モデルや市民暦表示から分離する。既存の`church_feasts()`は`ChurchFeastPolicy`の互換adapterとして残し、`churchFeastDates()`が担う別市民暦への変換とlabel付与はprojection/notation層に置く。将来の`ThaiBuddhistFeastProvider`も同じ契約へ接続できるが、政府休日の年表や宗派別の採用日はこのpolicyとは別のoverride層とする。
+
 ### 2.3 座標・表示層
 
 内部計算では、リセットされない `raw_year` と表示用の `year` を分ける。元号、仏暦、地域の年番号は `raw_year` から導出する注釈とし、月の `month_index` と表示月番号も分離する。

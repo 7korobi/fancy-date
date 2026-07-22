@@ -1,3 +1,5 @@
+import type { FeastPolicy, FeastPolicyContext } from './calendar-policy'
+
 export type ComputusSystem = 'gregorian' | 'julian'
 
 export type CivilDate = {
@@ -32,6 +34,29 @@ export type ChurchFeast = {
   kind: 'fixed' | 'movable'
   date: CivilDate
   offset_from_easter?: number
+}
+
+export class ChurchFeastPolicy implements FeastPolicy<FeastPolicyContext, ChurchFeast> {
+  constructor(readonly system: ComputusSystem = 'gregorian') {}
+
+  resolve({ year }: FeastPolicyContext): readonly ChurchFeast[] {
+    const result = computus(year, this.system)
+    const fixed = FIXED_FEASTS.map(([id, month, day]) => ({
+      id,
+      kind: 'fixed' as const,
+      date: civil_date(year, month, day),
+    }))
+    const movable = MOVABLE_FEASTS.map(([id, offset_from_easter]) => ({
+      id,
+      kind: 'movable' as const,
+      date: add_civil_days(result.easter_sunday, offset_from_easter, this.system),
+      offset_from_easter,
+    }))
+    return [...fixed, ...movable].sort(
+      (left, right) =>
+        civil_date_to_jdn(left.date, this.system) - civil_date_to_jdn(right.date, this.system),
+    )
+  }
 }
 
 const FIXED_FEASTS: readonly (readonly [ChurchFeastId, number, number])[] = [
@@ -172,19 +197,5 @@ export function church_feasts(
   year: number,
   system: ComputusSystem = 'gregorian',
 ): readonly ChurchFeast[] {
-  const result = computus(year, system)
-  const fixed = FIXED_FEASTS.map(([id, month, day]) => ({
-    id,
-    kind: 'fixed' as const,
-    date: civil_date(year, month, day),
-  }))
-  const movable = MOVABLE_FEASTS.map(([id, offset_from_easter]) => ({
-    id,
-    kind: 'movable' as const,
-    date: add_civil_days(result.easter_sunday, offset_from_easter, system),
-    offset_from_easter,
-  }))
-  return [...fixed, ...movable].sort(
-    (left, right) => civil_date_to_jdn(left.date, system) - civil_date_to_jdn(right.date, system),
-  )
+  return new ChurchFeastPolicy(system).resolve({ year })
 }

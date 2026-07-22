@@ -145,6 +145,11 @@ export type {
   LunisolarLeapDay,
   LunisolarPolicy,
   LunisolarYearContext,
+  FeastDate,
+  FeastKind,
+  FeastPolicy,
+  FeastPolicyContext,
+  FeastRecord,
 } from './phenomena/calendar-policy'
 export {
   normalizeDayBoundaryPolicy,
@@ -156,7 +161,13 @@ export type {
   LunisolarPrincipalTermLike,
   PrincipalTermLunisolarMonth,
 } from './phenomena/calendar-policy'
-export { add_civil_days, church_feasts, computus, convert_civil_date } from './phenomena/computus'
+export {
+  ChurchFeastPolicy,
+  add_civil_days,
+  church_feasts,
+  computus,
+  convert_civil_date,
+} from './phenomena/computus'
 export type {
   ChurchFeast,
   ChurchFeastId,

@@ -87,6 +87,31 @@ export type LunisolarPolicy = {
   resolveLeapDay?(context: LunisolarYearContext): LunisolarLeapDay | undefined
 }
 
+export type FeastDate = {
+  year: number
+  month: number
+  day: number
+}
+
+export type FeastKind = 'fixed' | 'movable' | 'observed'
+
+export type FeastRecord<Id extends string = string> = {
+  id: Id
+  kind: FeastKind
+  date: FeastDate
+}
+
+export type FeastPolicyContext = {
+  year: number
+}
+
+export type FeastPolicy<
+  Context extends FeastPolicyContext = FeastPolicyContext,
+  Feast extends FeastRecord = FeastRecord,
+> = {
+  resolve(context: Context): readonly Feast[]
+}
+
 export type LunisolarPrincipalTermLike = {
   index: number
   longitudeDeg: number

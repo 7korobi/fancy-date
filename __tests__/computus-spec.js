@@ -1,6 +1,7 @@
 const api = require('../lib/index')
 
-const { Calendar, churchFeastDates, churchFeastNotes, church_feasts, computus } = api
+const { Calendar, ChurchFeastPolicy, churchFeastDates, churchFeastNotes, church_feasts, computus } =
+  api
 
 describe('church computus', () => {
   test.each([
@@ -48,6 +49,12 @@ describe('church computus', () => {
     ])
     expect(feasts.find(({ id }) => id === 'good-friday').offset_from_easter).toBe(-2)
     expect(feasts.find(({ id }) => id === 'ascension').offset_from_easter).toBe(39)
+  })
+
+  test('exposes church feasts through the shared feast policy contract', () => {
+    const policy = new ChurchFeastPolicy('julian')
+    expect(policy.resolve({ year: 2024 })).toEqual(church_feasts(2024, 'julian'))
+    expect(policy.resolve({ year: 2024 })).toHaveLength(12)
   })
 
   test('converts Gregorian computus dates into Gregorian calendar dates and notes', () => {
