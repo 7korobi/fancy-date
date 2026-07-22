@@ -58,6 +58,8 @@ Policy の責務は以下である。
 
 この契約の初期型は `src/phenomena/calendar-policy.ts` に置く。Phase 2では型定義と公開barrelへの再exportだけを行い、既存の平均・観測・Thai実装の挙動にはまだ接続しない。
 
+Phase 3では `PeriodicCalendarYearPolicy` を Gregorian/Julian の既存年表へ接続する。これは閏年の年構造だけをpolicy化する最初の実装であり、月境界や太陰太陽暦のpolicyは後続Phaseで分離する。
+
 ### 2.3 座標・表示層
 
 内部計算では、リセットされない `raw_year` と表示用の `year` を分ける。元号、仏暦、地域の年番号は `raw_year` から導出する注釈とし、月の `month_index` と表示月番号も分離する。

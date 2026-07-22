@@ -1,3 +1,5 @@
+import { mod } from '../number'
+
 export type CalendarMonthLayout = {
   index: number
   month: number
@@ -16,6 +18,42 @@ export type CalendarYearLayout = {
 
 export type CalendarYearPolicy<Context = unknown> = {
   resolve(year: number, context: Context): CalendarYearLayout
+}
+
+export type CalendarYearPolicyContext = {
+  normalLengthDays: number
+  leapLengthDays: number
+  normalMonths?: readonly CalendarMonthLayout[]
+  leapMonths?: readonly CalendarMonthLayout[]
+}
+
+export class PeriodicCalendarYearPolicy implements CalendarYearPolicy<CalendarYearPolicyContext> {
+  constructor(
+    readonly divisors: readonly number[],
+    readonly period: number,
+    readonly leapShift = 0,
+  ) {}
+
+  isLeapYear(year: number) {
+    const relativeYear = mod(year - this.leapShift, this.period)
+    let isLeap = false
+    for (let index = 0; index < this.divisors.length; index++) {
+      if (relativeYear % this.divisors[index] !== 0) continue
+      isLeap = index % 2 === 0
+    }
+    return isLeap || mod(year, this.period) === mod(this.leapShift, this.period)
+  }
+
+  resolve(year: number, context: CalendarYearPolicyContext): CalendarYearLayout {
+    const is_leap = this.isLeapYear(year)
+    return {
+      year,
+      lengthDays: is_leap ? context.leapLengthDays : context.normalLengthDays,
+      months: is_leap ? (context.leapMonths ?? []) : (context.normalMonths ?? []),
+      is_leap,
+      kind: 'periodic',
+    }
+  }
 }
 
 export type LunisolarBoundarySource = 'mean' | 'observed' | 'table' | 'hybrid'

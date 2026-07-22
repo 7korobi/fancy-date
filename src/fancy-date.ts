@@ -11,6 +11,7 @@ import type {
 } from './orbital-model'
 import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
 import type { LunisolarDate } from './phenomena/lunisolar'
+import { PeriodicCalendarYearPolicy } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
 import {
@@ -118,6 +119,7 @@ export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisola
 export type {
   CalendarMonthLayout,
   CalendarYearLayout,
+  CalendarYearPolicyContext,
   CalendarYearPolicy,
   HourArithmeticPolicy,
   HourDivisionPolicy,
@@ -127,6 +129,7 @@ export type {
   LunisolarPolicy,
   LunisolarYearContext,
 } from './phenomena/calendar-policy'
+export { PeriodicCalendarYearPolicy } from './phenomena/calendar-policy'
 export { add_civil_days, church_feasts, computus, convert_civil_date } from './phenomena/computus'
 export type {
   ChurchFeast,
@@ -3155,19 +3158,15 @@ export class FancyDate {
     let period = leaps.pop()
 
     if (period) {
-      const leap_shift = this.dic.leap_shift || 0
+      const yearPolicy = new PeriodicCalendarYearPolicy(leaps, period, this.dic.leap_shift || 0)
       range.year = []
       for (let idx = 0; idx < period; idx++) {
-        const rel_idx = mod(idx - leap_shift, period)
-        let is_leap = 0
-        for (let mode = 0; mode < leaps.length; mode++) {
-          const div = leaps[mode]
-          if (rel_idx % div) continue
-          is_leap = (!mode as any as number) % 2
-        }
-        range.year.push(this.calc.range.year[is_leap])
+        const layout = yearPolicy.resolve(idx, {
+          normalLengthDays: this.calc.range.year[0],
+          leapLengthDays: this.calc.range.year[1],
+        })
+        range.year.push(layout.lengthDays)
       }
-      range.year[mod(leap_shift, period)] = this.calc.range.year[1]
     } else {
       range.year = [this.calc.range.year[0]]
     }
