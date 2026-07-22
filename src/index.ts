@@ -200,9 +200,11 @@ export {
   rotationOf,
   tithi,
   thai_lunisolar,
+  thai_lunisolar_date_start,
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
   ThaiModernLunisolarYearPolicy,
+  ThaiBuddhistFeastPolicy,
   transformOrbital,
 } from './fancy-date'
 export type {
@@ -283,6 +285,9 @@ export type {
   ThaiLunisolarDate,
   ThaiLunisolarOptions,
   ThaiLunisolarYearType,
+  ThaiBuddhistFeast,
+  ThaiBuddhistFeastId,
+  ThaiBuddhistFeastPolicyOptions,
   JupiterSolarOrbitalOptions,
   KeplerianSolarOrbitalOptions,
   MarsSolarOrbitalOptions,

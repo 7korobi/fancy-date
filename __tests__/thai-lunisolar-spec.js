@@ -4,6 +4,7 @@ const {
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
 } = require('../lib/phenomena/thai-lunisolar')
+const { ThaiBuddhistFeastPolicy } = require('../lib/index')
 const {
   THAI_OFFICIAL_DATE_FIXTURES,
   THAI_OFFICIAL_SOURCE,
@@ -91,6 +92,57 @@ describe('official Thai lunisolar rules', () => {
 
   test('keeps the historical lower bound explicit', () => {
     expect(() => thai_lunisolar_year_type(1902)).toThrow(/1903 and later/)
+  })
+
+  test('projects Buddhist lunar feasts into local civil dates', () => {
+    const policy = new ThaiBuddhistFeastPolicy({
+      lunar: {
+        geo: official.dic.geo,
+        dayMsec: official.calc.msec.day,
+        dayZero: official.calc.zero.day,
+      },
+    })
+    const feasts = policy.resolve({ year: 2567 })
+
+    expect(
+      feasts.map(({ id, date, lunar_month, lunar_day }) => [id, date, lunar_month, lunar_day]),
+    ).toEqual([
+      ['makha-bucha', { year: 2024, month: 2, day: 24 }, 3, 15],
+      ['visakha-bucha', { year: 2024, month: 5, day: 22 }, 6, 15],
+      ['asalha-bucha', { year: 2024, month: 7, day: 20 }, 8, 15],
+      ['khao-phansa', { year: 2024, month: 7, day: 21 }, 8, 16],
+      ['ok-phansa', { year: 2024, month: 10, day: 17 }, 11, 15],
+    ])
+    for (const feast of feasts) {
+      const date = official.thaiLunisolar(feast.utc + 12 * 60 * 60 * 1000)
+      expect([date.year, date.month, date.day, date.is_leap]).toEqual([
+        feast.thai_year,
+        feast.lunar_month,
+        feast.lunar_day,
+        feast.is_leap_month,
+      ])
+    }
+  })
+
+  test('moves Asalha and Khao Phansa to the repeated 8th month', () => {
+    const policy = new ThaiBuddhistFeastPolicy({
+      lunar: {
+        geo: official.dic.geo,
+        dayMsec: official.calc.msec.day,
+        dayZero: official.calc.zero.day,
+      },
+    })
+    expect(
+      policy
+        .resolve({ year: 2569 })
+        .map(({ id, date, is_leap_month, lunar_day }) => [id, date, is_leap_month, lunar_day]),
+    ).toEqual([
+      ['makha-bucha', { year: 2026, month: 2, day: 2 }, false, 15],
+      ['visakha-bucha', { year: 2026, month: 5, day: 1 }, false, 15],
+      ['asalha-bucha', { year: 2026, month: 7, day: 29 }, true, 15],
+      ['khao-phansa', { year: 2026, month: 7, day: 30 }, true, 16],
+      ['ok-phansa', { year: 2026, month: 10, day: 26 }, false, 15],
+    ])
   })
 
   test('classifies normal, intercalary-day, and intercalary-month years', () => {

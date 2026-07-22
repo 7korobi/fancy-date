@@ -74,6 +74,8 @@ Phase 9では、年ごとの宗教行事を基礎暦へ投影する`FeastPolicy`
 
 Phase 10では、Hourの区画生成と、Hourを含む相対日時操作の意味を`HourArithmeticPolicy`で分ける。`elapsed-duration`は公称Hour幅を固定durationとして`add()`/`span()`へ適用し、`boundary-step`は不定時法・表形式Hourの実境界を次の区画として扱う。`Tempo.succ()`/`back()`は区画そのものの遷移なので常にruleのboundary stepを使い、calendar-levelの相対操作だけがこのpolicyを参照する。既定値は等分Hourがelapsed、temporal/table Hourがboundaryである。
 
+Phase 11では、Thai近代太陰太陽暦を基礎にした`ThaiBuddhistFeastPolicy`を追加する。policyの入力年は仏暦年、結果の`date`は指定地点の現地Gregorian civil date、`utc`とThai lunar month/dayを併記する。通常年は3/15・6/15・8/15・8/16・11/15を採用し、閏月年は8月の宗教行事を後半の8/8へ移す。現段階では宗教日の計算に限定し、政府休日、週末振替、宗派・地域差は別のtable/override providerの責務とする。
+
 ### 2.3 座標・表示層
 
 内部計算では、リセットされない `raw_year` と表示用の `year` を分ける。元号、仏暦、地域の年番号は `raw_year` から導出する注釈とし、月の `month_index` と表示月番号も分離する。

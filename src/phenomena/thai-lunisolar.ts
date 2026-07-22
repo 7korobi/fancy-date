@@ -363,6 +363,38 @@ function year_start(options: ThaiLunisolarOptions, year: number) {
   return start + options.dayMsec
 }
 
+export function thai_lunisolar_date_start(
+  options: ThaiLunisolarOptions,
+  buddhistYear: number,
+  month: number,
+  day: number,
+  is_leap = false,
+) {
+  if (!Number.isFinite(options.dayMsec) || options.dayMsec !== SOLAR_DAY_MSEC) {
+    throw new RangeError('Thai lunisolar calendar requires a 24-hour civil day')
+  }
+  if (!Number.isInteger(buddhistYear) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new RangeError(`invalid Thai lunisolar date ${buddhistYear}-${month}-${day}`)
+  }
+  const solarYear = buddhistYear - 543
+  const layout = thai_year_layout(solarYear)
+  const monthIndex = layout.months.findIndex(
+    (entry) => entry.month === month && entry.is_leap === is_leap,
+  )
+  if (monthIndex < 0) {
+    throw new RangeError(`Thai lunisolar month is not present: ${buddhistYear}-${month}`)
+  }
+  const monthEntry = layout.months[monthIndex]
+  if (day < 1 || monthEntry.days < day) {
+    throw new RangeError(`invalid Thai lunisolar day ${buddhistYear}-${month}-${day}`)
+  }
+  let start = year_start(options, solarYear)
+  for (let index = 0; index < monthIndex; index++) {
+    start += layout.months[index].days * options.dayMsec
+  }
+  return start + (day - 1) * options.dayMsec
+}
+
 function resolve_year(options: ThaiLunisolarOptions, utc: number) {
   if (!Number.isFinite(options.dayMsec) || options.dayMsec !== SOLAR_DAY_MSEC) {
     throw new RangeError('Thai lunisolar calendar requires a 24-hour civil day')

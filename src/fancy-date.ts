@@ -178,15 +178,22 @@ export type {
 } from './phenomena/computus'
 export {
   thai_lunisolar,
+  thai_lunisolar_date_start,
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
   ThaiModernLunisolarYearPolicy,
 } from './phenomena/thai-lunisolar'
+export { ThaiBuddhistFeastPolicy } from './phenomena/thai-feasts'
 export type {
   ThaiLunisolarDate,
   ThaiLunisolarOptions,
   ThaiLunisolarYearType,
 } from './phenomena/thai-lunisolar'
+export type {
+  ThaiBuddhistFeast,
+  ThaiBuddhistFeastId,
+  ThaiBuddhistFeastPolicyOptions,
+} from './phenomena/thai-feasts'
 export type { PreparedSpot, PreparedSpotModels } from './prepare'
 export { prepareSpot, prepareSpotModels } from './prepare'
 // export * from はコンパイル時に tslib.__exportStar() という実行時関数呼び出しになり、
