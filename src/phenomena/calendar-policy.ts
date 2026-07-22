@@ -63,6 +63,7 @@ export type LunisolarBoundary = {
   last_at: number
   next_at: number
   source_at?: number
+  next_source_at?: number
   source_kind: LunisolarBoundarySource
 }
 
@@ -84,6 +85,86 @@ export type LunisolarPolicy = {
   resolveMonth(context: LunisolarYearContext, boundary: LunisolarBoundary): number
   isLeapMonth?(context: LunisolarYearContext, boundary: LunisolarBoundary): boolean
   resolveLeapDay?(context: LunisolarYearContext): LunisolarLeapDay | undefined
+}
+
+export type LunisolarPrincipalTermLike = {
+  index: number
+  longitudeDeg: number
+  month: number
+  at: number
+}
+
+export type PrincipalTermLunisolarMonth = LunisolarBoundary & {
+  month: number
+  is_leap: boolean
+  year: number
+  principal_term?: LunisolarPrincipalTermLike
+}
+
+export class PrincipalTermLunisolarPolicy {
+  constructor(
+    private readonly resolvePrincipalTerm: (
+      boundary: LunisolarBoundary,
+    ) => LunisolarPrincipalTermLike | undefined,
+    private readonly yearOf: (at: number) => number,
+  ) {}
+
+  assign(boundaries: readonly LunisolarBoundary[]): PrincipalTermLunisolarMonth[] {
+    const assigned = boundaries.map((boundary) => ({
+      ...boundary,
+      month: NaN,
+      is_leap: false,
+      year: NaN,
+      principal_term: this.resolvePrincipalTerm(boundary),
+    }))
+    let month = NaN
+    for (const item of assigned) {
+      if (item.principal_term) {
+        month = item.principal_term.month
+        item.month = month
+        item.is_leap = false
+      } else {
+        item.month = month
+        item.is_leap = true
+      }
+    }
+
+    const firstAssignedIndex = assigned.findIndex(({ month }) => Number.isFinite(month))
+    if (0 < firstAssignedIndex) {
+      let previousMonth = assigned[firstAssignedIndex].month
+      for (let index = firstAssignedIndex - 1; 0 <= index; index--) {
+        const item = assigned[index]
+        if (item.principal_term) {
+          previousMonth = item.principal_term.month
+          item.month = previousMonth
+          item.is_leap = false
+        } else {
+          item.month = previousMonth
+          item.is_leap = true
+        }
+      }
+    }
+
+    const firstMonthOneIndex = assigned.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
+    if (firstMonthOneIndex < 0) {
+      const year = this.yearOf(assigned[0].last_at)
+      for (const item of assigned) item.year = year
+      return assigned
+    }
+
+    let year = this.yearOf(assigned[firstMonthOneIndex].last_at)
+    for (let index = 0; index < firstMonthOneIndex; index++) {
+      assigned[index].year = year - 1
+    }
+    for (let index = firstMonthOneIndex; index < assigned.length; index++) {
+      const item = assigned[index]
+      if (item.month === 1 && !item.is_leap) {
+        year = this.yearOf(item.last_at)
+      }
+      item.year = year
+    }
+    return assigned
+  }
 }
 
 export type HourArithmeticPolicy = 'elapsed-duration' | 'boundary-step'

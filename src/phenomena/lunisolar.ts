@@ -1,5 +1,7 @@
 import type { OrbitalModel, TIMEZONE } from '../orbital-model'
 import { to_tempo_bare } from '../time'
+import { PrincipalTermLunisolarPolicy } from './calendar-policy'
+import type { LunisolarBoundary, LunisolarBoundarySource } from './calendar-policy'
 
 export type LunisolarPrincipalTerm = {
   index: number
@@ -41,6 +43,7 @@ export type LunisolarOptions = {
   solarPeriodMsec?: number
   principalTermCount?: number
   solarYear?: YearResolver
+  boundarySource?: LunisolarBoundarySource
   geo: TIMEZONE
   dayMsec: number
   dayZero: number
@@ -95,6 +98,26 @@ export function lunisolar(options: LunisolarOptions, utc: number): LunisolarDate
 }
 
 function lunisolar_months_around(options: LunisolarOptions, utc: number): LunisolarMonth[] {
+  const boundaries = lunisolar_boundaries_around(options, utc)
+  const yearOf = (at: number) =>
+    options.solarYear?.(at) ?? new Date(at + local_timezone_msec(options)).getUTCFullYear()
+  const policy = new PrincipalTermLunisolarPolicy(
+    (boundary) => lunisolar_principal_term(options, boundary),
+    yearOf,
+  )
+  return policy.assign(boundaries).map((item) => ({
+    month: item.month,
+    is_leap: item.is_leap,
+    year: item.year,
+    last_at: item.last_at,
+    next_at: item.next_at,
+    new_moon_at: item.source_at!,
+    next_new_moon_at: item.next_source_at!,
+    principal_term: item.principal_term,
+  }))
+}
+
+function lunisolar_boundaries_around(options: LunisolarOptions, utc: number): LunisolarBoundary[] {
   if (!options.moony) {
     throw new Error('lunisolar requires a satellite orbital model')
   }
@@ -123,84 +146,31 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
   for (let i = 0; i < window.future; i++) {
     newMoons.push(lunarPhase(0, newMoons[newMoons.length - 1] + periodMsec))
   }
-  const months = newMoons.slice(0, -1).map((at, index) => {
+  const source_kind = options.boundarySource ?? 'observed'
+  return newMoons.slice(0, -1).map((at, index) => {
     const nextAt = newMoons[index + 1]
     return {
-      month: NaN,
-      is_leap: false,
+      index,
       last_at: local_day_start(options, at),
       next_at: local_day_start(options, nextAt),
-      new_moon_at: at,
-      next_new_moon_at: nextAt,
-      principal_term: lunisolar_principal_term(options, at, nextAt),
+      source_at: at,
+      next_source_at: nextAt,
+      source_kind,
     }
   })
-  assign_lunisolar_months(options, months)
-  return months
 }
 
-function assign_lunisolar_months(options: LunisolarOptions, months: LunisolarMonth[]) {
-  const yearOf = (at: number) =>
-    options.solarYear?.(at) ?? new Date(at + local_timezone_msec(options)).getUTCFullYear()
-  let month = NaN
-  for (const item of months) {
-    if (item.principal_term) {
-      month = item.principal_term.month
-      item.month = month
-      item.is_leap = false
-    } else {
-      item.month = month
-      item.is_leap = true
-    }
-  }
-
-  const firstAssignedIndex = months.findIndex(({ month }) => Number.isFinite(month))
-  if (0 < firstAssignedIndex) {
-    let previousMonth = months[firstAssignedIndex].month
-    for (let i = firstAssignedIndex - 1; 0 <= i; i--) {
-      const item = months[i]
-      if (item.principal_term) {
-        previousMonth = item.principal_term.month
-        item.month = previousMonth
-        item.is_leap = false
-      } else {
-        item.month = previousMonth
-        item.is_leap = true
-      }
-    }
-  }
-
-  const firstMonthOneIndex = months.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
-  if (firstMonthOneIndex < 0) {
-    const year = yearOf(months[0].last_at)
-    for (const item of months) item.year = year
-    return
-  }
-  let year = yearOf(months[firstMonthOneIndex].last_at)
-  for (let i = 0; i < firstMonthOneIndex; i++) {
-    months[i].year = year - 1
-  }
-  for (let i = firstMonthOneIndex; i < months.length; i++) {
-    const item = months[i]
-    if (item.month === 1 && !item.is_leap) {
-      year = yearOf(item.last_at)
-    }
-    item.year = year
-  }
-}
-
-function lunisolar_principal_term(
-  options: LunisolarOptions,
-  monthStartAt: number,
-  nextMonthStartAt: number,
-) {
+function lunisolar_principal_term(options: LunisolarOptions, boundary: LunisolarBoundary) {
   const termCount = options.principalTermCount ?? 12
   if (!Number.isInteger(termCount) || termCount <= 0) {
     throw new Error(`invalid principal term count ${termCount}`)
   }
-  const near = (monthStartAt + nextMonthStartAt) / 2
-  const startAt = local_day_start(options, monthStartAt)
-  const nextAt = local_day_start(options, nextMonthStartAt)
+  if (boundary.source_at == null || boundary.next_source_at == null) {
+    throw new Error('lunisolar boundary has no source phase')
+  }
+  const near = (boundary.source_at + boundary.next_source_at) / 2
+  const startAt = local_day_start(options, boundary.source_at)
+  const nextAt = local_day_start(options, boundary.next_source_at)
   // principalTermCount は「月名を決める中気の数」。地球型なら12、木星・
   // カリストのように1太陽年あたり約260朔望月ある暦では260にできる。
   // 探索窓は lunisolar_month_window_counts() が月/年比率から広げ、ここでは

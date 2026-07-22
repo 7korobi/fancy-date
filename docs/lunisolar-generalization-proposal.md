@@ -60,6 +60,8 @@ Policy の責務は以下である。
 
 Phase 3では `PeriodicCalendarYearPolicy` を Gregorian/Julian の既存年表へ接続する。これは閏年の年構造だけをpolicy化する最初の実装であり、月境界や太陰太陽暦のpolicyは後続Phaseで分離する。
 
+Phase 4では、平均・観測太陰太陽暦の朔望月境界列を先に生成し、その列へ`PrincipalTermLunisolarPolicy`を適用する。中気による月番号・閏月・年番号の割り当てを境界生成から分離するが、既存の`LunisolarDate`へ返す結果形状は維持する。
+
 ### 2.3 座標・表示層
 
 内部計算では、リセットされない `raw_year` と表示用の `year` を分ける。元号、仏暦、地域の年番号は `raw_year` から導出する注釈とし、月の `month_index` と表示月番号も分離する。

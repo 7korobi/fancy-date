@@ -129,7 +129,14 @@ export type {
   LunisolarPolicy,
   LunisolarYearContext,
 } from './phenomena/calendar-policy'
-export { PeriodicCalendarYearPolicy } from './phenomena/calendar-policy'
+export {
+  PeriodicCalendarYearPolicy,
+  PrincipalTermLunisolarPolicy,
+} from './phenomena/calendar-policy'
+export type {
+  LunisolarPrincipalTermLike,
+  PrincipalTermLunisolarMonth,
+} from './phenomena/calendar-policy'
 export { add_civil_days, church_feasts, computus, convert_civil_date } from './phenomena/computus'
 export type {
   ChurchFeast,
@@ -1536,6 +1543,11 @@ export class FancyDate {
         moony: this.dic.moony,
         solarPeriodMsec: this.dic.sunny.periodMsec,
         principalTermCount: this.dic.M.length || 12,
+        boundarySource:
+          this.dic.observed_lunisolar ||
+          (hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony))
+            ? 'observed'
+            : 'mean',
         solarYear:
           this.dic.observed_lunisolar_solar_year ??
           (this.dic.observed_lunisolar
