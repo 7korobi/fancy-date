@@ -203,6 +203,26 @@ export type DayBoundaryPolicy =
   | { kind: 'fixed-offset'; offsetHours: number }
   | { kind: 'solar-event'; event: DayBoundaryEvent }
 
+export type DayAssignmentContext = {
+  token: string
+  dayStart: 'midnight' | 'sunrise' | 'sunset'
+  at: number
+  previousAt: number
+  nextAt: number
+}
+
+export type DayAssignmentResult =
+  | number
+  | {
+      now_idx: number
+      assignment_raw_now_idx?: number
+      assignment_flags?: readonly string[]
+    }
+
+export type DayAssignmentPolicy = {
+  assign(context: DayAssignmentContext): DayAssignmentResult
+}
+
 export function normalizeDayBoundaryPolicy(
   dayStart?: DayBoundaryEvent,
   offsetHours?: number,

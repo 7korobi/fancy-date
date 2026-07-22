@@ -16,7 +16,13 @@ import {
   normalizeHourDivisionPolicy,
   PeriodicCalendarYearPolicy,
 } from './phenomena/calendar-policy'
-import type { DayBoundaryPolicy, HourDivisionPolicy } from './phenomena/calendar-policy'
+import type {
+  DayAssignmentContext,
+  DayAssignmentPolicy,
+  DayAssignmentResult,
+  DayBoundaryPolicy,
+  HourDivisionPolicy,
+} from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
 import {
@@ -128,6 +134,9 @@ export type {
   CalendarYearPolicy,
   DayBoundaryPolicy,
   DayBoundaryEvent,
+  DayAssignmentContext,
+  DayAssignmentPolicy,
+  DayAssignmentResult,
   HourArithmeticPolicy,
   HourDivisionPolicy,
   LegacyHourDivision,
@@ -794,6 +803,26 @@ export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (
   dayStart: DayStart,
   context: AssignmentContext<Token>,
 ) => AssignmentResult
+
+function assignment_policy_of<Token extends AssignmentToken>(
+  rule: AssignmentRule<Token>,
+  token: Token,
+  calendar: FancyDate,
+): DayAssignmentPolicy {
+  return {
+    assign(context: DayAssignmentContext): DayAssignmentResult {
+      const dayStart = context.dayStart as DayStart
+      return rule(dayStart, {
+        token,
+        calendar,
+        dayStart,
+        at: context.at,
+        previousAt: context.previousAt,
+        nextAt: context.nextAt,
+      })
+    },
+  }
+}
 export type AssignmentOptions = Partial<{
   [Token in AssignmentToken]: AssignmentRule<Token> | undefined
 }>
@@ -927,10 +956,14 @@ class AssignedTempoRule<
   constructor(
     private readonly innerRule: TempoRule<Base>,
     private readonly token: Token,
-    private readonly calendar: FancyDate,
-    private readonly assignment: AssignmentRule<Token>,
+    calendar: FancyDate,
+    assignment: AssignmentRule<Token>,
     private readonly currentDayStart: () => DayStart,
-  ) {}
+  ) {
+    this.assignmentPolicy = assignment_policy_of(assignment, token, calendar)
+  }
+
+  private readonly assignmentPolicy: DayAssignmentPolicy
 
   private raw_envelope(envelope: TempoEnvelope): TempoEnvelope {
     return {
@@ -943,9 +976,8 @@ class AssignedTempoRule<
     const rawEnvelope = this.raw_envelope(raw)
     const previous = this.innerRule.slide(rawEnvelope, -1, base)
     const dayStart = this.currentDayStart()
-    const assigned = this.assignment(dayStart, {
+    const assigned = this.assignmentPolicy.assign({
       token: this.token,
-      calendar: this.calendar,
       dayStart,
       at: rawEnvelope.last_at,
       previousAt: previous.last_at,
