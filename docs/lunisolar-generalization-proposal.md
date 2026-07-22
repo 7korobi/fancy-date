@@ -38,12 +38,7 @@ type LunisolarBoundary = {
   source_kind?: 'mean' | 'observed' | 'table'
 }
 
-type LunisolarYearContext = {
-  solar_year: number
-  year_start_at: number
-  next_year_start_at: number
-  months: readonly LunisolarBoundary[]
-}
+`LunisolarBoundary` は `last_at`/`next_at` と天文由来のsource metadataを持つ、月番号付与前の境界候補である。
 ```
 
 Policy の責務は以下である。
@@ -56,7 +51,7 @@ Policy の責務は以下である。
 
 月境界の生成と policy を一つの関数に閉じ込めず、同じ天文結果に複数の地域 policy を適用できる形を目標にする。
 
-この契約の初期型は `src/phenomena/calendar-policy.ts` に置く。Phase 2では型定義と公開barrelへの再exportだけを行い、既存の平均・観測・Thai実装の挙動にはまだ接続しない。
+この境界形状は `src/phenomena/calendar-policy.ts` に置き、Phase 4で`PrincipalTermLunisolarPolicy`へ接続した。初期に検討した汎用契約は実装形状と一致しなかったため公開面へ持ち込まず、現在は境界生成と中気による割り当てを担うpolicyを正本とする。
 
 Phase 3では `PeriodicCalendarYearPolicy` を Gregorian/Julian の既存年表へ接続する。これは閏年の年構造だけをpolicy化する最初の実装であり、月境界や太陰太陽暦のpolicyは後続Phaseで分離する。
 
@@ -70,7 +65,7 @@ Phase 7では、暦日の開始方法を`DayBoundaryPolicy`へ正規化する。
 
 Phase 8では、天体現象をcivil dayへ投影する`DayAssignmentPolicy`を追加する。tithiのような現象は、day boundaryを決めるpolicyでも、月番号を決めるlunisolar policyでもなく、各civil dayへ現象indexを割り当てる第三の軸である。既存の`AssignmentRule`は互換adapterとして残し、raw連続indexと表示用`now_idx`、`repeated`/`skipped` flagsを保持する。
 
-Phase 9では、年ごとの宗教行事を基礎暦へ投影する`FeastPolicy`を追加する。policyは`{ year }`を受けてcivil date付きの行事列を返し、Computusのような計算伝統を基礎暦の天体モデルや市民暦表示から分離する。既存の`church_feasts()`は`ChurchFeastPolicy`の互換adapterとして残し、`churchFeastDates()`が担う別市民暦への変換とlabel付与はprojection/notation層に置く。将来の`ThaiBuddhistFeastProvider`も同じ契約へ接続できるが、政府休日の年表や宗派別の採用日はこのpolicyとは別のoverride層とする。
+Phase 9では、年ごとの宗教行事を基礎暦へ投影する`FeastPolicy`を追加する。policyは`{ year }`を受けてcivil date付きの行事列を返し、Computusのような計算伝統を基礎暦の天体モデルや市民暦表示から分離する。`ChurchFeastPolicy`が計算結果を返し、`churchFeastDates()`が担う別市民暦への変換とlabel付与はprojection/notation層に置く。将来の`ThaiBuddhistFeastPolicy`も同じ契約へ接続できるが、政府休日の年表や宗派別の採用日はこのpolicyとは別のoverride層とする。
 
 Phase 10では、Hourの区画生成と、Hourを含む相対日時操作の意味を`HourArithmeticPolicy`で分ける。`elapsed-duration`は公称Hour幅を固定durationとして`add()`/`span()`へ適用し、`boundary-step`は不定時法・表形式Hourの実境界を次の区画として扱う。`Tempo.succ()`/`back()`は区画そのものの遷移なので常にruleのboundary stepを使い、calendar-levelの相対操作だけがこのpolicyを参照する。既定値は等分Hourがelapsed、temporal/table Hourがboundaryである。
 
@@ -110,19 +105,7 @@ Phase 12では、`ThaiBuddhistFeastPolicy`の結果をsampleのlabel／notes API
 
 ## 5. 閏月と閏日
 
-閏月と閏日は独立した policy とする。
-
-```ts
-type IntercalationPolicy = {
-  leapMonth?: (context: LunisolarYearContext) => number | undefined
-  leapDay?: (context: LunisolarYearContext) =>
-    | {
-        month: number
-        amount: number
-      }
-    | undefined
-}
-```
+閏月と閏日は、各暦の具体的なyear policyが返すmonth layoutの属性として扱う。未接続の汎用型は置かず、Thaiでは`ThaiModernLunisolarYearPolicy`、平均・観測系では`PrincipalTermLunisolarPolicy`の結果を利用する。
 
 同じ年に閏月と閏日を同時に許すか、閏日を閏月の年に限定するかも policy の明示項目にする。月の物理的長さを29.5日から丸める処理と、暦法上の加日を別にする。
 
@@ -189,7 +172,7 @@ type CalendarProvenance = {
 - `lunisolar()` は現在の平均/観測天文モデルを維持する。
 - タイ暦規則のような固有 policy は `thaiOfficialLunisolar()` のような明示 opt-in とする。名称に反して、これは政府公表年表の保証ではなく、既知のタイ固有規則を計算するモデルである。
 - `ObservedLunisolarMonthRule` は、天文結果と同じ月境界形状を返す civil policy にも使えるよう、月結果の最小構造を受け取る。
-- 次段階で `LunisolarPolicy` を公開し、タイ暦・インド系・東南アジア系を同じ注入点で実装する。
+- 各暦固有のyear／month policyを必要な実装形状で接続し、未使用の汎用契約を増やさない。
 
 中期には `FancyDate.to_tempos()` 内の「年」「月」「日」の解決を、天文境界と policy の二段階へ切り出す。既存の `MeanLunisolarMonthRule` と `ObservedLunisolarMonthRule` は、その移行期間の互換アダプターとして残す。
 
@@ -212,7 +195,7 @@ type CalendarProvenance = {
 
 教会暦上の満月は、実際の月の天文学的イベントではなく、epact・Golden Number・補正表などを使う計算上の境界である。そのため、通常の`OrbitalModel`や`SATELLITE`へ直接変換して月の出入り・panchanga・物理的な月相と混同させない。内部で周期モデルが便利な場合も、`EcclesiasticalLunarCycle`のような専用adapterに閉じ込める。
 
-同じ構造をタイ暦にも適用する。`ThaiModernLunisolarPolicy`が7月加日・8月重複を解決し、別の`ThaiBuddhistFeastProvider`がマーカブーチャー、ヴィサーカブーチャー、アーサーンハブーチャー、入安居、出安居などを日付へ投影する。政府の休日指定はさらに別の年表/override層とする。
+同じ構造をタイ暦にも適用する。`ThaiModernLunisolarYearPolicy`が7月加日・8月重複を解決し、別の`ThaiBuddhistFeastPolicy`がマーカブーチャー、ヴィサーカブーチャー、アーサーンハブーチャー、入安居、出安居などを日付へ投影する。政府の休日指定はさらに別の年表/override層とする。
 
 ## 参考資料
 

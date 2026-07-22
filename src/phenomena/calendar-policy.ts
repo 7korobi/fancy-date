@@ -67,26 +67,6 @@ export type LunisolarBoundary = {
   source_kind: LunisolarBoundarySource
 }
 
-export type LunisolarYearContext = {
-  solar_year: number
-  year_start_at: number
-  next_year_start_at: number
-  months: readonly LunisolarBoundary[]
-  source?: LunisolarBoundarySource
-}
-
-export type LunisolarLeapDay = {
-  month: number
-  amount: number
-}
-
-export type LunisolarPolicy = {
-  resolveYear(context: LunisolarYearContext): number
-  resolveMonth(context: LunisolarYearContext, boundary: LunisolarBoundary): number
-  isLeapMonth?(context: LunisolarYearContext, boundary: LunisolarBoundary): boolean
-  resolveLeapDay?(context: LunisolarYearContext): LunisolarLeapDay | undefined
-}
-
 export type FeastDate = {
   year: number
   month: number

@@ -143,9 +143,6 @@ export type {
   LegacyHourDivision,
   LunisolarBoundary,
   LunisolarBoundarySource,
-  LunisolarLeapDay,
-  LunisolarPolicy,
-  LunisolarYearContext,
   FeastDate,
   FeastKind,
   FeastPolicy,
@@ -165,7 +162,6 @@ export type {
 export {
   ChurchFeastPolicy,
   add_civil_days,
-  church_feasts,
   computus,
   convert_civil_date,
 } from './phenomena/computus'

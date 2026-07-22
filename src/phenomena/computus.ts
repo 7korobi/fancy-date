@@ -192,10 +192,3 @@ export function computus(year: number, system: ComputusSystem = 'gregorian'): Co
   assert_year(year)
   return system === 'julian' ? julian_computus(year) : gregorian_computus(year)
 }
-
-export function church_feasts(
-  year: number,
-  system: ComputusSystem = 'gregorian',
-): readonly ChurchFeast[] {
-  return new ChurchFeastPolicy(system).resolve({ year })
-}
