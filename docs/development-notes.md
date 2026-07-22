@@ -107,6 +107,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 太陽太陰暦一般化のPhase 7として、`dayStart()`/`dayBoundary()`を`DayBoundaryPolicy`へ正規化した。`midnight`、`fixed-offset`、`solar-event`を共通型で表し、既存のsolar-event優先順位と逆方向の日付解決を維持する。内部設定は非列挙で保持し、既存の`dic` snapshot形状を変更しない。
 - 太陽太陰暦一般化のPhase 8として、assignmentの公開契約を`DayAssignmentPolicy`へ統一した。tithiは必要な月モデルをfactoryへ明示注入し、raw連続index、civil dayへの投影、`repeated`/`skipped` flags、cache semanticsをpolicy内部で扱う。assignmentがday boundary policyとは別軸であることを型契約へ反映した。
 - 0系API整理のPhase 13として、旧`AssignmentRule`／`AssignmentContext`／`AssignmentResult`とcalendarを渡すadapterを削除した。policy objectはcalendar clone時にidentityを保証せず、値形状を複製して保持するため、利用側はobject identityではなく`assign()`契約を使う。
+- 0系API整理のPhase 14として、Hourの入力型`HourDivisionInput`と、内部に保持する正規化済み`HourDivisionPolicy`を分離した。入力では`arithmetic`を省略できるが、正規化後は必須とし、equalは`elapsed-duration`、temporal/tableは`boundary-step`を明示的に保持する。
 - 太陽太陰暦一般化のPhase 9として、年ごとの宗教行事をcivil dateへ返す`FeastPolicy`契約を追加し、Computusの教会祝祭日を`ChurchFeastPolicy`へ接続した。Computusの伝統、表示先の市民暦、表示ラベルはそれぞれ計算policy・projection・notationの別責務として残した。
 - 太陽太陰暦一般化のPhase 10として、予約していた`HourArithmeticPolicy`を`add()`/`span()`へ接続した。`elapsed-duration`ではH/m/s/Sを固定durationへ集約して時刻へ加算し、`boundary-step`ではtemporal/tableの実境界を辿る。等分Hourはelapsed、temporal/table Hourはboundaryを既定値とし、`Tempo.succ()`/`back()`自体は各Hour ruleの境界stepとして維持した。
 - 太陽太陰暦一般化のPhase 11として、`ThaiBuddhistFeastPolicy`を追加した。マーカブーチャー(3/15)、ヴィサーカブーチャー(6/15)、アーサーンハブーチャー(8/15)、入安居(8/16)、出安居(11/15)を、閏月年にはアーサーンハブーチャーと入安居だけ後半の8/8へ移し、既存のThai近代規則から現地civil dateへ投影する。これは政府休日・振替休日の年表ではなく、宗教上の月日を返す計算policyである。

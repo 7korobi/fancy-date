@@ -235,6 +235,7 @@ export type {
   ComputusResult,
   ComputusSystem,
   HourArithmeticPolicy,
+  HourDivisionInput,
   HourDivisionPolicy,
   LegacyHourDivision,
   LunisolarBoundary,

@@ -1,4 +1,4 @@
-const { FancyDate } = require('../lib/fancy-date')
+const { FancyDate, normalizeHourDivisionPolicy } = require('../lib/fancy-date')
 const { Calendar } = require('../lib/sample')
 
 const DAY = 86400000
@@ -140,6 +140,33 @@ describe('calendar policy regression invariants', () => {
       kind: 'temporal',
       dayDivisions: temporal.dic.H.length / 2,
       nightDivisions: temporal.dic.H.length / 2,
+      arithmetic: 'boundary-step',
+    })
+  })
+
+  test('normalizes hour division input into an arithmetic-complete policy', () => {
+    expect(normalizeHourDivisionPolicy({ kind: 'equal', divisions: 24 }, 24)).toEqual({
+      kind: 'equal',
+      divisions: 24,
+      arithmetic: 'elapsed-duration',
+    })
+    expect(
+      normalizeHourDivisionPolicy(
+        {
+          kind: 'temporal',
+          dayDivisions: 12,
+          nightDivisions: 12,
+          dayStart: 'sunrise',
+          dayEnd: 'sunset',
+        },
+        24,
+      ),
+    ).toEqual({
+      kind: 'temporal',
+      dayDivisions: 12,
+      nightDivisions: 12,
+      dayStart: 'sunrise',
+      dayEnd: 'sunset',
       arithmetic: 'boundary-step',
     })
   })

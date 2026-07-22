@@ -20,6 +20,7 @@ import type {
   DayAssignmentPolicy,
   DayBoundaryPolicy,
   HourArithmeticPolicy,
+  HourDivisionInput,
   HourDivisionPolicy,
 } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
@@ -146,6 +147,7 @@ export type {
   FeastPolicy,
   FeastPolicyContext,
   FeastRecord,
+  HourDivisionInput,
 } from './phenomena/calendar-policy'
 export {
   normalizeDayBoundaryPolicy,
@@ -781,7 +783,7 @@ type IDIC = IIDX & {
   thai_official_lunisolar?: boolean
 }
 export type DivisionOptions = {
-  H?: false | 'equal' | 'solar' | HourDivisionPolicy
+  H?: false | 'equal' | 'solar' | HourDivisionInput
 }
 export type LunisolarYearResolver = (at: number) => number
 export type ObservedLunisolarOptions = {
@@ -3761,8 +3763,7 @@ K   = @dic.earthy[2] / 360
   }
 
   private hour_arithmetic_policy(): HourArithmeticPolicy {
-    const policy = this.hour_division_policy()
-    return policy.arithmetic ?? (policy.kind === 'equal' ? 'elapsed-duration' : 'boundary-step')
+    return this.hour_division_policy().arithmetic
   }
 
   private day_start_event(): SolarDayBoundaryEvent | undefined {

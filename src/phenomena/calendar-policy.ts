@@ -179,7 +179,7 @@ export type HourArithmeticPolicy = 'elapsed-duration' | 'boundary-step'
  * a separate policy, so temporal hours can be combined with midnight-based
  * civil dates as the existing calendar model requires.
  */
-export type HourDivisionPolicy =
+export type HourDivisionInput =
   | {
       kind: 'equal'
       divisions: number
@@ -197,6 +197,26 @@ export type HourDivisionPolicy =
       kind: 'table'
       boundaries: readonly number[]
       arithmetic?: HourArithmeticPolicy
+    }
+
+export type HourDivisionPolicy =
+  | {
+      kind: 'equal'
+      divisions: number
+      arithmetic: HourArithmeticPolicy
+    }
+  | {
+      kind: 'temporal'
+      dayDivisions: number
+      nightDivisions: number
+      dayStart: 'sunrise'
+      dayEnd: 'sunset'
+      arithmetic: HourArithmeticPolicy
+    }
+  | {
+      kind: 'table'
+      boundaries: readonly number[]
+      arithmetic: HourArithmeticPolicy
     }
 
 export type LegacyHourDivision = false | 'equal' | 'solar'
@@ -243,7 +263,7 @@ export function normalizeDayBoundaryPolicy(
 }
 
 export function normalizeHourDivisionPolicy(
-  value: LegacyHourDivision | HourDivisionPolicy,
+  value: LegacyHourDivision | HourDivisionInput,
   defaultDivisions: number,
 ): HourDivisionPolicy {
   if (value === false || value === 'equal') {
