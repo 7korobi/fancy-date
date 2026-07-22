@@ -1,5 +1,6 @@
 require('../lib/sample')
 const { FancyDate, hasSolarEvents, tithi } = require('../lib/fancy-date')
+const { SolarTermPolicy, ZassetsuPolicy } = require('../lib/phenomena/solar')
 const { prepareSpot } = require('../lib/fancy-date')
 const {
   Calendar,
@@ -78,6 +79,38 @@ const jog = Calendar.JupiterObserved
 
 function mod(value, by) {
   return ((value % by) + by) % by
+}
+
+function solarTermsOf(
+  calendar,
+  utc,
+  tempos = calendar.to_tempos(utc),
+  kind = hasSolarEvents(calendar.dic.sunny) ? 'observed' : 'mean',
+) {
+  if (kind === 'observed') {
+    return new SolarTermPolicy('observed').resolve({
+      kind: 'observed',
+      sunny: calendar.dic.sunny,
+      dayMsec: calendar.calc.msec.day,
+      dayZero: calendar.calc.zero.day,
+      utc,
+    })
+  }
+  return new SolarTermPolicy('mean').resolve({ kind: 'mean', Zz: tempos.Zz, d: tempos.d })
+}
+
+function zassetsuOf(
+  calendar,
+  utc,
+  tempos = calendar.to_tempos(utc),
+  kind = hasSolarEvents(calendar.dic.sunny) ? 'observed' : 'mean',
+) {
+  return new ZassetsuPolicy().resolve({
+    terms: solarTermsOf(calendar, utc, tempos, kind),
+    dayMsec: calendar.calc.msec.day,
+    day10Zero: calendar.calc.zero.day10,
+    stemLength: calendar.dic.dCS.length,
+  })
 }
 
 function shiftedMeanOrbital(source, shiftMsec) {
@@ -1015,7 +1048,7 @@ describe('平気法', () => {
         100000000000000, 10000000000000, 1556636400000, 1000000000000, 100000000000, 10000000000, 0,
       ].map((utc) => {
         const o = 平気法.to_tempos(utc)
-        const z = 平気法.雑節(utc, o)
+        const z = zassetsuOf(平気法, utc, o)
         const list = (() => {
           const result = []
           for (let key in z) {
@@ -1029,7 +1062,7 @@ describe('平気法', () => {
           }
           return result
         })()
-        return [...list.flat(2).sort(), 平気法.note(utc, o, z).join('')]
+        return [...list.flat(2).sort(), 平気法.note(utc).join('')]
       }),
     ).toMatchSnapshot()
   })
@@ -1076,7 +1109,7 @@ describe('Gregorian', () => {
         100000000000000, 10000000000000, 1556636400000, 1000000000000, 100000000000, 10000000000, 0,
       ].map((utc) => {
         const o = g.to_tempos(utc)
-        const z = g.雑節(utc, o)
+        const z = zassetsuOf(g, utc, o)
         const list = (() => {
           const result = []
           for (let key in z) {
@@ -1090,7 +1123,7 @@ describe('Gregorian', () => {
           }
           return result
         })()
-        return [...list.flat(2).sort(), g.note(utc, o, z).join('')]
+        return [...list.flat(2).sort(), g.note(utc).join('')]
       }),
     ).toMatchSnapshot()
   })
@@ -1108,8 +1141,8 @@ describe('Gregorian', () => {
   test('社日(春社日/秋社日)は十干「戊」の日を、春分/秋分から±5日以内で指す(平気法/実軌道どちらの経路でも)', () => {
     const dayMsec = g.calc.msec.day
     for (const [cal, resolve雑節] of [
-      [平気法, (utc) => 平気法.雑節(utc)],
-      [ga, (utc) => ga.雑節_by_phase(utc)],
+      [平気法, (utc) => zassetsuOf(平気法, utc)],
+      [ga, (utc) => zassetsuOf(ga, utc)],
     ]) {
       let checked = 0
       for (let year = 2000; year < 2040; year++) {
@@ -1540,7 +1573,7 @@ describe('Gregorian', () => {
   })
 
   test('astronomical phase helper uses high precision model opt-in', () => {
-    const term = ga.solar_term(g.parse('2020年3月20日'), 0)
+    const term = solarTermsOf(ga, g.parse('2020年3月20日')).春分
     expect(ga.format(term.last_at, 'yyyy年MM月dd日 HH:mm')).toEqual('2020年03月20日 00:00')
     expect(ga.format(ga.solar_phase(0, g.parse('2020年3月20日')), 'yyyy年MM月dd日 HH:mm')).toEqual(
       '2020年03月20日 12:49',
@@ -1549,10 +1582,10 @@ describe('Gregorian', () => {
 
   test('phase based solar terms preserve mean calendars and auto-select astronomical dates', () => {
     const utc = g.parse('2020年3月22日')
-    const mean = g.雑節(utc)
-    const terms = ga.solar_terms(utc)
-    const auto = ga.雑節(utc)
-    const phase = ga.雑節_by_phase(utc)
+    const mean = zassetsuOf(g, utc)
+    const terms = solarTermsOf(ga, utc)
+    const auto = zassetsuOf(ga, utc)
+    const phase = zassetsuOf(ga, utc)
     expect(ga.format(terms.春分.last_at, 'yyyy年MM月dd日')).toEqual('2020年03月20日')
     expect(g.format(mean.秋分.last_at, 'yyyy年MM月dd日')).toEqual('2020年09月19日')
     expect(ga.format(phase.春分.last_at, 'yyyy年MM月dd日')).toEqual(
@@ -1565,9 +1598,9 @@ describe('Gregorian', () => {
   test('custom mean orbital model shifts only explicit phase based solar terms', () => {
     const shifted = solarShiftCalendar(to_msec('2d'))
     const utc = g.parse('2020年3月23日')
-    const auto = shifted.雑節(utc)
-    const terms = shifted.solar_terms(utc)
-    const phase = shifted.雑節_by_phase(utc)
+    const auto = zassetsuOf(shifted, utc)
+    const terms = solarTermsOf(shifted, utc, undefined, 'observed')
+    const phase = zassetsuOf(shifted, utc, undefined, 'observed')
 
     expect(shifted.dic.sunny.epochMsec).toBe(ga.dic.sunny.epochMsec)
     expect(shifted.calc.zero.season).toBe(ga.calc.zero.season)
@@ -1581,7 +1614,7 @@ describe('Gregorian', () => {
   // GregorianAstronomical(ga)は天文東京を使うため対象になり、SolarTermPolicyの
   // 8つの主要な節気(立春/春分/立夏/夏至/立秋/秋分/立冬/冬至)とラベルが一致する。
   test('Z resolves true solar terms (定気法) once sunny exposes solarEvents precision', () => {
-    const terms = ga.solar_terms(g.parse('2020年6月1日'))
+    const terms = solarTermsOf(ga, g.parse('2020年6月1日'))
     for (const name of ['立春', '春分', '立夏', '夏至', '立秋', '秋分', '立冬', '冬至']) {
       expect(ga.format(terms[name].write_at, 'Z')).toBe(name)
     }

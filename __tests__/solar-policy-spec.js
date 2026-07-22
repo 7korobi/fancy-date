@@ -1,12 +1,25 @@
+const api = require('../lib/index')
+const { Calendar } = api
 const {
-  Calendar,
   JapaneseFixedDateNotePolicy,
   ReligiousFixedDateNotePolicy,
-  SolarTermPolicy,
-  ZassetsuPolicy,
-} = require('../lib/index')
+} = require('../lib/phenomena/calendar-notes')
+const { SolarTermPolicy, ZassetsuPolicy } = require('../lib/phenomena/solar')
 
 describe('seasonal calendar note policies', () => {
+  test('exposes note as the public seasonal result while hiding intermediate layers', () => {
+    const calendar = Calendar.Gregorian
+
+    expect(typeof calendar.note).toBe('function')
+    expect(calendar.solar_terms).toBeUndefined()
+    expect(calendar.雑節).toBeUndefined()
+    expect(calendar.節句).toBeUndefined()
+    expect(api.SolarTermPolicy).toBeUndefined()
+    expect(api.ZassetsuPolicy).toBeUndefined()
+    expect(api.JapaneseFixedDateNotePolicy).toBeUndefined()
+    expect(api.ReligiousFixedDateNotePolicy).toBeUndefined()
+  })
+
   test('resolves mean and observed solar terms through one policy contract', () => {
     const utc = Calendar.Gregorian.parse('2020年3月22日')
     const meanTempos = Calendar.平気法.to_tempos(utc)
@@ -52,11 +65,11 @@ describe('seasonal calendar note policies', () => {
     const notes = new JapaneseFixedDateNotePolicy().resolve(undefined)
     const religious = new ReligiousFixedDateNotePolicy().resolve(undefined)
 
-    expect(notes.節句.七夕).toEqual([7, 7])
-    expect(notes.風習.七五三).toEqual([11, 15])
+    expect(notes.節句.七夕).toEqual({ M: 6, d: 6 })
+    expect(notes.風習.七五三).toEqual({ M: 10, d: 14 })
     expect(notes.カトリック).toBeUndefined()
-    expect(religious.カトリック.万聖節).toEqual([11, 1])
-    expect(religious.仏教.灌仏会).toEqual([4, 8])
-    expect(Calendar.Gregorian.節句().仏教.灌仏会).toEqual([4, 8])
+    expect(religious.カトリック.万聖節).toEqual({ M: 10, d: 0 })
+    expect(religious.仏教.灌仏会).toEqual({ M: 3, d: 7 })
+    expect(Calendar.Gregorian.note(Calendar.Gregorian.parse('2024年4月8日'))).toContain('灌仏会')
   })
 })

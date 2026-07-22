@@ -281,9 +281,9 @@ export class FixedTempoRule implements TempoRule {
  * 既存 time.ts の `Tempo.join(a, b)` (静的メソッド)と数値的に同じ式
  * (a.zero !== b.zero はエラー、last_at=min、next_at=max、
  * write_at=(a.write_at+b.write_at)/2)を、TempoLike 向けに再実装したもの
- * (phenomena/solar.ts の雑節_from_terms() が 彼岸/土用/四季の区間を
+ * (phenomena/solar.ts の ZassetsuPolicy が 彼岸/土用/四季の区間を
  * 求めるのに使う。既存の静的メソッドは a/b に生の Tempo を要求するため、
- * TempoView(a/bがsolar_terms()由来でTempoView化されると必要になる)を
+ * TempoView(a/bがSolarTermPolicy由来でTempoView化されると必要になる)を
  * 渡せない)。結合後の区間は「last_at を零点とする幅 size の1区間」なので
  * FixedTempoRule(size, last_at) で構築すれば now_idx=0 かつ
  * succ()/back()/is_cover() が正しく機能する TempoView になる。
@@ -1058,7 +1058,7 @@ export class RealSunsetDayTempoRule extends SolarEventDayTempoRule {
  * OrbitalPhaseTempoRule: 実軌道(実際の黄経など)を基準に、1公転周期を等しい
  * 「角度」で divisions 等分した位相区間を解決する規則。
  *
- * 既存 solar_terms()/雑節_by_phase() が使っている solar_phase()
+ * SolarTermPolicy が使っている solar_phase()
  * (= sunny.timeOfPhase())をそのまま再利用する。referencePhaseOffset は
  * 既存実装が使う「基準位相からのズレ」(二十四節気なら春分基準の 2/8)をそのまま渡せばよい。
  *

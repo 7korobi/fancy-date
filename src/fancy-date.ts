@@ -36,8 +36,6 @@ import {
   noon as resolveNoon,
   solor as resolveSolor,
   solar_phase as resolveSolarPhase,
-  solar_phase_before as resolveSolarPhaseBefore,
-  solar_term as resolveSolarTerm,
   SolarTermPolicy,
   ZassetsuPolicy,
   to_tempo_by_solor as resolveTempoBySolor,
@@ -144,7 +142,6 @@ export type {
   CalendarYearLayout,
   CalendarYearPolicyContext,
   CalendarYearPolicy,
-  CalendarNotePolicy,
   DayBoundaryPolicy,
   DayBoundaryEvent,
   DayAssignmentContext,
@@ -173,23 +170,6 @@ export type {
   LunisolarPrincipalTermLike,
   PrincipalTermLunisolarMonth,
 } from './phenomena/calendar-policy'
-export {
-  JapaneseFixedDateNotePolicy,
-  ReligiousFixedDateNotePolicy,
-} from './phenomena/calendar-notes'
-export type {
-  DateNoteGroups,
-  DateNoteRule,
-  SeasonalNote,
-  SeasonalNoteMap,
-} from './phenomena/calendar-notes'
-export { SOLAR_TERM_PHASES, SolarTermPolicy, ZassetsuPolicy } from './phenomena/solar'
-export type {
-  SolarTermName,
-  SolarTerms,
-  SolarTermPolicyContext,
-  ZassetsuPolicyContext,
-} from './phenomena/solar'
 export {
   ChurchFeastPolicy,
   add_civil_days,
@@ -1597,24 +1577,6 @@ export class FancyDate {
     cache.unshift(resolved)
     cache.length = Math.min(cache.length, LUNISOLAR_CACHE_CAPACITY)
     return resolved
-  }
-
-  solar_term(utc: number, phase: number) {
-    return resolveSolarTerm(this.dic.sunny, this.calc.msec.day, this.calc.zero.day, utc, phase)
-  }
-
-  solar_phase_before(phase: number, utc: number) {
-    return resolveSolarPhaseBefore(this.dic.sunny, phase, utc)
-  }
-
-  solar_terms(utc: number) {
-    return observed_solar_term_policy.resolve({
-      kind: 'observed',
-      sunny: this.dic.sunny,
-      dayMsec: this.calc.msec.day,
-      dayZero: this.calc.zero.day,
-      utc,
-    })
   }
 
   succ(utc: DateLike, diff: SpanLike) {
@@ -3610,7 +3572,7 @@ K   = @dic.earthy[2] / 360
     return this.dic.moony.lunarNode(kind, near)
   }
 
-  節句(): DateNoteGroups {
+  private resolve_fixed_date_notes(): DateNoteGroups {
     const japanese = japanese_fixed_date_note_policy.resolve(undefined)
     const religious = religious_fixed_date_note_policy.resolve(undefined)
     return {
@@ -3621,8 +3583,8 @@ K   = @dic.earthy[2] / 360
     }
   }
 
-  雑節(utc: number, { Zz, d } = this.to_tempos(utc)) {
-    if (hasSolarEvents(this.dic.sunny)) return this.雑節_by_phase(utc)
+  private resolve_zassetsu(utc: number, { Zz, d } = this.to_tempos(utc)) {
+    if (hasSolarEvents(this.dic.sunny)) return this.resolve_zassetsu_by_phase(utc)
     return with_seasonal_note_labels(
       zassetsu_policy.resolve({
         terms: mean_solar_term_policy.resolve({ kind: 'mean', Zz, d }),
@@ -3634,7 +3596,7 @@ K   = @dic.earthy[2] / 360
     )
   }
 
-  雑節_by_phase(utc: number) {
+  private resolve_zassetsu_by_phase(utc: number) {
     return with_seasonal_note_labels(
       zassetsu_policy.resolve({
         terms: observed_solar_term_policy.resolve({
@@ -3841,11 +3803,21 @@ K   = @dic.earthy[2] / 360
     return new Tempo(rule.assign(envelope_of(day), day.base), day.base, rule)
   }
 
-  note(
+  note(utc: number) {
+    const tempos = this.to_tempos(utc)
+    return this.note_at(
+      utc,
+      tempos,
+      this.resolve_zassetsu(utc, tempos),
+      this.resolve_fixed_date_notes(),
+    )
+  }
+
+  private note_at(
     utc: number,
-    tempos = this.to_tempos(utc),
-    arg1 = this.雑節(utc, tempos),
-    arg2 = this.節句(),
+    tempos: Tempos,
+    arg1: SeasonalNoteMapWithLabels,
+    arg2: DateNoteGroups,
   ) {
     const list: string[] = []
     for (const provider of this.note_providers(arg1, arg2)) {
@@ -3881,11 +3853,11 @@ K   = @dic.earthy[2] / 360
     for (const root in groups) {
       const group = groups[root]
       for (const name in group) {
-        const [M, d, B, E] = group[name]
-        if (M && M !== tempos.M.now_idx) continue
-        if (d && d !== tempos.d.now_idx) continue
-        if (B && B !== tempos.B.now_idx) continue
-        if (E && E !== tempos.E.now_idx) continue
+        const { M, d, B, E } = group[name]
+        if (M != null && M !== tempos.M.now_idx) continue
+        if (d != null && d !== tempos.d.now_idx) continue
+        if (B != null && B !== tempos.B.now_idx) continue
+        if (E != null && E !== tempos.E.now_idx) continue
         list.push(name)
       }
     }
@@ -4430,8 +4402,8 @@ K   = @dic.earthy[2] / 360
   to_table(utc: number, bk: string, ik: string, has_notes = false) {
     const indexer: Indexer = this.dic[ik]
     let o = this.to_tempos(utc)
-    const arg1 = this.雑節(utc, o)
-    const arg2 = this.節句()
+    const arg1 = this.resolve_zassetsu(utc, o)
+    const arg2 = this.resolve_fixed_date_notes()
     let { last_at } = o[bk]
 
     o = this.to_tempos(last_at)
@@ -4450,7 +4422,7 @@ K   = @dic.earthy[2] / 360
         indexer.to_value(null, item, 0),
         indexer.to_label(indexer.list, item, 0),
         indexer.to_ruby(indexer.rubys, item, 0),
-        has_notes ? this.note(last_at, this.to_tempos(last_at), arg1, arg2) : undefined,
+        has_notes ? this.note_at(last_at, this.to_tempos(last_at), arg1, arg2) : undefined,
       ])
     }
     return list

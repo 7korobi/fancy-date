@@ -78,7 +78,7 @@ export function solar_phase(sunny: OrbitalModel, phase: number, near: number) {
   return sunny.timeOfPhase(mod(phase, 1), near)
 }
 
-export function solar_term(
+function solar_term(
   sunny: OrbitalModel,
   dayMsec: number,
   dayZero: number,
@@ -89,7 +89,7 @@ export function solar_term(
   return Tempo.at(new FixedTempoRule(dayMsec, dayZero), { write_at: at })
 }
 
-export function solar_phase_before(sunny: OrbitalModel, phase: number, utc: number) {
+function solar_phase_before(sunny: OrbitalModel, phase: number, utc: number) {
   let at = solar_phase(sunny, phase, utc)
   while (utc < at) {
     at = solar_phase(sunny, phase, at - sunny.periodMsec)
@@ -241,7 +241,7 @@ export function solor(
  * mean SolarTermPolicy: 平気法(等角分割)版の二十四節気+雑節の基準15項目。
  * observed SolarTermPolicy が実軌道(sunny.timeOfPhase())で求めるのに対し、
  * こちらは Zz(平均太陽年)の span を比例配分するだけで求める。
- * 既存 FancyDate.雑節() が内部で行っていた計算をそのまま抽出したもの。
+ * 旧FancyDateの雑節計算をpolicy内部へ抽出したもの。
  *
  * Zz/d は呼び出し側の to_tempos() が解決した Tempo をそのまま渡すこと
  * (暦によって d の zero 基準が異なる場合があるため、ここで作り直さない)。

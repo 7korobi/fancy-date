@@ -1,6 +1,15 @@
 import type { CalendarNotePolicy } from './calendar-policy'
 
-export type DateNoteRule = readonly (number | undefined)[]
+/**
+ * Fixed-note constraints use the internal zero-based indexes exposed by Tempo:
+ * M=month, d=day, B=day-branch, and E=weekday-cycle.
+ */
+export type DateNoteRule = {
+  M?: number
+  d?: number
+  B?: number
+  E?: number
+}
 
 export type DateNoteGroups = Readonly<Record<string, Readonly<Record<string, DateNoteRule>>>>
 
@@ -12,30 +21,30 @@ export type SeasonalNoteMap = Record<string, SeasonalNote>
 
 const JAPANESE_FIXED_DATE_NOTES: DateNoteGroups = {
   節句: {
-    人日: [1, 7],
-    初午: [2, undefined, 7],
-    上巳: [3, 3],
-    端午: [5, 5],
-    七夕: [7, 7],
-    重陽: [9, 9],
+    人日: { M: 0, d: 6 },
+    初午: { M: 1, B: 6 },
+    上巳: { M: 2, d: 2 },
+    端午: { M: 4, d: 4 },
+    七夕: { M: 6, d: 6 },
+    重陽: { M: 8, d: 8 },
   },
   風習: {
-    小正月: [1, 15],
-    十五夜: [8, 15],
-    十三夜: [9, 13],
-    七五三: [11, 15],
-    正月事始め: [12, 13],
+    小正月: { M: 0, d: 14 },
+    十五夜: { M: 7, d: 14 },
+    十三夜: { M: 8, d: 12 },
+    七五三: { M: 10, d: 14 },
+    正月事始め: { M: 11, d: 12 },
   },
 }
 
 const RELIGIOUS_FIXED_DATE_NOTES: DateNoteGroups = {
   カトリック: {
-    万聖節: [11, 1],
-    万霊節: [11, 2],
+    万聖節: { M: 10, d: 0 },
+    万霊節: { M: 10, d: 1 },
   },
   仏教: {
-    灌仏会: [4, 8],
-    盂蘭盆会: [7, 15],
+    灌仏会: { M: 3, d: 7 },
+    盂蘭盆会: { M: 6, d: 14 },
   },
 }
 
