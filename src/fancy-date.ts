@@ -11,7 +11,11 @@ import type {
 } from './orbital-model'
 import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
 import type { LunisolarDate } from './phenomena/lunisolar'
-import { PeriodicCalendarYearPolicy } from './phenomena/calendar-policy'
+import {
+  normalizeHourDivisionPolicy,
+  PeriodicCalendarYearPolicy,
+} from './phenomena/calendar-policy'
+import type { HourDivisionPolicy } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
 import {
@@ -123,6 +127,7 @@ export type {
   CalendarYearPolicy,
   HourArithmeticPolicy,
   HourDivisionPolicy,
+  LegacyHourDivision,
   LunisolarBoundary,
   LunisolarBoundarySource,
   LunisolarLeapDay,
@@ -130,6 +135,7 @@ export type {
   LunisolarYearContext,
 } from './phenomena/calendar-policy'
 export {
+  normalizeHourDivisionPolicy,
   PeriodicCalendarYearPolicy,
   PrincipalTermLunisolarPolicy,
 } from './phenomena/calendar-policy'
@@ -735,6 +741,8 @@ type IDIC = IIDX & {
   labels: SpanLabels
   start: [string, string, number]
   is_solor: boolean
+  hour_division?: HourDivisionPolicy
+  hour_division_legacy?: boolean
   day_offset_hours?: number
   day_start?: DayStart
   assignments: AssignmentOptions
@@ -744,7 +752,7 @@ type IDIC = IIDX & {
   thai_official_lunisolar?: boolean
 }
 export type DivisionOptions = {
-  H?: false | 'equal' | 'solar'
+  H?: false | 'equal' | 'solar' | HourDivisionPolicy
 }
 export type LunisolarYearResolver = (at: number) => number
 export type ObservedLunisolarOptions = {
@@ -1132,6 +1140,20 @@ export class FancyDate {
       value: {},
       writable: true,
     })
+    Object.defineProperties(this.dic, {
+      hour_division: {
+        configurable: true,
+        enumerable: false,
+        value: undefined,
+        writable: true,
+      },
+      hour_division_legacy: {
+        configurable: true,
+        enumerable: false,
+        value: undefined,
+        writable: true,
+      },
+    })
 
     this.calc = {
       eras: [],
@@ -1212,6 +1234,12 @@ export class FancyDate {
       const canonical = token_base(key as Token) as ALGO_DIC
       this.dic[canonical] = new Indexer(val)
       normalized[canonical] = val
+      if (canonical === 'H' && this.dic.hour_division_legacy) {
+        this.dic.hour_division = normalizeHourDivisionPolicy(
+          this.dic.is_solor ? 'solar' : false,
+          this.dic.H.length,
+        )
+      }
       if (canonical === 'E') {
         const length = this.dic.E.length
         if (length === 7 || length === 8 || length === 10) {
@@ -1318,7 +1346,12 @@ export class FancyDate {
   division(options: DivisionOptions) {
     if ('H' in options) {
       const H = options.H
-      this.dic.is_solor = H === 'solar'
+      if (H != null) {
+        this.dic.hour_division = normalizeHourDivisionPolicy(H, this.dic.H.length)
+        this.dic.hour_division_legacy = typeof H !== 'object'
+        this.dic.is_solor = this.dic.hour_division.kind === 'temporal'
+        this._solar_hour_rule = undefined
+      }
     }
     return this
   }
@@ -1447,7 +1480,7 @@ export class FancyDate {
     // 確実に不可能」という下限であり、唯一の閾値ではない(手前でも夏至・
     // 冬至付近で退化するケースは残る)。
     if (
-      (this.dic.is_solor || this.day_start_event()) &&
+      (this.hour_division_policy().kind === 'temporal' || this.day_start_event()) &&
       this.dic.geo &&
       66.5 <= Math.abs(this.dic.geo[0])
     ) {
@@ -2069,7 +2102,7 @@ export class FancyDate {
     if (span_rank('S') <= rank) carry('S', 's', this.dic.S.length)
     if (span_rank('s') <= rank) {
       carry('s', 'm', this.dic.s.length)
-      if (this.dic.is_solor && target.m < 0 && target.s === 0) {
+      if (this.hour_division_policy().kind === 'temporal' && target.m < 0 && target.s === 0) {
         target.s = this.dic.s.length
         target.m--
       }
@@ -3626,6 +3659,10 @@ K   = @dic.earthy[2] / 360
    * テーブル再構築ごと省略できる。
    */
   private solar_hour_rule(): CachedTempoRule<SolarDayHourBase> {
+    const policy = this.hour_division_policy()
+    if (policy.kind !== 'temporal') {
+      throw new Error('solar hour rule requires temporal hour division')
+    }
     return (this._solar_hour_rule ??= new CachedTempoRule(
       new SolarDayHourTempoRule(
         this.dic.sunny,
@@ -3635,9 +3672,16 @@ K   = @dic.earthy[2] / 360
         this.calc.zero.day,
         this.calc.msec.year,
         this.calc.zero.season,
-        this.dic.H.length,
+        policy.dayDivisions + policy.nightDivisions,
       ),
     ))
+  }
+
+  private hour_division_policy(): HourDivisionPolicy {
+    return (
+      this.dic.hour_division ??
+      normalizeHourDivisionPolicy(this.dic.is_solor ? 'solar' : false, this.dic.H.length)
+    )
   }
 
   private day_start_event(): SolarDayBoundaryEvent | undefined {
@@ -4045,10 +4089,17 @@ K   = @dic.earthy[2] / 360
     d = this.assign_day_tempo(d)
 
     // hour minute second  in day
-    if (this.dic.is_solor) {
+    const hourPolicy = this.hour_division_policy()
+    if (hourPolicy.kind === 'temporal') {
       H = Tempo.at(this.solar_hour_rule(), { write_at: utc, day: envelope_of(d) })
       m = this.subdivide_tempo(H.size / this.dic.m.length, utc, envelope_of(H))
+    } else if (hourPolicy.kind === 'table') {
+      H = Tempo.at(new TableTempoRule(hourPolicy.boundaries, d.last_at), { write_at: utc })
+      m = this.subdivide_tempo(H.size / this.dic.m.length, utc, envelope_of(H))
     } else {
+      // Preserve the established calc.msec.hour operation order for equal
+      // hours. The policy's divisions describe the contract; the existing
+      // derived value preserves floating-point-compatible boundaries.
       H = this.subdivide_tempo(this.calc.msec.hour, utc, envelope_of(d))
       m = this.subdivide_tempo(this.calc.msec.minute, utc, envelope_of(H))
     }

@@ -169,6 +169,11 @@ export class PrincipalTermLunisolarPolicy {
 
 export type HourArithmeticPolicy = 'elapsed-duration' | 'boundary-step'
 
+/**
+ * A civil day's hour-slot construction policy. Day boundary selection remains
+ * a separate policy, so temporal hours can be combined with midnight-based
+ * civil dates as the existing calendar model requires.
+ */
 export type HourDivisionPolicy =
   | {
       kind: 'equal'
@@ -188,3 +193,55 @@ export type HourDivisionPolicy =
       boundaries: readonly number[]
       arithmetic?: HourArithmeticPolicy
     }
+
+export type LegacyHourDivision = false | 'equal' | 'solar'
+
+export function normalizeHourDivisionPolicy(
+  value: LegacyHourDivision | HourDivisionPolicy,
+  defaultDivisions: number,
+): HourDivisionPolicy {
+  if (value === false || value === 'equal') {
+    return {
+      kind: 'equal',
+      divisions: defaultDivisions,
+      arithmetic: 'elapsed-duration',
+    }
+  }
+  if (value === 'solar') {
+    if (
+      !Number.isInteger(defaultDivisions) ||
+      defaultDivisions <= 0 ||
+      defaultDivisions % 2 !== 0
+    ) {
+      throw new RangeError(
+        `temporal hours require a positive even division count: ${defaultDivisions}`,
+      )
+    }
+    const divisions = defaultDivisions / 2
+    return {
+      kind: 'temporal',
+      dayDivisions: divisions,
+      nightDivisions: divisions,
+      dayStart: 'sunrise',
+      dayEnd: 'sunset',
+      arithmetic: 'boundary-step',
+    }
+  }
+  if (value.kind === 'equal') {
+    if (!Number.isInteger(value.divisions) || value.divisions <= 0) {
+      throw new RangeError(`equal hours require a positive division count: ${value.divisions}`)
+    }
+  } else if (value.kind === 'temporal') {
+    if (
+      !Number.isInteger(value.dayDivisions) ||
+      value.dayDivisions <= 0 ||
+      !Number.isInteger(value.nightDivisions) ||
+      value.nightDivisions <= 0
+    ) {
+      throw new RangeError('temporal hours require positive day and night divisions')
+    }
+  } else if (value.boundaries.length === 0 || value.boundaries.some((boundary) => boundary <= 0)) {
+    throw new RangeError('table hours require positive cumulative boundaries')
+  }
+  return value
+}

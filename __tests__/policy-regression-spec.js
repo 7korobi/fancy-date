@@ -1,3 +1,4 @@
+const { FancyDate } = require('../lib/fancy-date')
 const { Calendar } = require('../lib/sample')
 
 const DAY = 86400000
@@ -81,6 +82,38 @@ describe('calendar policy regression invariants', () => {
     expect(winter.next_at - winter.last_at).not.toBe(calendar.calc.msec.hour)
     expect(summer.next_at - summer.last_at).not.toBe(calendar.calc.msec.hour)
     expect(winter.next_at - winter.last_at).not.toBe(summer.next_at - summer.last_at)
+  })
+
+  test('legacy division modes are recorded as hour policies', () => {
+    const equal = new FancyDate(Calendar.Gregorian).division({ H: 'equal' }).init()
+    const temporal = new FancyDate(Calendar.Gregorian).division({ H: 'solar' }).init()
+    expect(equal.dic.hour_division).toMatchObject({
+      kind: 'equal',
+      divisions: equal.dic.H.length,
+      arithmetic: 'elapsed-duration',
+    })
+    expect(temporal.dic.hour_division).toMatchObject({
+      kind: 'temporal',
+      dayDivisions: temporal.dic.H.length / 2,
+      nightDivisions: temporal.dic.H.length / 2,
+      arithmetic: 'boundary-step',
+    })
+  })
+
+  test('table-hour policy drives H and remains steppable', () => {
+    const table = new FancyDate(Calendar.Gregorian)
+      .division({
+        H: {
+          kind: 'table',
+          boundaries: [6 * 60 * 60 * 1000, 12 * 60 * 60 * 1000, 18 * 60 * 60 * 1000, DAY],
+        },
+      })
+      .init()
+    const day = table.to_tempos(Date.UTC(2024, 0, 15, 12)).d
+    const hour = table.to_tempos(day.last_at + 1).H
+    expect(table.dic.hour_division.kind).toBe('table')
+    expect(hour.size).toBe(6 * 60 * 60 * 1000)
+    expect(hour.succ().last_at).toBe(hour.next_at)
   })
 
   test('a full temporal-hour cycle remains contiguous', () => {
