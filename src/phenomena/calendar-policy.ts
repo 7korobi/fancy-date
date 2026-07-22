@@ -309,5 +309,8 @@ export function normalizeHourDivisionPolicy(
   } else if (value.boundaries.length === 0 || value.boundaries.some((boundary) => boundary <= 0)) {
     throw new RangeError('table hours require positive cumulative boundaries')
   }
-  return value
+  if (value.kind === 'equal') {
+    return { ...value, arithmetic: value.arithmetic ?? 'elapsed-duration' }
+  }
+  return { ...value, arithmetic: value.arithmetic ?? 'boundary-step' }
 }

@@ -21,6 +21,7 @@ import type {
   DayAssignmentPolicy,
   DayAssignmentResult,
   DayBoundaryPolicy,
+  HourArithmeticPolicy,
   HourDivisionPolicy,
 } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
@@ -476,6 +477,8 @@ type SpanTarget = {
   sourceHourSince: number
   sourceMinuteSince: number
   sourceSecondSince: number
+  elapsedTimeMsec: number
+  timeOnly: boolean
 }
 export type Tempos = {
   Zz: Tempo<TempoBase>
@@ -2053,6 +2056,8 @@ export class FancyDate {
       sourceHourSince: source.H.since,
       sourceMinuteSince: source.m.since,
       sourceSecondSince: source.s.since,
+      elapsedTimeMsec: 0,
+      timeOnly: true,
     }
     const resolvePendingWeek = () => {
       if (target.week == null) return
@@ -2062,12 +2067,14 @@ export class FancyDate {
     for (const { token, value: amount } of this.span_diff_entries(diff)) {
       if (target.week != null && token !== 'w') resolvePendingWeek()
       if ('w' === token) {
+        target.timeOnly = false
         target.week = (target.week ?? source.w.now_idx) + amount
         target.changedRank = Math.max(target.changedRank, span_rank('d'))
         target.near += amount * this.dic.E.length * this.unit_msec('day')
         continue
       }
       if ('M' === token) {
+        target.timeOnly = false
         // target.M += amount という単純な番号加算だと、次の月が閏月
         // (is_leap=true、now_idx は前月と同じ)であるケースを一切
         // 考慮できず、閏月をまるごと読み飛ばしてしまう不具合があった
@@ -2089,6 +2096,17 @@ export class FancyDate {
       if (!is_core_precision(token)) {
         throw new Error(`cannot add span token ${token}`)
       }
+      if (
+        this.hour_arithmetic_policy() === 'elapsed-duration' &&
+        (token === 'H' || token === 'm' || token === 's' || token === 'S')
+      ) {
+        const duration = this.unit_msec(this.span_part_unit(token))
+        target.elapsedTimeMsec += amount * duration
+        target.changedRank = Math.max(target.changedRank, span_rank(token))
+        target.near += amount * duration
+        continue
+      }
+      if (token === 'y' || token === 'd') target.timeOnly = false
       target[token] += amount
       if (token === 'y') target.u += amount
       target.changedRank = Math.max(target.changedRank, span_rank(token))
@@ -2156,16 +2174,18 @@ export class FancyDate {
       target[parent] += amount
     }
     const rank = target.changedRank
-    if (span_rank('S') <= rank) carry('S', 's', this.dic.S.length)
-    if (span_rank('s') <= rank) {
-      carry('s', 'm', this.dic.s.length)
-      if (this.hour_division_policy().kind === 'temporal' && target.m < 0 && target.s === 0) {
-        target.s = this.dic.s.length
-        target.m--
+    if (this.hour_arithmetic_policy() !== 'elapsed-duration') {
+      if (span_rank('S') <= rank) carry('S', 's', this.dic.S.length)
+      if (span_rank('s') <= rank) {
+        carry('s', 'm', this.dic.s.length)
+        if (this.hour_division_policy().kind === 'temporal' && target.m < 0 && target.s === 0) {
+          target.s = this.dic.s.length
+          target.m--
+        }
       }
+      if (span_rank('m') <= rank) carry('m', 'H', this.dic.m.length)
+      if (span_rank('H') <= rank) carry('H', 'd', this.dic.H.length)
     }
-    if (span_rank('m') <= rank) carry('m', 'H', this.dic.m.length)
-    if (span_rank('H') <= rank) carry('H', 'd', this.dic.H.length)
     if (span_rank('M') <= rank) {
       const years = Math.floor(target.M / this.dic.M.length)
       target.M = mod(target.M, this.dic.M.length)
@@ -2195,6 +2215,13 @@ export class FancyDate {
 
   private find_span_time(target: SpanTarget, utc: number) {
     if (target.changedRank < 0) return utc
+    if (
+      this.hour_arithmetic_policy() === 'elapsed-duration' &&
+      target.timeOnly &&
+      target.elapsedTimeMsec !== 0
+    ) {
+      return utc + target.elapsedTimeMsec
+    }
     const month = this.find_span_month(target)
     const dayIndex =
       target.changedRank <= span_rank('M')
@@ -2211,11 +2238,11 @@ export class FancyDate {
     // add()/sub() が1日早い日付を返す実バグがあったため修正)。
     const day = this.to_tempos(this.resolve_day_start(month.last_at, dayIndex)).d
     if (target.changedRank <= span_rank('d')) {
-      return this.clamp_since(day, target.sourceDaySince)
+      return this.clamp_since(day, target.sourceDaySince) + target.elapsedTimeMsec
     }
     const direct = this.find_span_time_in_day_direct(day, target)
-    if (direct != null) return direct
-    return this.find_span_time_in_day(day, target)
+    if (direct != null) return direct + target.elapsedTimeMsec
+    return this.find_span_time_in_day(day, target) + target.elapsedTimeMsec
   }
 
   private find_span_time_in_day_direct(day: TempoLike, target: SpanTarget) {
@@ -2673,6 +2700,13 @@ export class FancyDate {
     const sign = from <= to ? -1 : 1
     const earlierTempos = this.to_tempos(earlier)
     const laterTempos = this.to_tempos(later)
+    if (
+      this.hour_arithmetic_policy() === 'elapsed-duration' &&
+      earlierTempos.d.last_at === laterTempos.d.last_at &&
+      (precision === 'H' || precision === 'm' || precision === 's' || precision === 'S')
+    ) {
+      return this.elapsed_time_span_diff(later - earlier, precision, sign)
+    }
     const rows = this.hierarchical_span_rows(precision, earlierTempos, laterTempos)
     if (!rows) throw new Error(`invalid span precision ${precision}`)
     const rank = rows.findIndex(([token]) => token === precision)
@@ -2699,6 +2733,29 @@ export class FancyDate {
         })
         .filter(({ value }) => value),
     )
+  }
+
+  private elapsed_time_span_diff(
+    duration: number,
+    precision: 'H' | 'm' | 's' | 'S',
+    sign: number,
+  ): SpanDiff {
+    const rows = [
+      ['H', this.calc.msec.hour],
+      ['m', this.calc.msec.minute],
+      ['s', this.calc.msec.second],
+      ['S', 1],
+    ] as const
+    const lastIndex = rows.findIndex(([token]) => token === precision)
+    let remaining = duration
+    const diff: SpanDiff = {}
+    for (let index = 0; index <= lastIndex; index++) {
+      const [token, size] = rows[index]
+      const value = Math.floor(remaining / size)
+      remaining -= value * size
+      if (value) diff[token] = value * sign
+    }
+    return this.normalize_span_diff(diff)
   }
 
   private hierarchical_span_rows(precision: Precision, earlierTempos: Tempos, laterTempos: Tempos) {
@@ -3739,6 +3796,11 @@ K   = @dic.earthy[2] / 360
       this.dic.hour_division ??
       normalizeHourDivisionPolicy(this.dic.is_solor ? 'solar' : false, this.dic.H.length)
     )
+  }
+
+  private hour_arithmetic_policy(): HourArithmeticPolicy {
+    const policy = this.hour_division_policy()
+    return policy.arithmetic ?? (policy.kind === 'equal' ? 'elapsed-duration' : 'boundary-step')
   }
 
   private day_start_event(): SolarDayBoundaryEvent | undefined {

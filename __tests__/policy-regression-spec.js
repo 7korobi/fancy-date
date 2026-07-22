@@ -84,6 +84,50 @@ describe('calendar policy regression invariants', () => {
     expect(winter.next_at - winter.last_at).not.toBe(summer.next_at - summer.last_at)
   })
 
+  test('elapsed-duration hour arithmetic uses the nominal hour duration', () => {
+    const calendar = new FancyDate(Calendar.平気法)
+      .division({
+        H: {
+          kind: 'temporal',
+          dayDivisions: 6,
+          nightDivisions: 6,
+          dayStart: 'sunrise',
+          dayEnd: 'sunset',
+          arithmetic: 'elapsed-duration',
+        },
+      })
+      .init()
+    const hour = calendar.to_tempos(Date.UTC(2024, 6, 15, 12)).H
+    const at = hour.last_at
+    const target = calendar.add(at, '1時間後')
+
+    expect(target).toBe(at + calendar.calc.msec.hour)
+    expect(calendar.succ(at, '1時間後')).toBe(at + calendar.calc.msec.hour)
+    expect(calendar.back(at, '1時間後')).toBe(at - calendar.calc.msec.hour)
+    expect(calendar.span(target, at, { precise: 'H' })).toBe(calendar.format_span({ H: 1 }).label)
+    expect(calendar.add(at, calendar.span_obj(target, at, { precise: 'S' }))).toBe(target)
+  })
+
+  test('boundary-step hour arithmetic keeps temporal hour index stepping', () => {
+    const calendar = new FancyDate(Calendar.平気法)
+      .division({
+        H: {
+          kind: 'temporal',
+          dayDivisions: 6,
+          nightDivisions: 6,
+          dayStart: 'sunrise',
+          dayEnd: 'sunset',
+          arithmetic: 'boundary-step',
+        },
+      })
+      .init()
+    const hour = calendar.to_tempos(Date.UTC(2024, 6, 15, 12)).H
+    const target = calendar.add(hour.last_at, '1時間後')
+
+    expect(Math.abs(target - hour.next_at)).toBeLessThan(10000)
+    expect(target - hour.last_at).not.toBe(calendar.calc.msec.hour)
+  })
+
   test('legacy division modes are recorded as hour policies', () => {
     const equal = new FancyDate(Calendar.Gregorian).division({ H: 'equal' }).init()
     const temporal = new FancyDate(Calendar.Gregorian).division({ H: 'solar' }).init()
@@ -135,6 +179,7 @@ describe('calendar policy regression invariants', () => {
     const day = table.to_tempos(Date.UTC(2024, 0, 15, 12)).d
     const hour = table.to_tempos(day.last_at + 1).H
     expect(table.dic.hour_division.kind).toBe('table')
+    expect(table.dic.hour_division.arithmetic).toBe('boundary-step')
     expect(hour.size).toBe(6 * 60 * 60 * 1000)
     expect(hour.succ().last_at).toBe(hour.next_at)
   })
