@@ -122,6 +122,11 @@ export {
 
 export { Calendar } from './calendars'
 export { CHURCH_FEAST_LABELS, churchFeastDates, churchFeastNotes } from './derived/church'
+export {
+  THAI_BUDDHIST_FEAST_LABELS,
+  thaiBuddhistFeastDates,
+  thaiBuddhistFeastNotes,
+} from './derived/thai'
 export { mayaHaab, mayaLongCount, mayaTzolkin } from './derived/maya'
 export {
   matchesPanchanga,
@@ -131,3 +136,4 @@ export {
 } from './derived/panchanga'
 export type { Panchanga, PanchangaCondition, PanchangaNoteRule } from './derived/panchanga'
 export type { ChurchFeastDate, ChurchFeastOptions } from './derived/church'
+export type { ThaiBuddhistFeastDate, ThaiBuddhistFeastOptions } from './derived/thai'
