@@ -199,6 +199,7 @@ export {
   thai_lunisolar,
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
+  ThaiModernLunisolarYearPolicy,
   transformOrbital,
 } from './fancy-date'
 export type {

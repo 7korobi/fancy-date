@@ -1,5 +1,6 @@
 const { Calendar } = require('../lib/sample')
 const {
+  ThaiModernLunisolarYearPolicy,
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
 } = require('../lib/phenomena/thai-lunisolar')
@@ -33,6 +34,31 @@ function monthsOf(year) {
 }
 
 describe('official Thai lunisolar rules', () => {
+  test('resolves the Thai year layout through the shared year policy contract', () => {
+    const policy = new ThaiModernLunisolarYearPolicy()
+    expect(
+      policy.resolve(2024, {}).months.map(({ month, days, is_leap }) => [month, days, is_leap]),
+    ).toEqual([
+      [1, 29, false],
+      [2, 30, false],
+      [3, 29, false],
+      [4, 30, false],
+      [5, 29, false],
+      [6, 30, false],
+      [7, 29, false],
+      [8, 30, false],
+      [9, 29, false],
+      [10, 30, false],
+      [11, 29, false],
+      [12, 30, false],
+    ])
+    expect(policy.resolve(2025, {}).lengthDays).toBe(355)
+    expect(policy.resolve(2026, {}).months.filter(({ month }) => month === 8)).toEqual([
+      { index: 7, month: 8, days: 30, is_leap: false },
+      { index: 8, month: 8, days: 30, is_leap: true },
+    ])
+  })
+
   test('keeps source metadata and representative year fixtures', () => {
     expect(THAI_OFFICIAL_SOURCE.url).toMatch(/PyThaiNLP/)
     expect(THAI_OFFICIAL_SOURCE.portUrl).toMatch(/touchiep/)

@@ -1,5 +1,11 @@
 import type { TIMEZONE } from '../orbital-model'
 import { to_tempo_bare } from '../time'
+import type {
+  CalendarMonthLayout,
+  CalendarYearLayout,
+  CalendarYearPolicy,
+  CalendarYearPolicyContext,
+} from './calendar-policy'
 
 export type ThaiLunisolarYearType = 'normal' | 'intercalary-day' | 'intercalary-month'
 
@@ -282,17 +288,6 @@ export function thai_lunisolar_year_type(year: number): ThaiLunisolarYearType {
   return 'normal'
 }
 
-export function thai_lunisolar_year_length(year: number) {
-  switch (thai_lunisolar_year_type(year)) {
-    case 'intercalary-month':
-      return 384
-    case 'intercalary-day':
-      return 355
-    default:
-      return 354
-  }
-}
-
 function thai_lunisolar_months(type: ThaiLunisolarYearType): readonly MonthEntry[] {
   const months: MonthEntry[] = [
     { month: 1, is_leap: false, days: 29 },
@@ -314,6 +309,42 @@ function thai_lunisolar_months(type: ThaiLunisolarYearType): readonly MonthEntry
     { month: 12, is_leap: false, days: 30 },
   )
   return months
+}
+
+const thai_year_policy_context: CalendarYearPolicyContext = {
+  normalLengthDays: 354,
+  leapLengthDays: 384,
+}
+
+export class ThaiModernLunisolarYearPolicy implements CalendarYearPolicy<CalendarYearPolicyContext> {
+  resolve(year: number, _context: CalendarYearPolicyContext): CalendarYearLayout {
+    const year_type = thai_lunisolar_year_type(year)
+    const months: readonly CalendarMonthLayout[] = thai_lunisolar_months(year_type).map(
+      ({ month, days, is_leap }, index) => ({
+        index,
+        month,
+        days,
+        is_leap,
+      }),
+    )
+    return {
+      year,
+      lengthDays: months.reduce((total, month) => total + month.days, 0),
+      months,
+      is_leap: year_type !== 'normal',
+      kind: year_type,
+    }
+  }
+}
+
+const thai_modern_year_policy = new ThaiModernLunisolarYearPolicy()
+
+function thai_year_layout(year: number) {
+  return thai_modern_year_policy.resolve(year, thai_year_policy_context)
+}
+
+export function thai_lunisolar_year_length(year: number) {
+  return thai_year_layout(year).lengthDays
 }
 
 function year_start(options: ThaiLunisolarOptions, year: number) {
@@ -357,7 +388,12 @@ function resolve_year(options: ThaiLunisolarOptions, utc: number) {
 export function thai_lunisolar(options: ThaiLunisolarOptions, utc: number): ThaiLunisolarDate {
   const { year, start, next, dayStart } = resolve_year(options, utc)
   const yearType = thai_lunisolar_year_type(year)
-  const months = thai_lunisolar_months(yearType)
+  const yearLayout = thai_year_layout(year)
+  const months: readonly MonthEntry[] = yearLayout.months.map(({ month, days, is_leap }) => ({
+    month,
+    days,
+    is_leap: is_leap === true,
+  }))
   let dayOfYear = Math.floor((dayStart - start) / options.dayMsec)
   let monthIndex = 0
   let monthStart = start

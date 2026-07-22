@@ -149,6 +149,7 @@ export {
   thai_lunisolar,
   thai_lunisolar_year_length,
   thai_lunisolar_year_type,
+  ThaiModernLunisolarYearPolicy,
 } from './phenomena/thai-lunisolar'
 export type {
   ThaiLunisolarDate,
