@@ -1298,14 +1298,16 @@ describe('Gregorian', () => {
 
   test('assign() stores token assignment rules separately from notation', () => {
     const utc = g.parse('2024年3月10日')
-    const assignment = (dayStart, context) =>
-      dayStart === 'sunrise' && context.token === 'd' ? 1 : 0
+    const assignment = {
+      assign: ({ dayStart, token }) => (dayStart === 'sunrise' && token === 'd' ? 1 : 0),
+    }
     const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: assignment }).init()
     const clone = new FancyDate(calendar)
 
     expect(calendar.dic.assignments.d).toBe(assignment)
     expect(Object.prototype.propertyIsEnumerable.call(calendar.dic, 'assignments')).toBe(false)
-    expect(clone.dic.assignments.d).toBe(assignment)
+    expect(clone.dic.assignments.d).toEqual(assignment)
+    expect(clone.dic.assignments.d).not.toBe(assignment)
     expect(calendar.format(utc, 'd')).toBe('2')
   })
 
@@ -1325,7 +1327,9 @@ describe('Gregorian', () => {
   })
 
   test('tithi() assigns d from the lunar phase at the configured dayStart boundary', () => {
-    const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: tithi() }).init()
+    const calendar = new FancyDate(g, (c) =>
+      c.dayStart('sunrise').assign({ d: tithi(c.dic.moony) }),
+    ).init()
     const base = calendar.parse('2024年6月21日')
     const day = calendar.to_tempos(base).d
     const expected = Math.floor(calendar.dic.moony.phaseAt(day.last_at) * 30)
@@ -1347,9 +1351,11 @@ describe('Gregorian', () => {
     const calendar = new FancyDate(g)
       .dayStart('sunrise')
       .assign({
-        d: (_dayStart, context) => {
-          contexts.push(context)
-          return 0
+        d: {
+          assign: (context) => {
+            contexts.push(context)
+            return 0
+          },
         },
       })
       .init()
@@ -1363,7 +1369,9 @@ describe('Gregorian', () => {
   })
 
   test('tithi() caches raw lunar phase indexes across repeated civil-day queries', () => {
-    const calendar = new FancyDate(g).dayStart('sunrise').assign({ d: tithi() }).init()
+    const calendar = new FancyDate(g, (c) =>
+      c.dayStart('sunrise').assign({ d: tithi(c.dic.moony) }),
+    ).init()
     const base = calendar.parse('2024年6月21日')
     const moony = calendar.dic.moony
     const phaseAt = moony.phaseAt.bind(moony)
@@ -1407,11 +1415,12 @@ describe('Gregorian', () => {
     expect(collectFlags(amTithi, g.parse('2024年1月1日'), 180)).toContain('skipped')
 
     const slowMoon = [月[0], [31 * to_msec('1d'), 月[1][1]], 月[2]]
-    const repeatedCalendar = new FancyDate(g)
-      .spot(slowMoon, 東京[1], 東京[2], 東京[3])
-      .dayStart('sunrise')
-      .assign({ d: tithi() })
-      .init()
+    const repeatedCalendar = new FancyDate(g, (c) =>
+      c
+        .spot(slowMoon, 東京[1], 東京[2], 東京[3])
+        .dayStart('sunrise')
+        .assign({ d: tithi(c.dic.moony) }),
+    ).init()
     expect(collectFlags(repeatedCalendar, g.parse('2024年1月1日'), 90)).toContain('repeated')
   })
 

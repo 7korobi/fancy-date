@@ -17,9 +17,7 @@ import {
   PeriodicCalendarYearPolicy,
 } from './phenomena/calendar-policy'
 import type {
-  DayAssignmentContext,
   DayAssignmentPolicy,
-  DayAssignmentResult,
   DayBoundaryPolicy,
   HourArithmeticPolicy,
   HourDivisionPolicy,
@@ -801,47 +799,8 @@ export type LocaleApplyOptions = {
 }
 export type DayStart = 'midnight' | SolarDayBoundaryEvent
 export type AssignmentToken = 'd'
-export type AssignmentContext<Token extends AssignmentToken = AssignmentToken> = {
-  token: Token
-  calendar: FancyDate
-  dayStart: DayStart
-  at: number
-  previousAt: number
-  nextAt: number
-}
-export type AssignmentResult =
-  | number
-  | {
-      now_idx: number
-      assignment_raw_now_idx?: number
-      assignment_flags?: readonly string[]
-    }
-export type AssignmentRule<Token extends AssignmentToken = AssignmentToken> = (
-  dayStart: DayStart,
-  context: AssignmentContext<Token>,
-) => AssignmentResult
-
-function assignment_policy_of<Token extends AssignmentToken>(
-  rule: AssignmentRule<Token>,
-  token: Token,
-  calendar: FancyDate,
-): DayAssignmentPolicy {
-  return {
-    assign(context: DayAssignmentContext): DayAssignmentResult {
-      const dayStart = context.dayStart as DayStart
-      return rule(dayStart, {
-        token,
-        calendar,
-        dayStart,
-        at: context.at,
-        previousAt: context.previousAt,
-        nextAt: context.nextAt,
-      })
-    },
-  }
-}
 export type AssignmentOptions = Partial<{
-  [Token in AssignmentToken]: AssignmentRule<Token> | undefined
+  [Token in AssignmentToken]: DayAssignmentPolicy | undefined
 }>
 
 const TITHI_ASSIGNMENT_CACHE_CAPACITY = 128
@@ -851,7 +810,8 @@ type TithiRawIndexCacheEntry = {
   raw: number
 }
 
-export function tithi(): AssignmentRule<'d'> {
+export function tithi(moony: OrbitalModel): DayAssignmentPolicy {
+  if (!moony) throw new Error('tithi() requires a satellite orbital model')
   const rawIndexCache = new WeakMap<OrbitalModel, TithiRawIndexCacheEntry[]>()
   const rawAt = (moony: OrbitalModel, targetAt: number) => {
     let entries = rawIndexCache.get(moony)
@@ -874,18 +834,18 @@ export function tithi(): AssignmentRule<'d'> {
     return raw
   }
 
-  return (_dayStart, { calendar, at, previousAt, nextAt }) => {
-    const moony = calendar.dic.moony
-    if (!moony) throw new Error('tithi() assignment requires a satellite orbital model')
-    const assignment_raw_now_idx = rawAt(moony, at)
-    const now_idx = mod(assignment_raw_now_idx, 30)
-    const previous = rawAt(moony, previousAt)
-    const next = rawAt(moony, nextAt)
-    const assignment_flags = [
-      assignment_raw_now_idx === previous ? 'repeated' : undefined,
-      assignment_raw_now_idx + 1 < next ? 'skipped' : undefined,
-    ].filter((flag): flag is string => !!flag)
-    return { now_idx, assignment_raw_now_idx, assignment_flags }
+  return {
+    assign: ({ at, previousAt, nextAt }) => {
+      const assignment_raw_now_idx = rawAt(moony, at)
+      const now_idx = mod(assignment_raw_now_idx, 30)
+      const previous = rawAt(moony, previousAt)
+      const next = rawAt(moony, nextAt)
+      const assignment_flags = [
+        assignment_raw_now_idx === previous ? 'repeated' : undefined,
+        assignment_raw_now_idx + 1 < next ? 'skipped' : undefined,
+      ].filter((flag): flag is string => !!flag)
+      return { now_idx, assignment_raw_now_idx, assignment_flags }
+    },
   }
 }
 
@@ -973,11 +933,10 @@ class AssignedTempoRule<
   constructor(
     private readonly innerRule: TempoRule<Base>,
     private readonly token: Token,
-    calendar: FancyDate,
-    assignment: AssignmentRule<Token>,
+    assignment: DayAssignmentPolicy,
     private readonly currentDayStart: () => DayStart,
   ) {
-    this.assignmentPolicy = assignment_policy_of(assignment, token, calendar)
+    this.assignmentPolicy = assignment
   }
 
   private readonly assignmentPolicy: DayAssignmentPolicy
@@ -3905,9 +3864,7 @@ K   = @dic.earthy[2] / 360
   private assign_day_tempo(day: Tempo<SubdivideBase>): Tempo<SubdivideBase> {
     const assignment = this.dic.assignments.d
     if (!assignment) return day
-    const rule = new AssignedTempoRule(day.rule, 'd', this, assignment, () =>
-      this.current_day_start(),
-    )
+    const rule = new AssignedTempoRule(day.rule, 'd', assignment, () => this.current_day_start())
     return new Tempo(rule.assign(envelope_of(day), day.base), day.base, rule)
   }
 

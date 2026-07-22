@@ -212,10 +212,7 @@ export {
   transformOrbital,
 } from './fancy-date'
 export type {
-  AssignmentContext,
   AssignmentOptions,
-  AssignmentRule,
-  AssignmentResult,
   AssignmentToken,
   CalendarMonthLayout,
   CalendarYearLayout,

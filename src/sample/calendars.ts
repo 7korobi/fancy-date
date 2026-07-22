@@ -171,7 +171,7 @@ const プールニマンタ = new FancyDate((c) =>
 
 // 実用的なパンチャーンガ系の日付では、civil day の境界(日の出)そのものと、
 // その日の d に割り当てる tithi(月太陽離角12度ごとの30分割)は別の層になる。
-// dayStart('sunrise') が「日の出始まりの日」を作り、assign({ d: tithi() }) が
+// dayStart('sunrise') が「日の出始まりの日」を作り、assign({ d: tithi(moony) }) が
 // その日の d index を日の出時点の tithi へ投影する。観測に寄る暦なので、
 // tithi 版は mean の アマンタ/プールニマンタ から派生しつつ spot() を
 // 天文月(および満月基準の天文黒分月)へ差し替える。
@@ -181,10 +181,16 @@ const 天文黒分月: SATELLITE = [
   天文月[2],
 ] as const
 const アマンタティティ = new FancyDate(アマンタ, (c) =>
-  c.spot(天文月, Madurai[1], Madurai[2], Madurai[3]).dayStart('sunrise').assign({ d: tithi() }),
+  c
+    .spot(天文月, Madurai[1], Madurai[2], Madurai[3])
+    .dayStart('sunrise')
+    .assign({ d: tithi(c.dic.moony!) }),
 )
 const プールニマンタティティ = new FancyDate(プールニマンタ, (c) =>
-  c.spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3]).dayStart('sunrise').assign({ d: tithi() }),
+  c
+    .spot(天文黒分月, Jaypore[1], Jaypore[2], Jaypore[3])
+    .dayStart('sunrise')
+    .assign({ d: tithi(c.dic.moony!) }),
 )
 
 const BangkokTimezoneMsec = (Bangkok[3] / 360) * 24 * 60 * 60 * 1000

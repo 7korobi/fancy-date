@@ -44,7 +44,7 @@ export type TempoEnvelope = {
   /** 元号を持つ暦で、同じ年区間に対応する元号内相対年。 */
   era_now_idx?: number
   /**
-   * AssignmentRule が now_idx へ投影する前の、assignment 側の通し番号。
+   * DayAssignmentPolicy が now_idx へ投影する前の、assignment 側の通し番号。
    * raw_now_idx は assignment 前の暦座標(civil day など)を保持する一方、
    * assignment_raw_now_idx は tithi のような割当対象現象そのものの連続座標を
    * 保持する。assignment を使わない token では設定されない。
@@ -1331,7 +1331,7 @@ export class Tempo<Base extends TempoBase = TempoBase> implements TempoLike {
   get era_now_idx() {
     return this.envelope.era_now_idx
   }
-  /** AssignmentRule が割り当てた現象側の通し番号。未設定なら undefined。 */
+  /** DayAssignmentPolicy が割り当てた現象側の通し番号。未設定なら undefined。 */
   get assignment_raw_now_idx() {
     return this.envelope.assignment_raw_now_idx
   }
