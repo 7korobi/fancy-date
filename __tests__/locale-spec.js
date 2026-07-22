@@ -12,6 +12,9 @@ describe('ロケール登録簿(発見・カタログ)', () => {
     expect(ja.numerals.cardinalDigit).toBe(jpn.桁読み)
     expect(ja.numerals.dateRuby.parse(20)).toBe('はつか')
     expect(ja.numerals.countRuby.parse(1)).toBe('ひとつ')
+    expect(ja.labels.M).toBe('ヶ月')
+    expect(ja.spanUnitRuby['ヶ月']).toBe('かげつ')
+    expect(ja.seasonalNoteLabels.春節分).toBe('節分')
     expect(ja.defaultParseFormat).toBe('y年M月d日')
     expect(getLocale('en').defaultParseFormat).toBe('y/M/d')
     expect(getLocale('en').defaultFormat).toBe('Gy/M/d(E)')
@@ -40,6 +43,21 @@ describe('ロケール登録簿(発見・カタログ)', () => {
     expect(calendar.format(utc, 'yo')).toBe('二千廿四')
     expect(calendar.format(utc, 'yr')).toBe('にせんにじゅうよん')
     expect(calendar.format(utc, 'yyyy年')).toBe('二千廿四年')
+  })
+
+  test('FancyDate.locale()はtoken labelもLocaleEntryから適用する', () => {
+    const ja = getLocale('ja')
+    const calendar = new FancyDate(Calendar.Gregorian)
+      .locale(
+        {
+          ...ja,
+          labels: { ...ja.labels, w: '週目' },
+        },
+        { lang: false },
+      )
+      .init()
+
+    expect(calendar.format_span({ w: 1 }).label).toBe('1週目後')
   })
 
   test('FancyDate.locale()は未知の数詞役割名を例外にする', () => {

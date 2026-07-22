@@ -1,5 +1,6 @@
 import { mod, parseNumeral, type Numeral } from './number'
 import type { LocaleEntry, NumeralPurpose } from './locale-registry'
+import { JA_LABELS, JA_SEASONAL_NOTE_LABELS, JA_SPAN_UNIT_RUBY } from './locale/labels'
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import type {
   LunarApsisKind,
@@ -665,21 +666,6 @@ type SeasonalNoteMap = Record<string, { is_cover(at: number): boolean }> & {
 type DateNoteGroups = Record<string, Record<string, readonly (number | undefined)[]>>
 type NoteProvider = (utc: number, tempos: Tempos) => readonly string[]
 
-const default_zassetsu_note_labels: SeasonalNoteLabels = {
-  春彼岸: '彼岸',
-  秋彼岸: '彼岸',
-  春社日: '社日',
-  秋社日: '社日',
-  春土用: '土用',
-  夏土用: '土用',
-  秋土用: '土用',
-  冬土用: '土用',
-  春節分: '節分',
-  夏節分: '節分',
-  秋節分: '節分',
-  冬節分: '節分',
-}
-
 function with_seasonal_note_labels<T extends SeasonalNoteMap>(
   notes: T,
   labels: SeasonalNoteLabels,
@@ -690,61 +676,6 @@ function with_seasonal_note_labels<T extends SeasonalNoteMap>(
     value: labels,
   })
   return notes
-}
-
-const DEFAULT_LABELS: Readonly<SpanLabels> = {
-  yC60: '年干支',
-  yC10: '年干',
-  yC12: '年支',
-  yC9: '年九星',
-  dC60: '日干支',
-  dC10: '日干',
-  dC12: '日支',
-  dC9: '日九星',
-  dC7: '曜日',
-  dC8: '曜日',
-  dC28: '宿',
-  R6: '六曜',
-  LM27: '宿',
-  yC: '年干支',
-  yCS: '年干',
-  yCB: '年支',
-  dC: '日干支',
-  dCS: '日干',
-  dCB: '日支',
-  a: '年干支',
-  b: '年支',
-  c: '年干',
-  A: '日干支',
-  B: '日支',
-  C: '日干',
-  E: '曜日',
-  N: '月相',
-  Q: '四半期',
-  Z: '節気',
-  Zz: '節気',
-  Y: '年',
-  y: '年',
-  u: '年',
-  w: '週',
-  D: '日',
-  d: '日',
-  M: 'ヶ月',
-  H: '時間',
-  m: '分',
-  s: '秒',
-  S: 'ミリ秒',
-}
-
-const default_span_unit_ruby: Readonly<Record<string, string>> = {
-  年: 'ねん',
-  ヶ月: 'かげつ',
-  週: 'しゅう',
-  日: 'にち',
-  時間: 'じかん',
-  分: 'ふん',
-  秒: 'びょう',
-  ミリ秒: 'みりびょう',
 }
 
 type IIDX = TOKENS<AnyDicToken, Indexer>
@@ -770,6 +701,8 @@ type IDIC = IIDX & {
   leaps: number[]
   leap_shift?: number
   labels: SpanLabels
+  span_unit_ruby: Readonly<Record<string, string>>
+  seasonal_note_labels: SeasonalNoteLabels
   start: [string, string, number]
   is_solor: boolean
   hour_division?: HourDivisionPolicy
@@ -1142,8 +1075,22 @@ export class FancyDate {
     Object.defineProperty(this.dic, 'labels', {
       configurable: true,
       enumerable: false,
-      value: { ...DEFAULT_LABELS },
+      value: { ...JA_LABELS },
       writable: true,
+    })
+    Object.defineProperties(this.dic, {
+      span_unit_ruby: {
+        configurable: true,
+        enumerable: false,
+        value: { ...JA_SPAN_UNIT_RUBY },
+        writable: true,
+      },
+      seasonal_note_labels: {
+        configurable: true,
+        enumerable: false,
+        value: { ...JA_SEASONAL_NOTE_LABELS },
+        writable: true,
+      },
     })
     Object.defineProperty(this.dic, 'assignments', {
       configurable: true,
@@ -1332,6 +1279,10 @@ export class FancyDate {
     if (options.labels !== false) {
       if (locale.labels) this.labels(locale.labels)
       if (options.labels && 'object' === typeof options.labels) this.labels(options.labels)
+    }
+    if (locale.spanUnitRuby) this.dic.span_unit_ruby = { ...locale.spanUnitRuby }
+    if (locale.seasonalNoteLabels) {
+      this.dic.seasonal_note_labels = { ...locale.seasonalNoteLabels }
     }
     return this
   }
@@ -2830,7 +2781,7 @@ export class FancyDate {
     if (!numberRuby) return undefined
     const relatives = this.dic[token_base(token)]?.relatives
     const unitLabel = 'string' === typeof relatives ? relatives : fallbackUnit
-    const unitRuby = default_span_unit_ruby[unitLabel]
+    const unitRuby = this.dic.span_unit_ruby[unitLabel]
     return unitRuby ? `${numberRuby}${unitRuby}` : numberRuby
   }
 
@@ -3658,7 +3609,7 @@ K   = @dic.earthy[2] / 360
     if (hasSolarEvents(this.dic.sunny)) return this.雑節_by_phase(utc)
     return with_seasonal_note_labels(
       resolve雑節ByMean(Zz, d, this.calc.msec.day, this.calc.zero.day10, this.dic.dCS.length),
-      default_zassetsu_note_labels,
+      this.dic.seasonal_note_labels,
     )
   }
 
@@ -3672,7 +3623,7 @@ K   = @dic.earthy[2] / 360
         this.dic.dCS.length,
         utc,
       ),
-      default_zassetsu_note_labels,
+      this.dic.seasonal_note_labels,
     )
   }
 

@@ -15,4 +15,6 @@ export type LocaleEntry = {
   defaultParseFormat: string
   defaultFormat: string
   labels?: Record<string, string>
+  spanUnitRuby?: Readonly<Record<string, string>>
+  seasonalNoteLabels?: Readonly<Record<string, string>>
 }

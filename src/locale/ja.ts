@@ -26,6 +26,7 @@ import {
   時鐘かな,
 } from '../sample/locale'
 import { 北朝元号 } from '../sample/eras'
+import { JA_LABELS, JA_SEASONAL_NOTE_LABELS, JA_SPAN_UNIT_RUBY } from './labels'
 import type { LocaleEntry } from './types'
 
 export const jaLocale: LocaleEntry = {
@@ -57,6 +58,9 @@ export const jaLocale: LocaleEntry = {
     R6: [六曜, 六曜かな],
     LM27: [二十七宿, 二十七宿かな],
   },
+  labels: JA_LABELS,
+  spanUnitRuby: JA_SPAN_UNIT_RUBY,
+  seasonalNoteLabels: JA_SEASONAL_NOTE_LABELS,
   defaultParseFormat: 'y年M月d日',
   defaultFormat: 'Gy年M月d日(E)',
 }
