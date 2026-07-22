@@ -1035,15 +1035,10 @@ class Indexer {
     if (rubys instanceof Array && rubys.length === this.length) {
       this.rubys = rubys
     }
-    if (relatives instanceof Array && relatives.length === this.length) {
-      Object.defineProperty(this, 'relatives', {
-        configurable: true,
-        enumerable: false,
-        value: relatives,
-        writable: false,
-      })
-    }
-    if ('string' === typeof relatives) {
+    if (
+      (relatives instanceof Array && relatives.length === this.length) ||
+      'string' === typeof relatives
+    ) {
       Object.defineProperty(this, 'relatives', {
         configurable: true,
         enumerable: false,
