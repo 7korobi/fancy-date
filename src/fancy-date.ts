@@ -142,6 +142,7 @@ export type {
   LegacyHourDivision,
   LunisolarBoundary,
   LunisolarBoundarySource,
+  LunisolarPhaseBoundary,
   FeastDate,
   FeastKind,
   FeastPolicy,

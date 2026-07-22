@@ -67,6 +67,11 @@ export type LunisolarBoundary = {
   source_kind: LunisolarBoundarySource
 }
 
+export type LunisolarPhaseBoundary = LunisolarBoundary & {
+  source_at: number
+  next_source_at: number
+}
+
 export type FeastDate = {
   year: number
   month: number
@@ -99,7 +104,7 @@ export type LunisolarPrincipalTermLike = {
   at: number
 }
 
-export type PrincipalTermLunisolarMonth = LunisolarBoundary & {
+export type PrincipalTermLunisolarMonth = LunisolarPhaseBoundary & {
   month: number
   is_leap: boolean
   year: number
@@ -109,12 +114,12 @@ export type PrincipalTermLunisolarMonth = LunisolarBoundary & {
 export class PrincipalTermLunisolarPolicy {
   constructor(
     private readonly resolvePrincipalTerm: (
-      boundary: LunisolarBoundary,
+      boundary: LunisolarPhaseBoundary,
     ) => LunisolarPrincipalTermLike | undefined,
     private readonly yearOf: (at: number) => number,
   ) {}
 
-  assign(boundaries: readonly LunisolarBoundary[]): PrincipalTermLunisolarMonth[] {
+  assign(boundaries: readonly LunisolarPhaseBoundary[]): PrincipalTermLunisolarMonth[] {
     const assigned = boundaries.map((boundary) => ({
       ...boundary,
       month: NaN,

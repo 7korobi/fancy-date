@@ -1,7 +1,7 @@
 import type { OrbitalModel, TIMEZONE } from '../orbital-model'
 import { to_tempo_bare } from '../time'
 import { PrincipalTermLunisolarPolicy } from './calendar-policy'
-import type { LunisolarBoundary, LunisolarBoundarySource } from './calendar-policy'
+import type { LunisolarBoundarySource, LunisolarPhaseBoundary } from './calendar-policy'
 
 export type LunisolarPrincipalTerm = {
   index: number
@@ -111,13 +111,16 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
     year: item.year,
     last_at: item.last_at,
     next_at: item.next_at,
-    new_moon_at: item.source_at!,
-    next_new_moon_at: item.next_source_at!,
+    new_moon_at: item.source_at,
+    next_new_moon_at: item.next_source_at,
     principal_term: item.principal_term,
   }))
 }
 
-function lunisolar_boundaries_around(options: LunisolarOptions, utc: number): LunisolarBoundary[] {
+function lunisolar_boundaries_around(
+  options: LunisolarOptions,
+  utc: number,
+): LunisolarPhaseBoundary[] {
   if (!options.moony) {
     throw new Error('lunisolar requires a satellite orbital model')
   }
@@ -160,13 +163,10 @@ function lunisolar_boundaries_around(options: LunisolarOptions, utc: number): Lu
   })
 }
 
-function lunisolar_principal_term(options: LunisolarOptions, boundary: LunisolarBoundary) {
+function lunisolar_principal_term(options: LunisolarOptions, boundary: LunisolarPhaseBoundary) {
   const termCount = options.principalTermCount ?? 12
   if (!Number.isInteger(termCount) || termCount <= 0) {
     throw new Error(`invalid principal term count ${termCount}`)
-  }
-  if (boundary.source_at == null || boundary.next_source_at == null) {
-    throw new Error('lunisolar boundary has no source phase')
   }
   const near = (boundary.source_at + boundary.next_source_at) / 2
   const startAt = local_day_start(options, boundary.source_at)

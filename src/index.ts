@@ -240,6 +240,7 @@ export type {
   LegacyHourDivision,
   LunisolarBoundary,
   LunisolarBoundarySource,
+  LunisolarPhaseBoundary,
   LunisolarPrincipalTermLike,
   PrincipalTermLunisolarMonth,
   LunisolarYearResolver,

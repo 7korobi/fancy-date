@@ -55,7 +55,7 @@ Policy の責務は以下である。
 
 Phase 3では `PeriodicCalendarYearPolicy` を Gregorian/Julian の既存年表へ接続する。これは閏年の年構造だけをpolicy化する最初の実装であり、月境界や太陰太陽暦のpolicyは後続Phaseで分離する。
 
-Phase 4では、平均・観測太陰太陽暦の朔望月境界列を先に生成し、その列へ`PrincipalTermLunisolarPolicy`を適用する。中気による月番号・閏月・年番号の割り当てを境界生成から分離するが、既存の`LunisolarDate`へ返す結果形状は維持する。
+Phase 4では、平均・観測太陰太陽暦の朔望月境界列を先に生成し、その列へ`PrincipalTermLunisolarPolicy`を適用する。中気による月番号・閏月・年番号の割り当てを境界生成から分離する。PrincipalTerm入力は`LunisolarPhaseBoundary`として`source_at`／`next_source_at`を必須にし、tableなどsource phaseを持たない境界候補とは型を分ける。既存の`LunisolarDate`へ返す結果形状は維持する。
 
 Phase 5では、Thaiの固定年長・固定月配置・閏日/閏月判定を`ThaiModernLunisolarYearPolicy`へ接続する。これはPrincipalTerm policyとは異なる表/規則policyだが、`CalendarYearPolicy`の共通契約を使う。天文月境界からThaiの月を推論することはせず、Thai policyが解決したyear layoutを日付投影へ使う。
 
