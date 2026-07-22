@@ -11,6 +11,8 @@ import type {
 } from './orbital-model'
 import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
 import type { LunisolarDate } from './phenomena/lunisolar'
+import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
+import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
 import {
   noon as resolveNoon,
   solor as resolveSolor,
@@ -113,6 +115,36 @@ export type {
 } from './nasa'
 export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean'
 export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar'
+export type {
+  CalendarMonthLayout,
+  CalendarYearLayout,
+  CalendarYearPolicy,
+  HourArithmeticPolicy,
+  HourDivisionPolicy,
+  LunisolarBoundary,
+  LunisolarBoundarySource,
+  LunisolarLeapDay,
+  LunisolarPolicy,
+  LunisolarYearContext,
+} from './phenomena/calendar-policy'
+export { add_civil_days, church_feasts, computus, convert_civil_date } from './phenomena/computus'
+export type {
+  ChurchFeast,
+  ChurchFeastId,
+  CivilDate,
+  ComputusResult,
+  ComputusSystem,
+} from './phenomena/computus'
+export {
+  thai_lunisolar,
+  thai_lunisolar_year_length,
+  thai_lunisolar_year_type,
+} from './phenomena/thai-lunisolar'
+export type {
+  ThaiLunisolarDate,
+  ThaiLunisolarOptions,
+  ThaiLunisolarYearType,
+} from './phenomena/thai-lunisolar'
 export type { PreparedSpot, PreparedSpotModels } from './prepare'
 export { prepareSpot, prepareSpotModels } from './prepare'
 // export * from はコンパイル時に tslib.__exportStar() という実行時関数呼び出しになり、
@@ -698,6 +730,7 @@ type IDIC = IIDX & {
   is_dusk: boolean
   observed_lunisolar?: boolean
   observed_lunisolar_solar_year?: LunisolarYearResolver
+  thai_official_lunisolar?: boolean
 }
 export type DivisionOptions = {
   H?: false | 'equal' | 'solar'
@@ -1254,6 +1287,21 @@ export class FancyDate {
       enabled && typeof options === 'object' ? options.solarYear : undefined
     this._lunisolar_cache.length = 0
     return this
+  }
+
+  thaiOfficialLunisolar(enabled = true) {
+    this.dic.thai_official_lunisolar = enabled
+    this._lunisolar_cache.length = 0
+    return this
+  }
+
+  thaiLunisolar(utc: number): ThaiLunisolarDate {
+    const options: ThaiLunisolarOptions = {
+      geo: this.dic.geo,
+      dayMsec: this.calc.msec.day,
+      dayZero: this.calc.zero.day,
+    }
+    return resolveThaiLunisolar(options, utc)
   }
 
   division(options: DivisionOptions) {
@@ -3759,12 +3807,20 @@ K   = @dic.earthy[2] / 360
     let N: Tempo<SubdivideBase> | undefined
     let Nn: (Tempo<TempoBase> & TempoMonth) | undefined
     const moon_msec = this.calc.msec.moon
+    const usesThaiOfficialLunisolar =
+      !this.is_table_month && this.dic.thai_official_lunisolar === true
     const usesObservedLunisolar =
       !this.is_table_month &&
+      !usesThaiOfficialLunisolar &&
       this.dic.moony != null &&
       (this.dic.observed_lunisolar ||
         (hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony)))
-    if (this.dic.moony && moon_msec != null && !usesObservedLunisolar) {
+    if (
+      this.dic.moony &&
+      moon_msec != null &&
+      !usesObservedLunisolar &&
+      !usesThaiOfficialLunisolar
+    ) {
       // 今月と中気(平均朔望月+日境界切り詰め+閏月判定 = MeanLunisolarMonthRule)。
       // 閏月判定・月番号は、Z 本体と同じ基準(実軌道 or 平気法)の
       // resolve_season を規則へ注入して内部で解決する。ここだけ等角の
@@ -3860,7 +3916,22 @@ K   = @dic.earthy[2] / 360
           parent: envelope_of(M),
         })
       } else {
-        if (usesObservedLunisolar) {
+        if (usesThaiOfficialLunisolar) {
+          const resolveThaiDate = (at: number) => this.thaiLunisolar(at)
+          const averageMonthMsec = moon_msec ?? 29.530589 * this.calc.msec.day
+          u = Tempo.at(this.year_rule(new ObservedLunisolarYearRule(resolveThaiDate)), {
+            write_at: utc,
+          })
+          M = Tempo.at(
+            this.month_rule(new ObservedLunisolarMonthRule(resolveThaiDate, averageMonthMsec)),
+            { write_at: utc },
+          ) as Tempo<TempoBase> & TempoMonth
+          d = Tempo.at(this.day_rule(), {
+            write_at: utc,
+            parent: envelope_of(M),
+          })
+          N = d
+        } else if (usesObservedLunisolar) {
           // u(年)は元号調整も含めて EraAdjustedTempoRule で構築する
           // (詳細はクラス自体のdocコメント参照)。M は ObservedLunisolarMonthRule
           // で構築する(内部で this.lunisolar(at) を呼ぶため、u 側の

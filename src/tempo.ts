@@ -2,6 +2,7 @@ import { mod } from './number'
 import type { OrbitalModel, RotationModel, TIMEZONE } from './orbital-model'
 import type { LunisolarDate } from './phenomena/lunisolar'
 import { noon, solar_hour_table, solar_phase, solor } from './phenomena/solar'
+type LunisolarMonthLike = Pick<LunisolarDate, 'year' | 'month' | 'is_leap' | 'last_at' | 'next_at'>
 
 /**
  * TempoEnvelope: 再利用可能な「暦区間」情報。
@@ -1164,7 +1165,7 @@ export class OrbitalPhaseTempoRule implements TempoRule<TempoBase> {
  */
 export class ObservedLunisolarMonthRule implements TempoRule<TempoBase> {
   constructor(
-    private readonly resolveMonth: (write_at: number) => LunisolarDate,
+    private readonly resolveMonth: (write_at: number) => LunisolarMonthLike,
     private readonly avgMonthMsec: number,
   ) {}
 

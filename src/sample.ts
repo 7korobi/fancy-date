@@ -121,6 +121,7 @@ export {
 } from './sample/astro'
 
 export { Calendar } from './sample/calendars'
+export { CHURCH_FEAST_LABELS, churchFeastDates, churchFeastNotes } from './sample/derived/church'
 export { mayaHaab, mayaLongCount, mayaTzolkin } from './sample/derived/maya'
 export {
   matchesPanchanga,
@@ -129,3 +130,4 @@ export {
   panchangaNotes,
 } from './sample/derived/panchanga'
 export type { Panchanga, PanchangaCondition, PanchangaNoteRule } from './sample/derived/panchanga'
+export type { ChurchFeastDate, ChurchFeastOptions } from './sample/derived/church'

@@ -41,6 +41,25 @@ g.format(utc, 'Gy年MM月dd日(E)')
 | `labels(labels)`                         | span の fallback 単位表記を差し替える     |
 | `numeral(numeral)`                       | 数値表記辞書を差し替える                  |
 
+Computus と教会祝祭日は、暦の天体モデルとは独立した計算層として扱う。
+
+```ts
+import { Calendar, churchFeastDates, churchFeastNotes } from 'fancy-date'
+
+const easter = churchFeastDates(Calendar.Gregorian, 2024).find(({ id }) => id === 'easter-sunday')
+
+Calendar.Gregorian.format(easter.utc, 'y年M月d日')
+// '2024年3月31日'
+
+churchFeastNotes(Calendar.Gregorian, easter.utc)
+// ['復活祭']
+```
+
+`system` はComputusの伝統(`'gregorian'` / `'julian'`)、`calendarSystem` は返された
+`CivilDate`を解釈する市民暦である。例えばJulian系の復活祭をGregorian日付へ変換する
+場合は、両方を明示する。実際の天文学的な月相ではなく、教会暦上の満月表と復活祭規則を
+使うため、Computusの結果を通常の`OrbitalModel`や物理衛星として扱わない。
+
 ## format token
 
 format 文字列では、token 文字を並べて暦の値を出力する。複数文字にすると、数値 token は概ね 0 埋め幅になる。

@@ -20,6 +20,44 @@ const g = Calendar.Gregorian
 
 token の意味、format / find / span での使い分け、`precise` や循環 token の詳しい扱いは [docs/manual.md](docs/manual.md) にまとめている。
 
+タイ暦は近似モデルと固有規則モデルを分けている。`Calendar.タイ太陰太陽暦` は平均モデル、`Calendar.タイ太陰太陽暦天文` は観測近似、`Calendar.タイ太陰太陽暦公式` はタイ固有の年型判定と civil month table を使う規則モデルである。規則モデルでは通常年354日、7月加日の年355日、8月を重複する年384日を区別する。1903〜2460年は参照実装との照合範囲で、2461年以後は同じ算術規則を連続適用する proleptic 計算として扱う。これは将来のタイ政府公表年表を保証するものではない。
+
+```ts
+const thai = Calendar.タイ太陰太陽暦公式
+const utc = Date.parse('2026-07-14T17:00:00Z')
+
+thai.format(utc, 'y-M-d')
+// '2569-閏8-1'
+
+thai.thaiLunisolar(utc).is_leap
+// true
+```
+
+一般化の仕様案は [docs/lunisolar-generalization-proposal.md](docs/lunisolar-generalization-proposal.md) を参照。
+
+### 教会暦とComputus
+
+Computus は、実際の月を `SATELLITE` として公開するものではなく、教会暦上の満月と復活祭を求める独立した計算規則である。計算に使う伝統と、結果を表示する市民暦は分けて指定できる。
+
+```ts
+const easter = churchFeastDates(Calendar.Gregorian, 2024).find(({ id }) => id === 'easter-sunday')
+
+easter.label
+// '復活祭'
+
+churchFeastNotes(Calendar.Gregorian, easter.utc)
+// ['復活祭']
+```
+
+Julian系の教会暦をGregorianの日付で表示する場合は、`system` と `calendarSystem` を別に指定する。
+
+```ts
+churchFeastDates(Calendar.Gregorian, 2024, {
+  system: 'julian',
+  calendarSystem: 'gregorian',
+})
+```
+
 ### parse / format
 
 `parse()` は暦表現を UTC ミリ秒へ変換し、`format()` は UTC ミリ秒や暦オブジェクトを文字列へ戻す。
