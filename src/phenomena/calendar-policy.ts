@@ -196,6 +196,27 @@ export type HourDivisionPolicy =
 
 export type LegacyHourDivision = false | 'equal' | 'solar'
 
+export type DayBoundaryEvent = 'sunrise' | 'sunset'
+
+export type DayBoundaryPolicy =
+  | { kind: 'midnight' }
+  | { kind: 'fixed-offset'; offsetHours: number }
+  | { kind: 'solar-event'; event: DayBoundaryEvent }
+
+export function normalizeDayBoundaryPolicy(
+  dayStart?: DayBoundaryEvent,
+  offsetHours?: number,
+): DayBoundaryPolicy {
+  if (dayStart != null) return { kind: 'solar-event', event: dayStart }
+  if (offsetHours != null) {
+    if (!Number.isFinite(offsetHours) || offsetHours < -24 || 24 < offsetHours) {
+      throw new RangeError(`day boundary offset must be between -24 and 24 hours: ${offsetHours}`)
+    }
+    return { kind: 'fixed-offset', offsetHours }
+  }
+  return { kind: 'midnight' }
+}
+
 export function normalizeHourDivisionPolicy(
   value: LegacyHourDivision | HourDivisionPolicy,
   defaultDivisions: number,

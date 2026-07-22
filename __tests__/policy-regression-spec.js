@@ -100,6 +100,29 @@ describe('calendar policy regression invariants', () => {
     })
   })
 
+  test('day boundary modes are represented by an independent policy', () => {
+    const midnight = new FancyDate(Calendar.Gregorian).dayStart('midnight').init()
+    const sunrise = new FancyDate(Calendar.Gregorian).dayStart('sunrise').init()
+    const fixed = new FancyDate(Calendar.Gregorian).dayBoundary(18).init()
+
+    expect(midnight.dic.day_boundary).toEqual({ kind: 'midnight' })
+    expect(sunrise.dic.day_boundary).toEqual({ kind: 'solar-event', event: 'sunrise' })
+    expect(fixed.dic.day_boundary).toEqual({ kind: 'fixed-offset', offsetHours: 18 })
+    expect(sunrise.dic.day_start).toBe('sunrise')
+    expect(fixed.dic.day_offset_hours).toBe(18)
+  })
+
+  test('solar day boundary keeps precedence over a later fixed-offset call', () => {
+    const solar = new FancyDate(Calendar.Gregorian).dayStart('sunset').init()
+    const fixed = new FancyDate(Calendar.Gregorian).dayBoundary(18).init()
+    const calendar = new FancyDate(Calendar.Gregorian).dayStart('sunset').dayBoundary(18).init()
+    const at = Date.UTC(2024, 5, 21, 12)
+    expect(calendar.dic.day_boundary).toEqual({ kind: 'fixed-offset', offsetHours: 18 })
+    expect(calendar.dic.day_start).toBe('sunset')
+    expect(calendar.to_tempos(at).d.last_at).toBe(solar.to_tempos(at).d.last_at)
+    expect(calendar.to_tempos(at).d.last_at).not.toBe(fixed.to_tempos(at).d.last_at)
+  })
+
   test('table-hour policy drives H and remains steppable', () => {
     const table = new FancyDate(Calendar.Gregorian)
       .division({

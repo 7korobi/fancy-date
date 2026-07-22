@@ -66,6 +66,8 @@ Phase 5では、Thaiの固定年長・固定月配置・閏日/閏月判定を`T
 
 Phase 6では、`.division({ H: 'equal' | 'solar' })`を`HourDivisionPolicy`へ正規化し、`dayStart()`/`dayBoundary()`とは独立したHour分割軸として実経路へ接続する。固定境界列は`kind: 'table'`、不定時法は`kind: 'temporal'`、従来の等分は`kind: 'equal'`で表す。`HourArithmeticPolicy`は、後続の`add/span/succ` semanticsを`elapsed-duration`と`boundary-step`に分けるための予約契約であり、今回のPhaseでは既存挙動を変更しない。
 
+Phase 7では、暦日の開始方法を`DayBoundaryPolicy`へ正規化する。`midnight`、`fixed-offset`、`solar-event`をHour分割とは別軸で扱い、`dayStart()`/`dayBoundary()`の既存互換APIから同じpolicyへ接続する。solar eventが指定されている場合にfixed offsetより優先する既存の組み合わせ semanticsも維持する。
+
 ### 2.3 座標・表示層
 
 内部計算では、リセットされない `raw_year` と表示用の `year` を分ける。元号、仏暦、地域の年番号は `raw_year` から導出する注釈とし、月の `month_index` と表示月番号も分離する。

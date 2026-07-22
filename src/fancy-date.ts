@@ -12,10 +12,11 @@ import type {
 import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
 import type { LunisolarDate } from './phenomena/lunisolar'
 import {
+  normalizeDayBoundaryPolicy,
   normalizeHourDivisionPolicy,
   PeriodicCalendarYearPolicy,
 } from './phenomena/calendar-policy'
-import type { HourDivisionPolicy } from './phenomena/calendar-policy'
+import type { DayBoundaryPolicy, HourDivisionPolicy } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
 import {
@@ -125,6 +126,8 @@ export type {
   CalendarYearLayout,
   CalendarYearPolicyContext,
   CalendarYearPolicy,
+  DayBoundaryPolicy,
+  DayBoundaryEvent,
   HourArithmeticPolicy,
   HourDivisionPolicy,
   LegacyHourDivision,
@@ -135,6 +138,7 @@ export type {
   LunisolarYearContext,
 } from './phenomena/calendar-policy'
 export {
+  normalizeDayBoundaryPolicy,
   normalizeHourDivisionPolicy,
   PeriodicCalendarYearPolicy,
   PrincipalTermLunisolarPolicy,
@@ -743,6 +747,7 @@ type IDIC = IIDX & {
   is_solor: boolean
   hour_division?: HourDivisionPolicy
   hour_division_legacy?: boolean
+  day_boundary?: DayBoundaryPolicy
   day_offset_hours?: number
   day_start?: DayStart
   assignments: AssignmentOptions
@@ -1153,6 +1158,12 @@ export class FancyDate {
         value: undefined,
         writable: true,
       },
+      day_boundary: {
+        configurable: true,
+        enumerable: false,
+        value: undefined,
+        writable: true,
+      },
     })
 
     this.calc = {
@@ -1373,6 +1384,7 @@ export class FancyDate {
   // 日の出没計算も this.dic.day_offset_hours の影響を受けない。
   dayBoundary(offsetHours = 0) {
     this.dic.day_offset_hours = offsetHours
+    this.dic.day_boundary = normalizeDayBoundaryPolicy(undefined, offsetHours)
     return this
   }
 
@@ -1383,8 +1395,10 @@ export class FancyDate {
   dayStart(dayStart: DayStart = 'midnight') {
     if (dayStart === 'midnight') {
       delete this.dic.day_start
+      this.dic.day_boundary = normalizeDayBoundaryPolicy(undefined, this.dic.day_offset_hours)
     } else {
       this.dic.day_start = dayStart
+      this.dic.day_boundary = normalizeDayBoundaryPolicy(dayStart)
     }
     this.dic.is_dusk = dayStart === 'sunset'
     this._solar_event_day_rule = undefined
@@ -3687,8 +3701,19 @@ K   = @dic.earthy[2] / 360
   private day_start_event(): SolarDayBoundaryEvent | undefined {
     const dayStart = this.dic.day_start
     if (dayStart === 'sunrise' || dayStart === 'sunset') return dayStart
-    if (this.dic.is_dusk) return 'sunset'
-    return undefined
+    const policy = this.day_boundary_policy()
+    return policy.kind === 'solar-event' ? policy.event : undefined
+  }
+
+  private day_boundary_policy(): DayBoundaryPolicy {
+    if (this.dic.day_start === 'sunrise' || this.dic.day_start === 'sunset') {
+      return { kind: 'solar-event', event: this.dic.day_start }
+    }
+    if (this.dic.is_dusk) return { kind: 'solar-event', event: 'sunset' }
+    if (this.dic.day_offset_hours != null) {
+      return normalizeDayBoundaryPolicy(undefined, this.dic.day_offset_hours)
+    }
+    return this.dic.day_boundary ?? { kind: 'midnight' }
   }
 
   private current_day_start(): DayStart {
@@ -3750,9 +3775,9 @@ K   = @dic.earthy[2] / 360
   // d/N(月内日)を組み立てる規則を dusk()/dayBoundary() の有無で切り替える。
   private day_rule(): TempoRule<SubdivideBase> {
     if (this.day_start_event()) return this.solar_event_day_rule()
-    const offset = this.dic.day_offset_hours
-      ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
-      : 0
+    const policy = this.day_boundary_policy()
+    const offset =
+      policy.kind === 'fixed-offset' ? (policy.offsetHours / 24) * this.calc.msec.day : 0
     return new SubdivideTempoRule(this.calc.msec.day, offset)
   }
 
@@ -4059,7 +4084,7 @@ K   = @dic.earthy[2] / 360
             ),
             { write_at: utc },
           )
-          if (this.dic.is_dusk) {
+          if (this.day_boundary_policy().kind === 'solar-event') {
             M = Tempo.at(
               this.month_rule(
                 new MeanLunisolarMonthRule(
@@ -4583,9 +4608,9 @@ K   = @dic.earthy[2] / 360
   private resolve_day_start(month_start: number, d: number): number {
     const event = this.day_start_event()
     if (!event) {
-      const offset = this.dic.day_offset_hours
-        ? (this.dic.day_offset_hours / 24) * this.calc.msec.day
-        : 0
+      const policy = this.day_boundary_policy()
+      const offset =
+        policy.kind === 'fixed-offset' ? (policy.offsetHours / 24) * this.calc.msec.day : 0
       return month_start + offset + d * this.calc.msec.day
     }
     const rule = new SolarEventDayTempoRule(
