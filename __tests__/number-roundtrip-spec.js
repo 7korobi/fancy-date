@@ -148,3 +148,58 @@ describe('kor: 漢語系・固有系(format方向のみ、既知の値で確認)
     expect(kor.固有系.助数詞前.parse(30)).toBe('서른')
   })
 })
+
+describe('kor: 逆引き(regex/to_number)の実装', () => {
+  test('漢語系: to_number で数値に戻る', () => {
+    expect(kor.漢語系.to_number('영')).toBe(0)
+    expect(kor.漢語系.to_number('일')).toBe(1)
+    expect(kor.漢語系.to_number('십')).toBe(10)
+    expect(kor.漢語系.to_number('십일')).toBe(11)
+    expect(kor.漢語系.to_number('십오')).toBe(15)
+    expect(kor.漢語系.to_number('이십')).toBe(20)
+    expect(kor.漢語系.to_number('백')).toBe(100)
+    expect(kor.漢語系.to_number('백일')).toBe(101)
+    expect(kor.漢語系.to_number('이백삼십사')).toBe(234)
+    expect(kor.漢語系.to_number('천')).toBe(1000)
+    expect(kor.漢語系.to_number('이천이십사')).toBe(2024)
+  })
+
+  test('漢語系: 完全往復', () => {
+    assertRoundTrips(kor.漢語系, 0, 9999)
+  })
+
+  test('固有系(基本): to_number で数値に戻る', () => {
+    expect(kor.固有系.基本.to_number('영')).toBe(0)
+    expect(kor.固有系.基本.to_number('하나')).toBe(1)
+    expect(kor.固有系.基本.to_number('열')).toBe(10)
+    expect(kor.固有系.基本.to_number('스물')).toBe(20)
+    expect(kor.固有系.基本.to_number('스물하나')).toBe(21)
+    expect(kor.固有系.基本.to_number('아흔아홉')).toBe(99)
+  })
+
+  test('固有系(基本): 完全往復', () => {
+    assertRoundTrips(kor.固有系.基本, 0, 99)
+  })
+
+  test('固有系(助数詞前): to_number で数値に戻る', () => {
+    expect(kor.固有系.助数詞前.to_number('영')).toBe(0)
+    expect(kor.固有系.助数詞前.to_number('한')).toBe(1)
+    expect(kor.固有系.助数詞前.to_number('스무')).toBe(20)
+    expect(kor.固有系.助数詞前.to_number('스물한')).toBe(21)
+    expect(kor.固有系.助数詞前.to_number('아흔아홉')).toBe(99)
+  })
+
+  test('固有系(助数詞前): 完全往復', () => {
+    assertRoundTrips(kor.固有系.助数詞前, 0, 99)
+  })
+
+  test('regex が実際の出力を含む', () => {
+    expect(kor.漢語系.regex).toBeTruthy()
+    expect('이천이십사').toMatch(new RegExp(`^${kor.漢語系.regex}$`))
+    expect(kor.固有系.基本.regex).toBeTruthy()
+    expect('스물하나').toMatch(new RegExp(`^${kor.固有系.基本.regex}$`))
+    expect(kor.固有系.助数詞前.regex).toBeTruthy()
+    expect('스물한').toMatch(new RegExp(`^${kor.固有系.助数詞前.regex}$`))
+    expect('스무').toMatch(new RegExp(`^${kor.固有系.助数詞前.regex}$`))
+  })
+})

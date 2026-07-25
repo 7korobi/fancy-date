@@ -30,7 +30,7 @@ const {
 const { 天文地球 } = require('../lib/sample/astro')
 const { MEAN_MOON } = require('../lib/astronomy-data')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
-const { english, jpn, roman } = require('../lib/number')
+const { english, jpn, kor, roman } = require('../lib/number')
 const {
   JupiterSolarOrbital,
   KeplerianSolarOrbital,
@@ -991,6 +991,60 @@ describe('平気法 calculate', () => {
     expect(new Set(labels).size).toEqual(60)
     // 60年進めると同じ干支に戻る(60年周期であることの直接確認)
     expect(平気法.format(msec, 'a')).toEqual(labels[0])
+  })
+
+  const 定気法 = Calendar.定気法
+
+  test('元号1年目のparse round-tripで年月日が一致する', () => {
+    const cases = [
+      [平気法, '1912年8月1日 12時0分0秒', '大正一年水無月十九日'],
+      [平気法, '1926年12月30日 12時0分0秒', '昭和一年霜月廿七日'],
+      [平気法, '1868年3月1日 12時0分0秒', '明治一年如月九日'],
+      [定気法, '1989年1月10日 12時0分0秒', '平成一年師走三日'],
+      [定気法, '2019年5月3日 12時0分0秒', '令和一年弥生廿九日'],
+    ]
+    for (const [cal, gregorian, expectedDate] of cases) {
+      const utc = g.parse(gregorian)
+      const formatted = cal.format(utc, 'Gy年Mod日')
+      expect(formatted).toBe(expectedDate)
+      const parsed = cal.parse(formatted, 'Gy年Mod日')
+      // 元号1年目でも日付部分は1日たりともずれてはならない
+      expect(cal.format(parsed, 'Gy年Mod日')).toBe(formatted)
+      expect(Math.abs(parsed - utc)).toBeLessThan(86400000)
+    }
+  })
+
+  test('元号2年目以降のparse round-tripで年月日が一致する', () => {
+    const cases = [
+      [平気法, '1913年8月1日 12時0分0秒'],
+      [定気法, '1990年6月1日 12時0分0秒'],
+    ]
+    for (const [cal, gregorian] of cases) {
+      const utc = g.parse(gregorian)
+      const formatted = cal.format(utc, 'Gy年Mod日')
+      const parsed = cal.parse(formatted, 'Gy年Mod日')
+      expect(cal.format(parsed, 'Gy年Mod日')).toBe(formatted)
+      expect(Math.abs(parsed - utc)).toBeLessThan(86400000)
+    }
+  })
+
+  test('calendar() anchor 文字列の parse round-trip で日付が一致する', () => {
+    for (const cal of [平気法, 定気法]) {
+      const [anchorStr, anchorFmt] = cal.dic.start
+      const parsed = cal.parse(anchorStr, anchorFmt)
+      expect(cal.format(parsed, anchorFmt)).toBe(anchorStr)
+    }
+  })
+
+  test('u年形式の parse round-trip で日付が一致する', () => {
+    const cases = [
+      [平気法, '二千六百廿九年十一月廿五日', 'u年M月d日'],
+      [定気法, '千九百六十九年十一月廿四日', 'u年M月d日'],
+    ]
+    for (const [cal, str, fmt] of cases) {
+      const parsed = cal.parse(str, fmt)
+      expect(cal.format(parsed, fmt)).toBe(str)
+    }
   })
 })
 
@@ -2190,6 +2244,49 @@ describe('ロムルス歴', () => {
         })} ${rg.format(msec, 'Y-ww-E yC60-dC60 Z\tGyyyy/MM/dd HH:mm:ss J')}`,
     )
     expect(dst).toMatchSnapshot()
+  })
+})
+
+describe('tokenごとの数詞出しわけ', () => {
+  test('token_numeral で日トークンを韓国語漢語系に切り替えて往復する', () => {
+    const c = new FancyDate(Calendar.Gregorian, (c) => c.token_numeral('d', kor.漢語系))
+    const msec = c.parse('2024년 3월 십오일', 'y년 M월 d일')
+    expect(c.format(msec, 'y년 M월 d일')).toBe('2024년 3월 십오일')
+  })
+
+  test('token_numeral_text で月トークンの表記を切り替える', () => {
+    const c = new FancyDate(Calendar.Gregorian, (c) => c.token_numeral_text('M', english.lower))
+    const msec = c.parse('2024/three/15', 'y/M/d')
+    expect(c.format(msec, 'y/M/d')).toBe('2024/three/15')
+  })
+
+  test('token_numeral_ruby で月トークンのふりがなを切り替える', () => {
+    const c = new FancyDate(Calendar.Gregorian, (c) => c.token_numeral_ruby('M', english.lower))
+    const parts = c.format_parts(c.parse('2024년 3월 15일', 'y년 M월 d일'), 'y년 M월 d일')
+    const mPart = parts.find((p) => p.token === 'M')
+    expect(mPart.ruby).toBe('three')
+  })
+
+  test('token_numeral_label で年トークンのラベルをローマ数字に切り替える', () => {
+    const c = new FancyDate(Calendar.Gregorian, (c) => c.token_numeral_label('y', roman.upper))
+    const msec = c.parse('2024년 3월 15일', 'y년 M월 d일')
+    expect(c.format(msec, 'yo년 M월 d일')).toBe('MMXXIV년 3월 15일')
+  })
+
+  test('locale() で token_numerals を適用して往復する', () => {
+    const c = new FancyDate(Calendar.Gregorian, (c) =>
+      c.locale('ja', {
+        token_numerals: { d: kor.漢語系 },
+      }),
+    )
+    const msec = c.parse('2024년 3월 십오일', 'y년 M월 d일')
+    expect(c.format(msec, 'y년 M월 d일')).toBe('2024년 3월 십오일')
+  })
+
+  test('韓国語グレゴリオ暦で基本的な format/parse が往復する', () => {
+    const c = Calendar.韓国語Gregorian
+    const msec = c.parse('2024年3月15日')
+    expect(c.format(msec)).toBe('西暦2024年3月15日(金) 00:00')
   })
 })
 

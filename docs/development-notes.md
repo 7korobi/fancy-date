@@ -44,7 +44,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ## 既知課題
 
-- 元号あり暦の anchor 表記規約: `y` は実在の元号テーブルを持つ暦では元号相対の年数(例: 令和6年)に調整される。一方、`calendar()` の anchor 文字列に書く年数(例: 平気法の「2629年」=皇紀の絶対年)は era 調整前の生値として較正されるため、`format(anchor_epoch, 'y...')` は anchor 自身の絶対年ではなく era 調整後の値を返す。これは明確な二重計算ではなく表記規約の不一致に近い。修正には「anchor の年をどちらの規約として較正するか」という設計判断が要る。
+- 元号あり暦の anchor 表記規約: `calendar()` の anchor 文字列に `u` 年(era 調整前の通年 index)を使う場合、`parse()` でもその通年を正しく解釈できるようになった。`u` が `sub_tokens` に含まれていたため `parse_by()` 冒頭で `data.u` が `diff.u || 0` に上書きされ失われるのが真因だった。`u` を `main_tokens` へ移動し、`u` 指定時には `calc.eras` から実際の元号を特定して `era_relative_y` を計算、`parse_by()` の平均太陰太陽暦経路では `to_tempos()` の `u` 規則と同じ `EraAdjustedTempoRule` で年 envelope を解決することで、`format(parse(anchor_string)) === anchor_string` の round-trip を実現した。
 - `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dayStart('sunrise' | 'sunset')` とは違い、月頭の切り詰め区間は既知の例外として残る。
 
 ## 実装済み・検証済み
@@ -70,6 +70,10 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 暦ごとの数値辞書を使った format/parse 入出力に対応した。
 - `perf:*` 系の性能測定スクリプトを追加した。入力検証強化(NaN/Infinity ガード追加)後に `bun run perf:core` を実行し、parse/format/to_tempos/span/add-sub/太陰太陽暦/天文現象の既存水準から劣化していないことを確認済み。
 - english 数詞の regex が任意の英字列を無条件に飲み込み、元号名・曜日名等と衝突しうる不具合を修正した。数詞語彙だけに一致する正規表現に差し替え、語彙を長さ降順に連結した。
+- 韓国語数詞(`kor.漢語系`・`kor.固有系.基本`・`kor.固有系.助数詞前`)に `regex`/`to_number` を実装し、逆引き(parse)を可能にした。固有系の縮約形(`스무`/`스물한` 等)も往復できる。
+- トークンごとの数詞出しわけ基盤を追加した。`Indexer` に `numeral`/`numeral_text`/`numeral_ruby`/`numeral_label`/`numeral_label_ruby` を持たせ、`format_number`/`parse_number`/`number_pattern` 等が各トークンの設定を優先して参照する。`FancyDate.token_numeral()` 等の公開APIと、`LocaleApplyOptions` の `token_numerals`/`token_numeral_texts`/`token_numeral_rubys`/`token_numeral_labels`/`token_numeral_label_rubys` から適用できる。`def_to_label()`/`def_regex()`/`def_to_idx()` も各トークンに対応する `Indexer` を配線し、format/parse 双方でトークンごとの数詞が使われるようにした。
+- トークン数詞変更時に正規表現を再構築するよう `_set_token_numeral()` から `def_regex()` を呼び出す。`numeral`/`numeral_text` の変更が parse 正規表現に反映される。
+- トークンの ruby 表示を、list/rubys が未設定の場合も `numeral_ruby` でフォールバックするようにした。これにより `to_table()` 等、`.format_parts_by()` を経由しない経路でも数詞読みが一貫して表示される。既存 snapshot は意図した挙動変更として更新した。
 
 ### 天文・観測・入力安全性
 
@@ -109,7 +113,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 0系API整理のPhase 13として、旧`AssignmentRule`／`AssignmentContext`／`AssignmentResult`とcalendarを渡すadapterを削除した。policy objectはcalendar clone時にidentityを保証せず、値形状を複製して保持するため、利用側はobject identityではなく`assign()`契約を使う。
 - 0系API整理のPhase 14として、Hourの入力型`HourDivisionInput`と、内部に保持する正規化済み`HourDivisionPolicy`を分離した。入力では`arithmetic`を省略できるが、正規化後は必須とし、equalは`elapsed-duration`、temporal/tableは`boundary-step`を明示的に保持する。
 - 0系API整理のPhase 15として、PrincipalTerm専用の`LunisolarPhaseBoundary`を追加した。`source_at`／`next_source_at`を必須にし、phaseを必要とする中気探索からoptional guardとnon-null assertionを削除した。sourceなしの一般`LunisolarBoundary`はtable等の候補用に残し、内部データの保証範囲を型で分けた。
-- 太陽太陰暦一般化のPhase 16として、`CalendarNotePolicy`契約を追加し、`SolarTermPolicy`（mean／observed）、`ZassetsuPolicy`、`JapaneseFixedDateNotePolicy`、`ReligiousFixedDateNotePolicy`へ季節現象・雑節・節句・宗教固定日noteの解決を分離した。公開結果は`FancyDate.note()`を正本とし、term set・雑節・節句の中間APIは削除した。固定noteの内部制約はTempoと同じ0-based index objectで表し、solar termのphase mapと固定日note catalogの重複定義も削除した。
+- 太陽太陰暦一般化のPhase 16として、`CalendarNotePolicy`契約を追加し、`SolarTermPolicy`（mean／observed）、`ZassetsuPolicy`、`JapaneseFixedDateNotePolicy`、`ReligiousFixedDateNotePolicy`へ季節現象・雑節・節句・宗教固定日noteの解決を分離した。公開結果は`FancyDate.note()`を正本とし、term set・雑節・節句の中間APIは削除した。固定noteの内部制約はTempoと同じ0-based index objectで表し、solar term phaseと固定日note catalogの定義値は`CALENDAR_NOTE_DATA`へ集約した。表示labelは言語依存データとしてlocale側に残す。
 - locale整理として、tokenのfallback labels、span unitのruby、雑節の表示labelを`src/locale/labels.ts`／`jaLocale`へ集約した。`LocaleEntry`に`labels`・`spanUnitRuby`・`seasonalNoteLabels`を持たせ、`FancyDate.locale()`から内部設定へ反映する。教会暦・Thai feastのID labelはfeature固有のためsample derived側に残す。
 - 太陽太陰暦一般化のPhase 9として、年ごとの宗教行事をcivil dateへ返す`FeastPolicy`契約を追加し、Computusの教会祝祭日を`ChurchFeastPolicy`へ接続した。Computusの伝統、表示先の市民暦、表示ラベルはそれぞれ計算policy・projection・notationの別責務として残した。
 - 太陽太陰暦一般化のPhase 10として、予約していた`HourArithmeticPolicy`を`add()`/`span()`へ接続した。`elapsed-duration`ではH/m/s/Sを固定durationへ集約して時刻へ加算し、`boundary-step`ではtemporal/tableの実境界を辿る。等分Hourはelapsed、temporal/table Hourはboundaryを既定値とし、`Tempo.succ()`/`back()`自体は各Hour ruleの境界stepとして維持した。
@@ -126,6 +130,9 @@ Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [不定�
 - 定気法(観測太陰太陽暦モデル)の `.parse()` 年逆算バグを修正した。観測モデルでは `ObservedLunisolarYearRule` がグレゴリオ暦年を使うため、平気法の連続 index 前提の `zero + y*msec.year` では約660年ズレていた。元号開始 msec を起点に `lunisolar()` 探索で目標年へ収束させる分岐を追加した。
 - 平均太陰太陽暦の `.parse()` 月逆算バグを修正した。従来は `parse_by()` が中気付近の単発シードから月初を決めていたため、閏月直後の非閏月を直前の閏月へ戻したり、年末閏月・師走を前年へ戻したりしていた。従来シードを近傍探索の中心として残しつつ、前後1年ぶんの候補月から元号・年番号・月番号・閏フラグが一致する月を選ぶようにした。平気法1980〜2025年の月初既定表示 round-trip と、バビロニア暦カスプ/ベールの月初表示同一性で検証済み。
 - `export *` の tslib バンドル非互換性を修正した。`src/index.ts`・`src/sample.ts`・`src/sample/index.ts`・`src/naoj.ts`・`src/naoj/index.ts`・`src/nasa/index.ts`・`src/fancy-date.ts` の計7箇所で `export *` を明示的な named export に置き換え、esbuild bundle で `Calendar`/`Tempo`/`to_msec` が undefined にならないことを確認した。
+- 元号1年目の `format()`→`parse()` round-trip ズレを修正した。`find_lunisolar_parse_month()` が月の開始時点だけで元号/年号一致を判定していたため、改元が月の途中で起きる年(大正/昭和/平成/令和元年)で約1年ずれていた。月の開始時点と終了直前の両方で一致確認するようにした。
+- 元号あり暦の anchor 文字列 round-trip を修正した。`calendar()` の anchor で `u` 年(era 調整前の通年)を使う場合、`parse()` 側で `u` トークンが失われ、かつ元号解決が `G=0` 固定になっていたため全く別の年を指していた。`u` を `main_tokens` へ移動、`u` 指定時に `calc.eras` から実元号を特定、`parse_by()` の平均太陰太陽暦経路で `to_tempos()` の `u` 規則と同じ `EraAdjustedTempoRule` を使うことで、平気法・定気法の anchor 文字列が `format(parse(...))` で元に戻るようになった。
+- `scripts/perf.js` の `ga.solar_terms(base)` を `ga.note(base)` に置き換えた。`FancyDate.solar_terms()` は削除され `note()` が公開APIとなったため。
 
 ## 調査メモ・教訓
 

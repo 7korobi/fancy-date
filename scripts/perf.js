@@ -196,7 +196,7 @@ const suites = [
     key: 'solarTermsObserved',
     label: 'Observed solar terms',
     count: 20,
-    run: () => ga.solar_terms(base),
+    run: () => ga.note(base),
   },
   {
     key: 'lunarPhaseObserved',

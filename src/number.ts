@@ -426,7 +426,6 @@ export const old_jpn = {
 // あるため、暦での実用範囲(0〜9999)に絞った薄い専用実装にする。
 // 固有系は 20 までの語根が不規則(二十=스물のように十の倍数を掛け算では
 // 作れない)なため、そもそも DIC の再帰エンジンに乗らない。
-// いずれも regex/to_number(逆引き)は未実装(format 方向のみ)。
 const KOREAN_SINO_DIGITS = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구']
 const KOREAN_SINO_SCALES = ['', '십', '백', '천']
 
@@ -445,6 +444,45 @@ function sino_korean(num: number): string {
   }
   return result
 }
+
+const KOREAN_SINO_DIGIT_MAP = new Map<string, number>([
+  ['일', 1],
+  ['이', 2],
+  ['삼', 3],
+  ['사', 4],
+  ['오', 5],
+  ['육', 6],
+  ['칠', 7],
+  ['팔', 8],
+  ['구', 9],
+])
+const KOREAN_SINO_SCALE_MAP = new Map<string, number>([
+  ['천', 1000],
+  ['백', 100],
+  ['십', 10],
+])
+
+function sino_korean_to_number(text: string): number | null {
+  if (text === '영') return 0
+  let total = 0
+  let currentDigit = 0
+  for (const ch of text) {
+    const digit = KOREAN_SINO_DIGIT_MAP.get(ch)
+    if (digit !== undefined) {
+      currentDigit = digit
+      continue
+    }
+    const scale = KOREAN_SINO_SCALE_MAP.get(ch)
+    if (scale === undefined) return null
+    total += (currentDigit === 0 ? 1 : currentDigit) * scale
+    currentDigit = 0
+  }
+  total += currentDigit
+  return total
+}
+
+const SINO_KOREAN_REGEX =
+  '(?:영|(?=[일이삼사오육칠팔구천백십])(?:[이삼사오육칠팔구]?천)?(?:[이삼사오육칠팔구]?백)?(?:[이삼사오육칠팔구]?십)?[일이삼사오육칠팔구]?)'
 
 const KOREAN_NATIVE_ONES = ['', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉']
 const KOREAN_NATIVE_ONES_COUNTED = [
@@ -492,13 +530,75 @@ function native_korean(num: number, counted: boolean): string {
   return tens_str + ones_str
 }
 
+const KOREAN_NATIVE_DIGIT_MAP = new Map<string, number>([
+  ['하나', 1],
+  ['둘', 2],
+  ['셋', 3],
+  ['넷', 4],
+  ['다섯', 5],
+  ['여섯', 6],
+  ['일곱', 7],
+  ['여덟', 8],
+  ['아홉', 9],
+  ['한', 1],
+  ['두', 2],
+  ['세', 3],
+  ['네', 4],
+])
+
+const KOREAN_NATIVE_TEN_MAP = new Map<string, number>([
+  ['열', 10],
+  ['스물', 20],
+  ['스무', 20],
+  ['서른', 30],
+  ['마흔', 40],
+  ['쉰', 50],
+  ['예순', 60],
+  ['일흔', 70],
+  ['여든', 80],
+  ['아흔', 90],
+])
+
+function native_korean_to_number(text: string): number | null {
+  if (text === '영') return 0
+  for (const [word, value] of [...KOREAN_NATIVE_TEN_MAP].sort(
+    (a, b) => b[0].length - a[0].length,
+  )) {
+    if (text.startsWith(word)) {
+      const rest = text.slice(word.length)
+      if (!rest) return value
+      const digit = KOREAN_NATIVE_DIGIT_MAP.get(rest)
+      return digit != null ? value + digit : null
+    }
+  }
+  return KOREAN_NATIVE_DIGIT_MAP.get(text) ?? null
+}
+
+const NATIVE_KOREAN_BASIC_REGEX =
+  '(?:영|(?:열|스물|서른|마흔|쉰|예순|일흔|여든|아흔)(?:하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉)?|하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉)'
+
+const NATIVE_KOREAN_COUNTED_REGEX =
+  '(?:영|(?:열|스물|서른|마흔|쉰|예순|일흔|여든|아흔)(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉)?|스무|한|두|세|네|다섯|여섯|일곱|여덟|아홉)'
+
 export const kor = {
-  漢語系: { parse: sino_korean } satisfies Numeral,
+  漢語系: {
+    parse: sino_korean,
+    regex: SINO_KOREAN_REGEX,
+    to_number: sino_korean_to_number,
+  } satisfies Numeral,
   固有系: {
     // 助数詞を伴わない素の計数(例: 番号として1,2,3…と数える)
-    基本: { parse: (num: number) => native_korean(num, false) } satisfies Numeral,
+    基本: {
+      parse: (num: number) => native_korean(num, false),
+      regex: NATIVE_KOREAN_BASIC_REGEX,
+      to_number: native_korean_to_number,
+    } satisfies Numeral,
     // 助数詞の直前で使う縮約形(例: 한 개, 두 명, 스무 살)
-    助数詞前: { parse: (num: number) => native_korean(num, true) } satisfies Numeral,
+    助数詞前: {
+      parse: (num: number) => native_korean(num, true),
+      regex: NATIVE_KOREAN_COUNTED_REGEX,
+      to_number: native_korean_to_number,
+    } satisfies Numeral,
   },
 }
 
