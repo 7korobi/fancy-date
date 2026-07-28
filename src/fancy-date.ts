@@ -1,12 +1,7 @@
 import { mod, parseNumeral, type Numeral } from './number'
 import type { LocaleEntry, NumeralPurpose } from './locale-registry'
 import { JA_LABELS, JA_SEASONAL_NOTE_LABELS, JA_SPAN_UNIT_RUBY } from './locale/labels'
-import {
-  JapaneseFixedDateNotePolicy,
-  ReligiousFixedDateNotePolicy,
-  type DateNoteGroups,
-  type SeasonalNoteMap,
-} from './phenomena/calendar-notes'
+import { CalendarNoteResolver } from './phenomena/calendar-note-resolver'
 import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-model'
 import type {
   LunarApsisKind,
@@ -36,8 +31,6 @@ import {
   noon as resolveNoon,
   solor as resolveSolor,
   solar_phase as resolveSolarPhase,
-  SolarTermPolicy,
-  ZassetsuPolicy,
   to_tempo_by_solor as resolveTempoBySolor,
 } from './phenomena/solar'
 import { prepareSpot } from './prepare'
@@ -68,15 +61,11 @@ import type {
   TempoEnvelope,
   TempoLabelLike,
   TempoLike,
+  TempoMonth,
   TempoRule,
+  Tempos,
 } from './tempo'
 import { to_tempo_bare } from './time'
-
-const observed_solar_term_policy = new SolarTermPolicy('observed')
-const mean_solar_term_policy = new SolarTermPolicy('mean')
-const zassetsu_policy = new ZassetsuPolicy()
-const japanese_fixed_date_note_policy = new JapaneseFixedDateNotePolicy()
-const religious_fixed_date_note_policy = new ReligiousFixedDateNotePolicy()
 
 export {
   MEAN_ASTRONOMY,
@@ -316,9 +305,6 @@ export type TempoIdxs = TOKENS<AnyDicToken, number> & {
   G_is_past?: boolean
   M_is_leap: boolean
 }
-type TempoMonth = {
-  is_leap: boolean
-}
 const year_cycle_tokens = ['yC60', 'yC12', 'yC10', 'yC9'] as const
 type YearCycleToken = (typeof year_cycle_tokens)[number]
 const day_cycle_tokens = ['dC60', 'dC12', 'dC10', 'dC9', 'dC7', 'dC8', 'dC28'] as const
@@ -495,53 +481,6 @@ type SpanTarget = {
   elapsedTimeMsec: number
   timeOnly: boolean
 }
-export type Tempos = {
-  Zz: Tempo<TempoBase>
-  dC60: Tempo<TempoBase>
-  dC12: Tempo<TempoBase>
-  dC10: Tempo<TempoBase>
-  dC9: Tempo<TempoBase>
-  dC7: Tempo<TempoBase>
-  dC8: Tempo<TempoBase>
-  dC28: Tempo<TempoBase>
-  R6: TempoLabelLike
-  LM27: TempoLabelLike
-  dC: Tempo<TempoBase>
-  dCB: Tempo<TempoBase>
-  dCS: Tempo<TempoBase>
-  A: Tempo<TempoBase>
-  B: Tempo<TempoBase>
-  C: Tempo<TempoBase>
-  D: Tempo<SubdivideBase>
-  E: TempoLike | TempoLabelLike
-  G: TempoLike | TempoLabelLike
-  H: TempoLike
-  J: Tempo<TempoBase>
-  M: Tempo<TempoBase> & TempoMonth
-  N: Tempo<SubdivideBase> | undefined
-  Q: TempoLabelLike
-  S: Tempo<SubdivideBase>
-  Y: TempoLabelLike
-  Z: Tempo<TempoBase>
-  yC60: TempoLabelLike
-  yC12: TempoLabelLike
-  yC10: TempoLabelLike
-  yC9: TempoLabelLike
-  yC: TempoLabelLike
-  yCB: TempoLabelLike
-  yCS: TempoLabelLike
-  a: TempoLabelLike
-  b: TempoLabelLike
-  c: TempoLabelLike
-  d: Tempo<SubdivideBase>
-  m: Tempo<SubdivideBase>
-  p: Tempo<TempoBase> | undefined
-  s: Tempo<SubdivideBase>
-  u: Tempo<TempoBase>
-  w: Tempo<SubdivideBase>
-  x: TempoLabelLike | undefined
-  y: Tempo<TempoBase>
-}
 type DateLike = number | Tempos | string
 type DateRange = readonly [from: DateLike, to: DateLike]
 
@@ -668,25 +607,6 @@ type MEASURE = {
 type FindMatcher = string | RegExp
 export type FindCondition = { note: FindMatcher } | { [format: string]: FindMatcher }
 type FindBetween = DateRange
-const seasonal_note_label_map = Symbol('seasonal_note_label_map')
-type SeasonalNoteLabels = Record<string, string>
-type SeasonalNoteMapWithLabels = SeasonalNoteMap & {
-  [seasonal_note_label_map]?: SeasonalNoteLabels
-}
-type NoteProvider = (utc: number, tempos: Tempos) => readonly string[]
-
-function with_seasonal_note_labels<T extends SeasonalNoteMapWithLabels>(
-  notes: T,
-  labels: SeasonalNoteLabels,
-): T {
-  Object.defineProperty(notes, seasonal_note_label_map, {
-    configurable: true,
-    enumerable: false,
-    value: labels,
-  })
-  return notes
-}
-
 type IIDX = TOKENS<AnyDicToken, Indexer>
 type IDIC = IIDX & {
   parse: string
@@ -711,7 +631,7 @@ type IDIC = IIDX & {
   leap_shift?: number
   labels: SpanLabels
   span_unit_ruby: Readonly<Record<string, string>>
-  seasonal_note_labels: SeasonalNoteLabels
+  seasonal_note_labels: Record<string, string>
   start: [string, string, number]
   is_solor: boolean
   hour_division?: HourDivisionPolicy
@@ -1055,6 +975,7 @@ export class FancyDate {
   private _solar_hour_rule?: CachedTempoRule<SolarDayHourBase>
   private _solar_event_day_rule?: CachedTempoRule<SubdivideBase>
   private _solar_event_day_core_rule?: SolarEventDayTempoRule
+  private _calendar_note_resolver?: CalendarNoteResolver
   // span/add/sub は「離れた2つの日時」を交互に問い合わせる(例:
   // span_obj() は from/to に加えて next_precise_span_at() で to を
   // 再度問い合わせる)。1スロットのキャッシュだと A→B→A の順で
@@ -1556,6 +1477,7 @@ export class FancyDate {
     this._solar_hour_rule = undefined
     this._solar_event_day_rule = undefined
     this._solar_event_day_core_rule = undefined
+    this._calendar_note_resolver = undefined
     this._lunisolar_cache.length = 0
 
     const { sunny, moony, earthy, leaps, month_divs } = this.dic
@@ -3763,46 +3685,15 @@ K   = @dic.earthy[2] / 360
     return this.dic.moony.lunarNode(kind, near)
   }
 
-  private resolve_fixed_date_notes(): DateNoteGroups {
-    const japanese = japanese_fixed_date_note_policy.resolve(undefined)
-    const religious = religious_fixed_date_note_policy.resolve(undefined)
-    return {
-      カトリック: religious.カトリック,
-      節句: japanese.節句,
-      仏教: religious.仏教,
-      風習: japanese.風習,
-    }
-  }
-
-  private resolve_zassetsu(utc: number, { Zz, d } = this.to_tempos(utc)) {
-    if (hasSolarEvents(this.dic.sunny)) return this.resolve_zassetsu_by_phase(utc)
-    return with_seasonal_note_labels(
-      zassetsu_policy.resolve({
-        terms: mean_solar_term_policy.resolve({ kind: 'mean', Zz, d }),
-        dayMsec: this.calc.msec.day,
-        day10Zero: this.calc.zero.day10,
-        stemLength: this.dic.dCS.length,
-      }),
-      this.dic.seasonal_note_labels,
-    )
-  }
-
-  private resolve_zassetsu_by_phase(utc: number) {
-    return with_seasonal_note_labels(
-      zassetsu_policy.resolve({
-        terms: observed_solar_term_policy.resolve({
-          kind: 'observed',
-          sunny: this.dic.sunny,
-          dayMsec: this.calc.msec.day,
-          dayZero: this.calc.zero.day,
-          utc,
-        }),
-        dayMsec: this.calc.msec.day,
-        day10Zero: this.calc.zero.day10,
-        stemLength: this.dic.dCS.length,
-      }),
-      this.dic.seasonal_note_labels,
-    )
+  private calendar_note_resolver(): CalendarNoteResolver {
+    return (this._calendar_note_resolver ??= new CalendarNoteResolver({
+      sunny: this.dic.sunny,
+      dayMsec: this.calc.msec.day,
+      dayZero: this.calc.zero.day,
+      day10Zero: this.calc.zero.day10,
+      stemLength: this.dic.dCS.length,
+      seasonalNoteLabels: this.dic.seasonal_note_labels,
+    }))
   }
 
   to_tempo_by_solor(utc: number, day) {
@@ -3996,63 +3887,7 @@ K   = @dic.earthy[2] / 360
 
   note(utc: number) {
     const tempos = this.to_tempos(utc)
-    return this.note_at(
-      utc,
-      tempos,
-      this.resolve_zassetsu(utc, tempos),
-      this.resolve_fixed_date_notes(),
-    )
-  }
-
-  private note_at(
-    utc: number,
-    tempos: Tempos,
-    arg1: SeasonalNoteMapWithLabels,
-    arg2: DateNoteGroups,
-  ) {
-    const list: string[] = []
-    for (const provider of this.note_providers(arg1, arg2)) {
-      list.push(...provider(utc, tempos))
-    }
-    return list
-  }
-
-  private note_providers(
-    seasonalNotes: SeasonalNoteMapWithLabels,
-    dateNoteGroups: DateNoteGroups,
-  ): NoteProvider[] {
-    return [
-      (_utc, tempos) => this.seasonal_note_labels(seasonalNotes, tempos),
-      (_utc, tempos) => this.date_note_labels(dateNoteGroups, tempos),
-    ]
-  }
-
-  private seasonal_note_labels(notes: SeasonalNoteMapWithLabels, tempos: Tempos) {
-    const list: string[] = []
-    const labels = notes[seasonal_note_label_map]
-    for (const name in notes) {
-      const note = notes[name]
-      if (note.is_cover(tempos.d.center_at)) {
-        list.push(labels?.[name] ?? name)
-      }
-    }
-    return list
-  }
-
-  private date_note_labels(groups: DateNoteGroups, tempos: Tempos) {
-    const list: string[] = []
-    for (const root in groups) {
-      const group = groups[root]
-      for (const name in group) {
-        const { M, d, B, E } = group[name]
-        if (M != null && M !== tempos.M.now_idx) continue
-        if (d != null && d !== tempos.d.now_idx) continue
-        if (B != null && B !== tempos.B.now_idx) continue
-        if (E != null && E !== tempos.E.now_idx) continue
-        list.push(name)
-      }
-    }
-    return list
+    return this.calendar_note_resolver().resolve(utc, tempos)
   }
 
   to_tempos(utc: number): Tempos {
@@ -4593,8 +4428,8 @@ K   = @dic.earthy[2] / 360
   to_table(utc: number, bk: string, ik: string, has_notes = false) {
     const indexer: Indexer = this.dic[ik]
     let o = this.to_tempos(utc)
-    const arg1 = this.resolve_zassetsu(utc, o)
-    const arg2 = this.resolve_fixed_date_notes()
+    const resolver = this.calendar_note_resolver()
+    const { seasonalNotes, dateNoteGroups } = resolver.resolveRaw(utc, o)
     let { last_at } = o[bk]
 
     o = this.to_tempos(last_at)
@@ -4613,7 +4448,9 @@ K   = @dic.earthy[2] / 360
         indexer.to_value(null, item, 0),
         indexer.to_label(indexer.list, item, 0),
         indexer.to_ruby(indexer.rubys, item, 0),
-        has_notes ? this.note_at(last_at, this.to_tempos(last_at), arg1, arg2) : undefined,
+        has_notes
+          ? resolver.note_at(last_at, this.to_tempos(last_at), seasonalNotes, dateNoteGroups)
+          : undefined,
       ])
     }
     return list

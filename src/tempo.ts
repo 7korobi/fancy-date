@@ -193,6 +193,58 @@ export interface TempoLabelLike {
   is_cover(at: number): boolean
 }
 
+export type TempoMonth = {
+  is_leap: boolean
+}
+
+export type Tempos = {
+  Zz: Tempo<TempoBase>
+  dC60: Tempo<TempoBase>
+  dC12: Tempo<TempoBase>
+  dC10: Tempo<TempoBase>
+  dC9: Tempo<TempoBase>
+  dC7: Tempo<TempoBase>
+  dC8: Tempo<TempoBase>
+  dC28: Tempo<TempoBase>
+  R6: TempoLabelLike
+  LM27: TempoLabelLike
+  dC: Tempo<TempoBase>
+  dCB: Tempo<TempoBase>
+  dCS: Tempo<TempoBase>
+  A: Tempo<TempoBase>
+  B: Tempo<TempoBase>
+  C: Tempo<TempoBase>
+  D: Tempo<SubdivideBase>
+  E: TempoLike | TempoLabelLike
+  G: TempoLike | TempoLabelLike
+  H: TempoLike
+  J: Tempo<TempoBase>
+  M: Tempo<TempoBase> & TempoMonth
+  N: Tempo<SubdivideBase> | undefined
+  Q: TempoLabelLike
+  S: Tempo<SubdivideBase>
+  Y: TempoLabelLike
+  Z: Tempo<TempoBase>
+  yC60: TempoLabelLike
+  yC12: TempoLabelLike
+  yC10: TempoLabelLike
+  yC9: TempoLabelLike
+  yC: TempoLabelLike
+  yCB: TempoLabelLike
+  yCS: TempoLabelLike
+  a: TempoLabelLike
+  b: TempoLabelLike
+  c: TempoLabelLike
+  d: Tempo<SubdivideBase>
+  m: Tempo<SubdivideBase>
+  p: Tempo<TempoBase> | undefined
+  s: Tempo<SubdivideBase>
+  u: Tempo<TempoBase>
+  w: Tempo<SubdivideBase>
+  x: TempoLabelLike | undefined
+  y: Tempo<TempoBase>
+}
+
 /**
  * cyclic_label(): 親トークンと同じ実区間(last_at/next_at)を持ち、
  * now_idx だけを差し替えたラベルを作る。TempoRule/TempoView を経由しない

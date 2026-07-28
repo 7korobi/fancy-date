@@ -277,7 +277,6 @@ export type {
   SpanMeasurePrecision,
   SpanMeasureOptions,
   SpanLike,
-  Tempos,
   FindCondition,
   LocaleApplyOptions,
   LunisolarDate,
@@ -351,6 +350,7 @@ export type {
   SubdivideBase,
   FloorStep,
   SolarDayHourBase,
+  Tempos,
 } from './tempo'
 
 export {
