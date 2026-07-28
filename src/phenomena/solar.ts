@@ -5,25 +5,10 @@ import type { TempoBase, TempoLike } from '../tempo'
 import { CyclicDayTempoRule, FixedTempoRule, join, Tempo } from '../tempo'
 import { to_tempo_by, to_tempo_bare } from '../time'
 import type { CalendarNotePolicy } from './calendar-policy'
+import { CALENDAR_NOTE_DATA } from './calendar-note-data'
 import type { SeasonalNoteMap } from './calendar-notes'
 
-export const SOLAR_TERM_PHASES = {
-  立春: 1 / 8,
-  入梅: 80 / 360,
-  春分: 2 / 8,
-  半夏生: 100 / 360,
-  夏土用: 13 / 40,
-  立夏: 3 / 8,
-  夏至: 4 / 8,
-  秋土用: 23 / 40,
-  立秋: 5 / 8,
-  秋分: 6 / 8,
-  冬土用: 33 / 40,
-  立冬: 7 / 8,
-  冬至: 8 / 8,
-  春土用: 43 / 40,
-  次立春: 9 / 8,
-} as const
+export const SOLAR_TERM_PHASES = CALENDAR_NOTE_DATA.solarTermPhases
 
 export type SolarTermName = keyof typeof SOLAR_TERM_PHASES
 export type SolarTerms = { [Name in SolarTermName]: Tempo<TempoBase> }
