@@ -1,4 +1,5 @@
 import type { CalendarNotePolicy } from './calendar-policy'
+import { CALENDAR_NOTE_DATA } from './calendar-note-data'
 
 /**
  * Fixed-note constraints use the internal zero-based indexes exposed by Tempo:
@@ -18,8 +19,6 @@ export type SeasonalNote = {
 }
 
 export type SeasonalNoteMap = Record<string, SeasonalNote>
-
-import { CALENDAR_NOTE_DATA } from './calendar-note-data'
 
 export class JapaneseFixedDateNotePolicy implements CalendarNotePolicy<undefined, DateNoteGroups> {
   resolve(_context?: undefined): DateNoteGroups {
