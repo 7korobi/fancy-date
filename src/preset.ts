@@ -10,6 +10,8 @@ import type {
   STAR,
 } from './fancy-date'
 import { placePlanet, placeSatellite } from './fancy-date'
+import type { KeplerianOrbitalProfile, KeplerianOrbitalOptions } from './keplerian-orbital'
+import { KeplerianOrbital } from './keplerian-orbital'
 import { transformOrbital } from './mean'
 
 export type PlanetAstronomyEntry = {
@@ -80,6 +82,52 @@ export function placeMeanSatellite(
     : baseOrbital
   const rotation = 'body' in source ? source.solarDay : source.自転
   return placeSatellite({ body, center, orbital, rotation })
+}
+
+export type KeplerianPlanetOptions = {
+  body?: BodyProfile
+  rotation: ROTATION
+} & KeplerianOrbitalOptions
+
+export type KeplerianSatelliteOptions = {
+  body?: BodyProfile
+  rotation?: ROTATION
+} & KeplerianOrbitalOptions
+
+/**
+ * ケプラー楕円軌道の創作惑星を配置する。
+ * 中心天体（恒星）の周りを楕円軌道で公転する惑星を作る。
+ */
+export function placeKeplerianPlanet(
+  center: STAR,
+  profile: KeplerianOrbitalProfile,
+  options: KeplerianPlanetOptions,
+): PlanetPlacement {
+  const { body, rotation, ...orbitalOptions } = options
+  return placePlanet({
+    body,
+    center,
+    orbital: new KeplerianOrbital(profile, orbitalOptions),
+    rotation,
+  })
+}
+
+/**
+ * ケプラー楕円軌道の創作衛星を配置する。
+ * 中心天体（惑星）の周りを楕円軌道で公転する衛星を作る。
+ */
+export function placeKeplerianSatellite(
+  center: PLANET,
+  profile: KeplerianOrbitalProfile,
+  options: KeplerianSatelliteOptions = {},
+): SatellitePlacement {
+  const { body, rotation, ...orbitalOptions } = options
+  return placeSatellite({
+    body,
+    center,
+    orbital: new KeplerianOrbital(profile, orbitalOptions),
+    rotation,
+  })
 }
 
 function hasOrbitalTransform({ direction, epochMsec, phaseOffset }: OrbitalTransformOptions) {

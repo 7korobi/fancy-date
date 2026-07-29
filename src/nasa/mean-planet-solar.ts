@@ -12,7 +12,6 @@ import {
   type MeanOrbitalInput,
   type MeanPlanetAstronomyEntry,
 } from '../astronomy-data'
-import { atan2_deg, cos_deg, julian_day, sin_deg } from '../naoj/astro-math'
 import { mod } from '../number'
 import { PlanetarySolarEventModel } from './planetary-solar'
 
@@ -27,28 +26,17 @@ type MeanPlanetSolarOrbitalProfile = {
   axialTiltDeg: number
 }
 
-type KeplerianElements = {
-  semiMajorAxisAu: number
-  eccentricity: number
-  inclinationDeg: number
-  meanLongitudeDeg: number
-  perihelionLongitudeDeg: number
-  ascendingNodeLongitudeDeg: number
-}
+import type {
+  KeplerianElementRates,
+  KeplerianElements,
+  KeplerianOrbitalProfile,
+} from '../keplerian-orbital'
+import { KeplerianOrbital } from '../keplerian-orbital'
 
-type KeplerianAnomalyTerms = {
-  b?: number
-  c?: number
-  s?: number
-  f?: number
-}
-
-type KeplerianSolarOrbitalProfile = MeanPlanetSolarOrbitalProfile & {
-  elementEpochJd?: number
-  elements: KeplerianElements
-  elementRates?: Partial<KeplerianElements>
-  anomalyTerms?: KeplerianAnomalyTerms
-}
+export type KeplerianSolarOrbitalProfile = MeanPlanetSolarOrbitalProfile &
+  Omit<KeplerianOrbitalProfile, 'periodMsec' | 'epochMsec'> & {
+    elementRates?: KeplerianElementRates
+  }
 
 type MeanPlanetSolarOrbitalConstructor = new (
   options?: MeanPlanetSolarOrbitalOptions,
@@ -83,21 +71,38 @@ export abstract class MeanPlanetSolarOrbital extends PlanetarySolarEventModel {
 export type KeplerianSolarOrbitalOptions = MeanPlanetSolarOrbitalOptions
 
 export abstract class KeplerianSolarOrbital extends MeanPlanetSolarOrbital {
-  private readonly profile: KeplerianSolarOrbitalProfile
-  private readonly referenceLongitudeDeg: number
+  private readonly keplerianOrbital: KeplerianOrbital
 
   protected constructor(
     profile: KeplerianSolarOrbitalProfile,
     options: KeplerianSolarOrbitalOptions = {},
   ) {
     super(profile, options)
-    this.profile = profile
-    const { epochMsec = profile.epochMsec } = meanOrbitalOptionsOf(options)
-    this.referenceLongitudeDeg = apparentSunLongitudeDeg(epochMsec, profile)
+    const { periodMsec = profile.periodMsec, epochMsec = profile.epochMsec } =
+      meanOrbitalOptionsOf(options)
+    this.keplerianOrbital = new KeplerianOrbital(
+      {
+        periodMsec,
+        epochMsec,
+        elementEpochJd: profile.elementEpochJd,
+        elements: profile.elements,
+        elementRates: profile.elementRates,
+        anomalyTerms: profile.anomalyTerms,
+      },
+      { periodMsec, epochMsec },
+    )
   }
 
-  solarLongitudeDeg(utc: number) {
-    return mod(apparentSunLongitudeDeg(utc, this.profile) - this.referenceLongitudeDeg, 360)
+  phaseAt(utc: number): number {
+    return this.keplerianOrbital.phaseAt(utc)
+  }
+
+  timeOfPhase(phase: number, near: number): number {
+    return this.keplerianOrbital.timeOfPhase(phase, near)
+  }
+
+  solarLongitudeDeg(utc: number): number {
+    return mod(this.keplerianOrbital.phaseAt(utc) * 360, 360)
   }
 }
 
@@ -137,72 +142,6 @@ function meanProfileOf({
     rotationEpochMsec: solarDay[1],
     axialTiltDeg: solarDay[2],
   }
-}
-
-function apparentSunLongitudeDeg(utc: number, profile: KeplerianSolarOrbitalProfile) {
-  const centuries = (julian_day(utc) - (profile.elementEpochJd ?? 2451545.0)) / 36525
-  const elements = elementsAt(profile, centuries)
-  const eccentricAnomalyRad = solveEccentricAnomalyRad(
-    elements.meanAnomalyDeg,
-    elements.eccentricity,
-  )
-  const xPrime = elements.semiMajorAxisAu * (Math.cos(eccentricAnomalyRad) - elements.eccentricity)
-  const yPrime =
-    elements.semiMajorAxisAu *
-    Math.sqrt(1 - elements.eccentricity * elements.eccentricity) *
-    Math.sin(eccentricAnomalyRad)
-  const argumentDeg = elements.perihelionLongitudeDeg - elements.ascendingNodeLongitudeDeg
-  const cosArgument = cos_deg(argumentDeg)
-  const sinArgument = sin_deg(argumentDeg)
-  const cosNode = cos_deg(elements.ascendingNodeLongitudeDeg)
-  const sinNode = sin_deg(elements.ascendingNodeLongitudeDeg)
-  const cosInclination = cos_deg(elements.inclinationDeg)
-  const x =
-    (cosArgument * cosNode - sinArgument * sinNode * cosInclination) * xPrime +
-    (-sinArgument * cosNode - cosArgument * sinNode * cosInclination) * yPrime
-  const y =
-    (cosArgument * sinNode + sinArgument * cosNode * cosInclination) * xPrime +
-    (-sinArgument * sinNode + cosArgument * cosNode * cosInclination) * yPrime
-  return mod(atan2_deg(-y, -x), 360)
-}
-
-function elementsAt(profile: KeplerianSolarOrbitalProfile, centuries: number) {
-  const element = (key: keyof KeplerianElements) =>
-    profile.elements[key] + (profile.elementRates?.[key] ?? 0) * centuries
-  const meanLongitudeDeg = element('meanLongitudeDeg')
-  const perihelionLongitudeDeg = element('perihelionLongitudeDeg')
-  const terms = profile.anomalyTerms
-  const anomalyCorrectionDeg = terms
-    ? (terms.b ?? 0) * centuries * centuries +
-      (terms.c ?? 0) * cos_deg((terms.f ?? 0) * centuries) +
-      (terms.s ?? 0) * sin_deg((terms.f ?? 0) * centuries)
-    : 0
-  return {
-    semiMajorAxisAu: element('semiMajorAxisAu'),
-    eccentricity: element('eccentricity'),
-    inclinationDeg: element('inclinationDeg'),
-    meanLongitudeDeg,
-    perihelionLongitudeDeg,
-    ascendingNodeLongitudeDeg: element('ascendingNodeLongitudeDeg'),
-    meanAnomalyDeg: signedDegree(meanLongitudeDeg - perihelionLongitudeDeg + anomalyCorrectionDeg),
-  }
-}
-
-function solveEccentricAnomalyRad(meanAnomalyDeg: number, eccentricity: number) {
-  const meanAnomalyRad = (meanAnomalyDeg * Math.PI) / 180
-  let eccentricAnomalyRad = meanAnomalyRad + eccentricity * Math.sin(meanAnomalyRad)
-  for (let index = 0; index < 8; index++) {
-    const delta =
-      (eccentricAnomalyRad - eccentricity * Math.sin(eccentricAnomalyRad) - meanAnomalyRad) /
-      (1 - eccentricity * Math.cos(eccentricAnomalyRad))
-    eccentricAnomalyRad -= delta
-    if (Math.abs(delta) < 1e-12) break
-  }
-  return eccentricAnomalyRad
-}
-
-function signedDegree(deg: number) {
-  return mod(deg + 180, 360) - 180
 }
 
 function defineProfile(profile: MeanPlanetSolarOrbitalProfile) {

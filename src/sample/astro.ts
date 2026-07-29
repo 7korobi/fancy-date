@@ -37,7 +37,7 @@ import {
   VenusSolarOrbital,
 } from '../nasa'
 import { EarthMoonOrbital, EarthSolarOrbital } from '../naoj'
-import { placeMeanPlanet, placeMeanSatellite } from '../preset'
+import { placeKeplerianPlanet, placeKeplerianSatellite, placeMeanPlanet, placeMeanSatellite } from '../preset'
 
 export const 太陽: STAR = placeStar(MEAN_SUN.body)
 
@@ -92,6 +92,41 @@ export const ナマカ: SATELLITE = placeMeanSatellite(ハウメア, MEAN_NAMAKA
 export const ヒイアカ: SATELLITE = placeMeanSatellite(ハウメア, MEAN_HIIAKA)
 export const カロン: SATELLITE = placeMeanSatellite(冥王星, MEAN_CHARON)
 export const ディスノミア: SATELLITE = placeMeanSatellite(エリス, MEAN_DYSNOMIA)
+
+const dayMsec = 24 * 60 * 60 * 1000
+const yearMsec = 365.25 * dayMsec
+
+/** 創作楕円軌道惑星: 公転周期 2 年、離心率 0.2、近心点黄経 90 度。 */
+export const 創作赤星: PLANET = placeKeplerianPlanet(
+  太陽,
+  {
+    periodMsec: yearMsec * 2,
+    epochMsec: 0,
+    eccentricity: 0.2,
+    meanLongitudeDeg: 0,
+    perihelionLongitudeDeg: 90,
+  },
+  {
+    body: { kind: 'virtual', name: '創作赤星', derivedFrom: 火星 },
+    rotation: [dayMsec * 1.5, 0, 23.5],
+  },
+)
+
+/** 創作楕円軌道衛星: 創作赤星の周りを 30 日周期の楕円軌道で公転。 */
+export const 創作赤星の衛星: SATELLITE = placeKeplerianSatellite(
+  創作赤星,
+  {
+    periodMsec: dayMsec * 30,
+    epochMsec: 0,
+    eccentricity: 0.1,
+    meanLongitudeDeg: 0,
+    perihelionLongitudeDeg: 0,
+  },
+  {
+    body: { kind: 'virtual', name: '創作赤星の衛星', derivedFrom: 月 },
+    rotation: [dayMsec * 30, 0, 0],
+  },
+)
 
 export const 東京: SPOT = [月, 35.7, 139.8, 15 * +9] as const
 export const 天文東京: SPOT = [天文月, 35.7, 139.8, 15 * +9] as const

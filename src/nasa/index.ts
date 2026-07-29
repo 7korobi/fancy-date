@@ -1,3 +1,12 @@
+export {
+  KeplerianOrbital,
+  solveEccentricAnomalyRad,
+  type KeplerianAnomalyTerms,
+  type KeplerianElementRates,
+  type KeplerianElements,
+  type KeplerianOrbitalOptions,
+  type KeplerianOrbitalProfile,
+} from '../keplerian-orbital'
 export { MarsSolarOrbital, type MarsSolarOrbitalOptions } from './mars-solar'
 export {
   JupiterSolarOrbital,

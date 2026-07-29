@@ -27,12 +27,13 @@ const {
   黒分月,
   黒分月軌道,
 } = require('../lib/sample')
-const { 天文地球 } = require('../lib/sample/astro')
+const { 天文地球, 創作赤星, 創作赤星の衛星 } = require('../lib/sample/astro')
 const { MEAN_MOON } = require('../lib/astronomy-data')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, kor, roman } = require('../lib/number')
 const {
   JupiterSolarOrbital,
+  KeplerianOrbital,
   KeplerianSolarOrbital,
   MarsSolarOrbital,
   MercurySolarOrbital,
@@ -2287,6 +2288,105 @@ describe('tokenごとの数詞出しわけ', () => {
     const c = Calendar.韓国語Gregorian
     const msec = c.parse('2024年3月15日')
     expect(c.format(msec)).toBe('西暦2024年3月15日(金) 00:00')
+  })
+})
+
+describe('KeplerianOrbital', () => {
+  const periodMsec = 365.25 * 24 * 60 * 60 * 1000
+  const epochMsec = 0
+
+  test('離心率0のとき、平均軌道と同じ位相を返す', () => {
+    const circular = new KeplerianOrbital({
+      periodMsec,
+      epochMsec,
+      eccentricity: 0,
+      meanLongitudeDeg: 0,
+      perihelionLongitudeDeg: 0,
+    })
+    const at = epochMsec + periodMsec / 4
+    expect(circular.phaseAt(at)).toBeCloseTo(0.25, 6)
+    expect(circular.apparentLongitudeDeg(at)).toBeCloseTo(90, 6)
+  })
+
+  test('離心率が大きいと、平均運動と真黄経がずれる', () => {
+    const orbital = new KeplerianOrbital({
+      periodMsec,
+      epochMsec,
+      eccentricity: 0.5,
+      meanLongitudeDeg: 0,
+      perihelionLongitudeDeg: 0,
+    })
+    const at = epochMsec + periodMsec / 4
+    // 平均運動なら 90 度だが、楕円軌道では真黄経はずれる。
+    expect(Math.abs(orbital.apparentLongitudeDeg(at) - 90)).toBeGreaterThan(10)
+  })
+
+  test('平均黄経を変えると、位相0の向きが変わる', () => {
+    const orbital = new KeplerianOrbital({
+      periodMsec,
+      epochMsec,
+      eccentricity: 0,
+      meanLongitudeDeg: 90,
+      perihelionLongitudeDeg: 0,
+    })
+    expect(orbital.apparentLongitudeDeg(epochMsec)).toBeCloseTo(90, 6)
+    expect(orbital.phaseAt(epochMsec + periodMsec / 4)).toBeCloseTo(0.25, 6)
+  })
+
+  test('phaseAt と timeOfPhase の往復', () => {
+    const orbital = new KeplerianOrbital({
+      periodMsec,
+      epochMsec,
+      eccentricity: 0.2,
+      meanLongitudeDeg: 0,
+      perihelionLongitudeDeg: 45,
+    })
+    const target = 0.6
+    const t = orbital.timeOfPhase(target, epochMsec)
+    expect(orbital.phaseAt(t)).toBeCloseTo(target, 6)
+  })
+
+  test('詳細なケプラー要素でも phaseAt/timeOfPhase が往復する', () => {
+    const orbital = new KeplerianOrbital({
+      periodMsec,
+      epochMsec,
+      elements: {
+        semiMajorAxisAu: 1.5,
+        eccentricity: 0.3,
+        inclinationDeg: 5,
+        meanLongitudeDeg: 0,
+        perihelionLongitudeDeg: 60,
+        ascendingNodeLongitudeDeg: 120,
+      },
+    })
+    const t = orbital.timeOfPhase(0.75, epochMsec)
+    expect(orbital.phaseAt(t)).toBeCloseTo(0.75, 6)
+  })
+})
+
+describe('創作楕円軌道天体', () => {
+  test('sample の創作惑星で暦を作れる', () => {
+    const calendar = new FancyDate(g).spot(創作赤星, 0, 0, 0).init()
+    const msec = calendar.parse('1年1月1日', 'y年M月d日')
+    expect(calendar.format(msec, 'y年M月d日')).toBe('1年1月1日')
+  })
+
+  test('sample の創作衛星で暦を作れる', () => {
+    const calendar = new FancyDate(g).spot(創作赤星の衛星, 0, 0, 0).init()
+    const msec = calendar.parse('1年1月1日', 'y年M月d日')
+    expect(calendar.format(msec, 'y年M月d日')).toBe('1年1月1日')
+  })
+
+  test('創作惑星の楕円軌道で、位相区間の長さが非対称', () => {
+    const calendar = new FancyDate(g).spot(創作赤星, 0, 0, 0).init()
+    const t0 = calendar.solar_phase(0, 0)
+    const t1 = calendar.solar_phase(0.25, 0)
+    const t2 = calendar.solar_phase(0.5, 0)
+    const t3 = calendar.solar_phase(0.75, 0)
+    const t4 = calendar.solar_phase(1, 0)
+    // 平均運動なら各区間は等しいはずだが、楕円軌道では異なる。
+    expect(t1 - t0).not.toBe(t2 - t1)
+    expect(t3 - t2).not.toBe(t4 - t3)
   })
 })
 
