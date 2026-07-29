@@ -30,7 +30,8 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - インド系暦を本格対応する場合、日の出始まりの civil day 自体は `.dayStart('sunrise')` で表現できる。ただしヒンドゥー暦・パンチャーンガの実務では「日の出時点で存在する tithi をその日の日付/祭日に割り当てる」層が本体になる。必要な追加要素は、(1) tithi(月太陽離角12度ごとの30分割)・paksha(白分/黒分)・nakshatra/yoga/karana 等の位相トークン、(2) 日の出時点での tithi 採用、欠日(kshaya tithi)・重日(adhika/repeated tithi)の扱い、(3) amanta/purnimanta の月名方式、adhika masa/kshaya masa の月規則、(4) 太陽入宮(sankranti)による sidereal solar month と ayanamsha/黄道基準の選択、(5) 地域・宗派・祭日ごとの「前日/翌日採用」「日の出前後の持続条件」などの判定 DSL。単に `dayStart('sunrise')` を追加するだけでは不十分で、月相日を civil day へ投影する専用 rule/assignment 層が必要。
 - 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
 - 歴史的時刻表現として、定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。ローマ・ユリウス暦サンプルでは、H を horae temporariae、m を pars minuta として表示し、秒・ミリ秒は標準表示から外した。秒は内部精度としては残すが、古代/中世以前の生活時刻語彙として一般化しない。
-- 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。今後は楕円軌道、彗星、多星系の暦を検討する。
+- 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。
+- 楕円軌道創作天体対応を実装済み。`KeplerianOrbital` を純粋なケプラー楕円軌道モデルとして新設し、`KeplerianSolarOrbital` はそのラッパーにリファクタした。`placeKeplerianPlanet` / `placeKeplerianSatellite` で恒星・惑星周りの創作天体を配置でき、`src/sample/astro.ts` に `創作赤星` と `創作赤星の衛星` のサンプルを追加した。今後は彗星、多星系の暦を検討する。
 - 暦外期間は、ロムルス暦のように暦月だけで1年を表現し尽くさない暦は他に類例が見当たらず、`month_divs` の `null` 要素 + `Indexer.list` への `null` 混在で表現した対応をこれ以上汎用化する必要は薄いと思われる。
 
 ### 性能・パッケージ構成
