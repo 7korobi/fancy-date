@@ -118,9 +118,9 @@ export const 創作赤星の衛星: SATELLITE = placeKeplerianSatellite(
   {
     periodMsec: dayMsec * 30,
     epochMsec: 0,
-    eccentricity: 0.1,
+    eccentricity: 0.2,
     meanLongitudeDeg: 0,
-    perihelionLongitudeDeg: 0,
+    perihelionLongitudeDeg: 45,
   },
   {
     body: { kind: 'virtual', name: '創作赤星の衛星', derivedFrom: 月 },

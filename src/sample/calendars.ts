@@ -31,6 +31,8 @@ import {
   Jaypore,
   zürich,
   カリスト,
+  創作赤星,
+  創作赤星の衛星,
   太陽,
   天文月,
   天文東京,
@@ -479,6 +481,17 @@ const Jupiter = new FancyDate((c) =>
 
 const JupiterObserved = new FancyDate(Jupiter, (c) => c.observedLunisolar())
 
+/** 創作赤星太陰太陽暦: 楕円軌道の創作惑星とその楕円軌道衛星を使った太陰太陽暦。 */
+const 創作赤星太陰太陽暦 = new FancyDate((c) =>
+  baseCalendar(c)
+    .lang('y年M月d日', 'Gy年M月d日(E) HH:mm')
+    .spot(創作赤星の衛星, 35, 0, 0)
+    .era('赤星暦', '赤星前')
+    .calendar(['1年1月1日', 'y年M月d日', 0])
+    .observedLunisolar()
+    .init(),
+)
+
 const フランス革命暦 = new FancyDate((c) =>
   baseCalendar(c)
     .lang('y年M月d日', 'Gy年Mo d日(dC10)')
@@ -656,6 +669,7 @@ export const Calendar = {
   MarsGregorian,
   Jupiter,
   JupiterObserved,
+  創作赤星太陰太陽暦,
   フランス革命暦,
   Maya,
   Beat,

@@ -2388,6 +2388,18 @@ describe('創作楕円軌道天体', () => {
     expect(t1 - t0).not.toBe(t2 - t1)
     expect(t3 - t2).not.toBe(t4 - t3)
   })
+
+  test('sample の創作赤星太陰太陽暦で暦日を取得できる', () => {
+    const c = Calendar.創作赤星太陰太陽暦
+    const msec = 0
+    const formatted = c.format(msec, 'y年M月d日')
+    expect(formatted).toMatch(/^-?\d+年/)
+    // 観測太陰太陽暦の parse は、暦日の日境界ではなく近似シードを返すため、
+    // 厳密な往復は保証されない。ここでは format が暦日文字列を返せること、
+    // および parse が近似的な時刻を返すことを確認する。
+    const parsed = c.parse(formatted, 'y年M月d日')
+    expect(Number.isFinite(parsed)).toBe(true)
+  })
 })
 
 function __mod__(a, b) {
