@@ -1,7 +1,11 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
 const { to_msec } = require('../lib/time')
-const { lunisolar_month_window_counts } = require('../lib/phenomena/lunisolar')
+const {
+  lunisolar,
+  lunisolar_month_window_counts,
+  resolve_lunisolar_boundary_starts,
+} = require('../lib/phenomena/lunisolar')
 const { NAOJ_LUNISOLAR_FIXTURES, NAOJ_LUNISOLAR_SOURCE } = require('./fixtures/lunisolar-naoj')
 
 describe('lunisolar month search window', () => {
@@ -27,6 +31,100 @@ describe('lunisolar month search window', () => {
       past: 9,
       future: 10,
     })
+  })
+})
+
+describe('lunisolar constrained-nominal boundary policy', () => {
+  const options = (boundaryPolicy) => ({
+    moony: { periodMsec: 8 },
+    solarPeriodMsec: 40,
+    principalTermCount: 1,
+    solarYear: () => 0,
+    boundarySource: 'observed',
+    boundaryPolicy,
+    boundaryToleranceMsec: 2,
+    geo: [0, 0, 0],
+    dayMsec: 10,
+    dayZero: 0,
+    lunarPhase: (_phase, near) => near,
+    solarPhase: (_phase, near) => near,
+  })
+
+  test('nominal reports a boundary ambiguity', () => {
+    const date = lunisolar(options('nominal'), 1)
+    expect(date.boundary_ambiguous).toBe(true)
+  })
+
+  test('constrained-nominal selects the minimum-change increasing boundary path', () => {
+    const resolutions = resolve_lunisolar_boundary_starts(
+      options('constrained-nominal'),
+      [1, 9, 19],
+    )
+    expect(resolutions.map(({ last_at }) => last_at)).toEqual([-10, 0, 10])
+    expect(resolutions.every(({ ambiguous }) => ambiguous)).toBe(true)
+  })
+
+  test('fixed month length is a hard constraint and supports explicit tie breaks', () => {
+    const later = resolve_lunisolar_boundary_starts(
+      options({
+        kind: 'constrained-nominal',
+        monthLength: { kind: 'fixed-range', minDays: 1, maxDays: 1 },
+        tieBreak: 'later',
+      }),
+      [1, 9, 19, 31],
+    )
+    expect(later.map(({ last_at }) => last_at)).toEqual([0, 10, 20, 30])
+
+    expect(() =>
+      resolve_lunisolar_boundary_starts(
+        options({
+          kind: 'constrained-nominal',
+          monthLength: { kind: 'fixed-range', minDays: 2, maxDays: 2 },
+        }),
+        [1, 9, 19, 31],
+      ),
+    ).toThrow('failed to resolve constrained lunisolar boundaries')
+  })
+
+  test('error tie break rejects multiple optimal boundary paths', () => {
+    expect(() =>
+      resolve_lunisolar_boundary_starts(
+        options({
+          kind: 'constrained-nominal',
+          monthLength: { kind: 'fixed-range', minDays: 1, maxDays: 1 },
+          tieBreak: 'error',
+        }),
+        [1, 9, 19, 31],
+      ),
+    ).toThrow('ambiguous constrained lunisolar boundaries')
+  })
+
+  test('constrained-nominal skips stability expansion when every event has one day candidate', () => {
+    let eventCalls = 0
+    const constrained = {
+      ...options({
+        kind: 'constrained-nominal',
+        boundaryToleranceMsec: 0,
+        monthLength: { kind: 'fixed-range', minDays: 1, maxDays: 2 },
+      }),
+      moony: { periodMsec: 12 },
+      solarPeriodMsec: 60,
+      lunarPhaseEvent: (_phase, near) => {
+        eventCalls++
+        return {
+          cycle: eventCalls,
+          phase: 0,
+          at: near,
+          lower_at: near,
+          upper_at: near,
+          source_kind: 'observed',
+          numeric_error_msec: 0,
+        }
+      },
+    }
+
+    lunisolar(constrained, 1)
+    expect(eventCalls).toBe(22)
   })
 })
 
@@ -142,8 +240,8 @@ describe('NAOJ lunisolar fixtures', () => {
       H: 1,
       m: 1,
       s: 1112,
-      S: 154,
-      label: '1年1刻半1112秒154ミリ秒後',
+      S: 658,
+      label: '1年1刻半1112秒658ミリ秒後',
     })
   })
 
@@ -185,7 +283,7 @@ describe('NAOJ lunisolar fixtures', () => {
 
     const thirtyHoursAgo = Calendar.定気法.add(base, '30刻前')
     expect(Calendar.定気法.span(thirtyHoursAgo, base, { precise: 'H' })).toBe('2日6刻前')
-    expect(Calendar.定気法.add(base, '1年1刻半1112秒154ミリ秒後')).toBe(target)
+    expect(Calendar.定気法.add(base, '1年1刻半1112秒658ミリ秒後')).toBe(target)
   })
 
   test('定気法 span exposes next label update time', () => {

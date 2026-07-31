@@ -87,6 +87,297 @@ localeの責務は、tokenのfallback label、span unitのruby、季節注の表
 
 すべての境界は半開区間 `[last_at, next_at)` とする。`utc === next_at` は次の月または次の日に属する。
 
+観測朔を暦日に割り当てる policy は `nominal` と `constrained-nominal` を持つ。
+`nominal` は代表朔時刻をそのまま日境界へ投影し、日境界から
+`boundaryToleranceMsec` 以内の朔には `boundary_ambiguous` を付ける。
+`constrained-nominal` は、その前後の日を候補として生成し、朔境界列が厳密に
+増加する経路だけを残した上で、月長hard constraint・誤差区間・nominalからの
+変更量を辞書順scoreで評価し、決定的な経路を選ぶ。探索窓を太陽年単位で拡張し、
+中央境界が安定した場合だけ結果を確定する。同点・制約違反・不安定な窓は専用の
+selection metadataまたは例外で表す。固定幅日界と日の出／日没の可変幅日界は同じ
+`CivilDayModel`契約へ接続し、朔候補・月長・月内日数が同じ `day_index` を参照する。
+以下を実装契約とする。
+
+### 3.1 共通イベント型とpolicy入力
+
+天文層はscalar時刻だけでなく、代表時刻と誤差区間を返す。
+
+```ts
+type LunarPhaseEvent = {
+  cycle: number
+  phase: number
+  at: number
+  lower_at: number
+  upper_at: number
+  source_kind: 'mean' | 'observed' | 'table'
+  numeric_error_msec: number
+  model_error_msec?: number
+}
+
+type ConstrainedNominalOptions = {
+  kind: 'constrained-nominal'
+  boundaryToleranceMsec?: number
+  monthLength?:
+    | { kind: 'event-derived' }
+    | { kind: 'fixed-range'; minDays: number; maxDays: number }
+  tieBreak?: 'earlier' | 'later' | 'error'
+  maxStabilityExpansions?: number
+}
+
+type LunisolarBoundaryPolicyInput = 'nominal' | 'constrained-nominal' | ConstrainedNominalOptions
+
+type LunisolarBoundaryCandidate = {
+  last_at: number
+  day_index: number
+  nominal_day_index: number
+  interval_overlap_msec: number
+}
+```
+
+`lower_at <= at <= upper_at` を必須とする。`lower_at` / `upper_at` は根探索の
+数値的な挟み込み区間へ `model_error_msec` を左右に加えた最終区間とする。
+既存の文字列指定 `'constrained-nominal'` は、
+`{ kind: 'constrained-nominal', monthLength: { kind: 'event-derived' },
+tieBreak: 'earlier', maxStabilityExpansions: 4 }` の shorthand とする。
+`boundaryToleranceMsec` はscalar時刻しか返せないlegacy resolverを上記イベント型へ
+包む互換用であり、新しいイベントモデルでは `lower_at` / `upper_at` を正本にする。
+`ObservedLunisolarOptions.boundaryPolicy` は `LunisolarBoundaryPolicyInput` を受ける。
+既存のトップレベル `boundaryToleranceMsec` は互換維持し、object形式では
+`boundaryPolicy.boundaryToleranceMsec` を優先する。未知のpolicy文字列、負の許容幅、
+非整数または `minDays <= 0` / `maxDays < minDays` のfixed rangeは初期化時に弾く。
+
+候補暦日は、誤差区間 `[lower_at, upper_at]` と交わるすべての半開暦日
+`[dayStart, nextDayStart)` から生成する。ただし `lower_at === upper_at === dayStart`
+なら、その点は半開区間規則により後の暦日だけに属する。区間幅が複数日に及ぶ場合も
+候補数を2に固定せず、交わる全日を保持する。候補は時刻だけでなく、同じ
+`DayBoundaryPolicy` が返す単調な暦日連番 `day_index` を持つ。midnight／fixedOffsetの
+固定幅暦日では `floor((last_at - dayZero) / dayMsec)` と同値にし、sunrise／sunsetの
+可変幅暦日では実境界を前後へ辿った通し番号を使う。
+
+### 3.2 手順1: 選択済み境界へ中気・閏月判定を接続する
+
+処理順を次で固定する。
+
+```text
+月相イベント列
+  -> 候補暦日列
+  -> constrained-nominalによる境界列選択
+  -> 選択済み[last_at, next_at)への中気包含判定
+  -> 月番号・閏月・年番号の割り当て
+```
+
+`lunisolar_principal_term()` は `source_at` / `next_source_at` を再度
+`local_day_start()` へ通してはならず、必ず選択済みの `boundary.last_at` /
+`boundary.next_at` を使う。中気時刻 `term.at` について
+`last_at <= term.at && term.at < next_at` の月へ割り当て、`term.at === next_at`
+は次月に属する。境界候補を変更した結果、中気を含む月が変わる場合は、その
+選択結果に基づいて月番号・閏月・年初をすべて再計算する。
+
+受入条件:
+
+- syntheticな朔境界を1日動かして中気が隣月へ移るfixtureで、月番号と閏月も同時に移る。
+- `last_at` / `next_at` と中気判定が異なる基準日を参照する経路を残さない。
+- 既存NAOJ旧暦fixtureは無変更で通る。
+
+### 3.3 手順2: 月長hard constraintを追加する
+
+連続する選択済み境界候補を `B_i`, `B_(i+1)` とし、civil month lengthを
+`L_i = B_(i+1).day_index - B_i.day_index` とする。すべての `L_i` は正の整数で
+なければならない。固定幅暦日では `(next.last_at - current.last_at) / dayMsec` と
+同値だが、日の出／日没起点のような可変幅暦日では実時間差を日数として使わない。
+
+固定幅暦日の `event-derived` では、連続する月相イベントの誤差区間から月ごとの
+許容範囲を次で導く。
+
+```text
+deltaMin = next.lower_at - current.upper_at
+deltaMax = next.upper_at - current.lower_at
+minDays = max(1, floor(deltaMin / dayMsec))
+maxDays = max(minDays, ceil(deltaMax / dayMsec))
+```
+
+候補edgeは `minDays <= L_i <= maxDays` を満たす場合だけ有効とする。
+可変幅暦日では、両イベントの誤差区間と実際に交わる候補暦日の直積から
+`day_index` 差の最小・最大を求める。平均 `dayMsec` への除算で近似しない。
+`fixed-range` は暦法が独自に許す月長を指定する。イベント由来範囲も計算できる場合は
+両範囲の共通部分を使い、共通部分が空なら設定矛盾として例外にする。地球の29/30日を
+他天体へ暗黙適用してはならない。架空天体の既定は `event-derived` とする。
+
+年の月数は `principalTermCount` と中気policyから導き、12/13月を共通hard constraint
+にはしない。暦固有に通常年・閏年の月数を固定したい場合だけyear policy側に置く。
+
+受入条件:
+
+- 地球型の29.5日前後のイベント列から29日または30日だけが許可される。
+- 創作赤星では、その太陽相対朔間隔から導いた範囲が使われ、29/30日は要求されない。
+- 全edgeが除外された場合は補正を捏造せず、`LunisolarBoundaryConstraintError` を返す。
+
+### 3.4 手順3: 選択コストを辞書順で定義する
+
+`constrained-nominal` は「見た目が整う月列」を作るpolicyではなく、hard constraintを
+満たす範囲でnominalを最大限保存するpolicyとする。29日・30日の交互配置や、同じ
+月長の連続に対する恣意的な賞罰は入れない。
+
+各経路のscoreを次のtupleとして計算し、左から辞書順で最小化する。
+
+```ts
+type ConstrainedNominalScore = readonly [
+  changedBoundaryCount: number,
+  shiftedDayCount: number,
+  intervalSupportPenalty: number,
+  monthLengthResidual: number,
+]
+```
+
+- `changedBoundaryCount`: nominal暦日と異なる境界数。
+- `shiftedDayCount`: `abs(day_index - nominal_day_index)` の合計。
+- `intervalSupportPenalty`: 誤差区間と候補暦日の重なりが小さいほど増える値。
+  区間幅が正なら `1 - overlap / intervalWidth`、点イベントならnominal候補を0とする。
+- `monthLengthResidual`: 各月について
+  `abs(L_i - (next.at - current.at) / dayMsec)` を合計した値。
+
+浮動小数点比較には固定epsilonを使い、scoreの各成分を無根拠なweightで一つの
+scalarへ合成しない。nominal経路がhard constraintを満たす場合は
+`changedBoundaryCount === 0` のため必ずnominalが勝つ。つまり、このpolicyは
+自然さだけを理由に正しいnominal境界を変更しない。
+
+受入条件:
+
+- nominal経路が適法なら、月長残差が小さい代替経路があってもnominalを維持する。
+- nominal経路が不適法な場合、変更境界数が同じ候補間では移動日数、区間support、
+  月長残差の順で選択される。
+- 同じ入力・候補順・query順でscoreと選択結果が常に一致する。
+
+選択器は候補列を層状DAGとして解く。第 `i` 層の候補から第 `i+1` 層の候補へ、
+hard constraintを満たす場合だけedgeを張る。各nodeには「そこへ到達する最良score、
+同点最良経路数、復元用の直前node、上位8本までの同点経路」を保持する。
+候補数を `k_i` とした計算量は `O(sum(k_i * k_(i+1)))`、通常各朔1〜2候補なら
+朔数に対して線形である。全経路を列挙してから比較してはならない。
+
+### 3.5 手順4: 同点・曖昧性・探索窓の契約を定める
+
+最良scoreを持つ経路が複数ある場合、情報不足を隠さず結果へ残す。
+
+```ts
+type LunisolarBoundarySelection = {
+  selected: readonly number[]
+  score: ConstrainedNominalScore
+  globally_ambiguous: boolean
+  optimal_path_count: number
+  alternative_boundaries: readonly (readonly number[])[]
+}
+```
+
+`LunisolarDate` は後方互換の `boundary_ambiguous?: boolean` を維持し、追加で
+次のselection要約を返せるようにする。
+
+```ts
+type LunisolarBoundarySelectionSummary = {
+  policy: 'nominal' | 'constrained-nominal'
+  selected_at: number
+  nominal_at: number
+  changed: boolean
+  locally_ambiguous: boolean
+  globally_ambiguous: boolean
+  optimal_path_count: number
+  score?: ConstrainedNominalScore
+}
+```
+
+`boundary_ambiguous` は `locally_ambiguous` の互換aliasとし、選択済み月初側の情報を
+表す。次月初の情報は `next_boundary_selection` として別に保持し、一つのbooleanで
+両端をまとめない。`LunisolarBoundaryConstraintError` /
+`AmbiguousLunisolarBoundaryError` / `UnstableLunisolarBoundaryError` は共通して
+`code`, `source_events`, `candidate_days`, `partial_selection?` を持つ。
+
+`tieBreak: 'earlier'` は境界列を先頭から比較して最初に小さい経路、`later` は大きい
+経路を選ぶ。これは物理的に正しいという主張ではなく、カレンダーを必ず成立させる
+ためのcanonicalizationである。`error` は最良経路が複数なら
+`AmbiguousLunisolarBoundaryError` を返す。どのmodeでも
+`globally_ambiguous` と `optimal_path_count` は同じ値を返す。`error` modeの例外は
+`selection: LunisolarBoundarySelection` を保持し、呼び出し側が候補を調査できるようにする。
+
+`alternative_boundaries` は既定で最大8経路まで保持し、それ以上はcountだけを返す。
+各月の `boundary_ambiguous` は「その朔に複数候補があったか」、
+`globally_ambiguous` は「全体最適化後も複数の同点経路が残ったか」を表し、混同しない。
+
+同じ月を異なる `utc` から問い合わせても結果が変わらないことを必須不変条件とする。
+初期探索窓と、その前後へ1太陽年相当の朔を追加した拡張窓の両方で解き、返却対象の
+中央境界列・score・曖昧性が一致した場合だけ確定する。一致しなければ同じ幅ずつ
+最大 `maxStabilityExpansions` 回まで拡張する。収束しなければ
+`UnstableLunisolarBoundaryError` とし、有限窓の端の都合で選択を固定しない。
+キャッシュkeyにはpolicy全体、誤差区間、月長constraintを含める。
+
+受入条件:
+
+- 同点fixtureで `earlier` / `later` / `error` がそれぞれ契約通りになる。
+- 窓を前後へ拡張しても中央12〜13ヶ月の選択結果が変わらない。
+- 問い合わせ順・キャッシュhit/miss・異なる基準`utc`で同じ月境界を返す。
+
+### 3.6 手順5: 太陽相対の朔イベントモデルを追加する
+
+衛星単独の公転位相0と、観測地点の惑星から見た太陽・衛星の合を分離する。
+`OrbitalModel.timeOfPhase()` は既存互換の軌道位相APIとして維持し、太陰太陽暦は
+次の独立能力を優先する。
+
+```ts
+interface LunarPhaseEventModel {
+  synodicPeriodMsec: number
+  lunarPhaseEvent(phase: number, near: number): LunarPhaseEvent
+}
+```
+
+平均月は平均朔望周期adapter、`EarthMoonOrbital` は既存のMeeus系朔弦望公式adapter、
+創作楕円衛星は惑星と衛星の黄経を合成する `RelativeLunarPhaseEventModel` を使う。
+後者は同一基準面・同一黄経原点を持つlongitude modelだけを受け付け、位相を
+
+```text
+relativePhase(at) = mod((moonLongitude(at) - sunLongitude(at)) / 360, 1)
+```
+
+と定義する。惑星の恒星中心黄経しかない場合の観測者から見た太陽黄経は180度反転
+させる。基準面が異なる、または高傾斜軌道をlongitude投影だけで扱えないモデルは
+暗黙変換せず、将来の3次元方向ベクトルmodelを要求する。
+
+根探索は次の契約とする。
+
+1. `synodicPeriodMsec` から `near` 周辺の探索区間を予測する。
+2. 1朔望周期を32分割以上でscanし、角度をunwrapして目標位相を挟む区間を得る。
+3. bracket付き二分法またはBrent法で、区間幅が数値許容幅以下になるまで縮める。
+4. 区間中央を決定的に丸めた値を `at`、bracket端を `lower_at` / `upper_at` とする。
+5. 根がない、複数根から最寄りを一意に選べない、残差が規定値を超える場合は例外にする。
+
+数値許容幅の既定は1msだが、遠い過去・未来ではIEEE 754の隣接表現可能値間隔が
+1msを超えうるため、実際には `max(1ms, ulp(bracketStart), ulp(bracketEnd))` を使う。
+反復回数上限へ達しただけで中央時刻を成功値として返してはならない。
+
+順行・同一方向の円軌道で周期が既知なら、初期推定は
+`1 / P_syn = abs(1 / P_moon - 1 / P_year)` を使える。創作赤星の88日衛星・
+730.5日太陽年なら平均朔望周期は約100.05日であり、88日を朔望周期として使わない。
+`lunisolar_month_window_counts()` と前後朔探索も `moony.periodMsec` ではなく
+`LunarPhaseEventModel.synodicPeriodMsec` を使う。
+
+受入条件:
+
+- 円軌道fixtureが解析的な平均朔望周期・合時刻と一致する。
+- 離心率を持つ創作衛星で、返却時刻の太陽・衛星相対黄経差が規定残差以内になる。
+- 88日/730.5日のfixtureが約100.05日平均になり、複数周期で朔間隔の変動を示す。
+- 既存NAOJ朔弦望fixtureの最大差を悪化させない。
+- `phaseAt()` と `timeOfPhase()` が逆関数でない `EarthMoonOrbital` に汎用root探索を
+  誤適用しない。
+
+### 3.7 実装順と完了条件
+
+上記は 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6 の順で実装する。3.2は現行実装の
+内部不整合修正、3.3〜3.5はcivil projectionの完成、3.6は創作天体で入力される
+「朔」自体の意味を正す変更である。3.6完了前の創作赤星サンプルは
+`constrained-nominal` の境界選択例ではあっても、太陽相対朔による完成した
+太陰太陽暦とは呼ばない。
+
+完了条件は、全受入条件に加え、同じ月を窓・query順・cache状態を変えて1000回以上
+比較して境界差分0件、全月で `last_at < next_at`、隣接月で
+`current.next_at === next.last_at` が成立することとする。
+
 日界は天文層と独立した policy option にする。
 
 - `midnight`: 固定タイムゾーンの現地0時。

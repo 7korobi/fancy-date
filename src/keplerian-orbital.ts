@@ -116,6 +116,29 @@ export class KeplerianOrbital {
   apparentLongitudeDeg(utc: number): number {
     return apparentLongitudeDeg(utc, this.profile)
   }
+
+  /**
+   * 軌道長半径に対する現在距離の比率を返す。
+   * 半長軸の単位はprofileごとに任意なので、比率だけを公開する。
+   */
+  radialDistanceRatioAt(utc: number): number {
+    const elementEpochJd = this.profile.elementEpochJd ?? 2451545.0
+    const utcCenturies = (julian_day(utc) - elementEpochJd) / 36525
+    const elements = elementsAt(this.profile, utcCenturies)
+    const epochCenturies =
+      (julian_day(this.profile.epochMsec) - elementEpochJd) / 36525
+    const epochElements = elementsAt(this.profile, epochCenturies)
+    const meanLongitudeDeg = mod(
+      epochElements.meanLongitudeDeg +
+        ((utc - this.profile.epochMsec) / this.profile.periodMsec) * 360,
+      360,
+    )
+    const meanAnomalyDeg = signedDegree(
+      meanLongitudeDeg - elements.perihelionLongitudeDeg + anomalyCorrectionDeg(this.profile, utcCenturies),
+    )
+    const eccentricAnomalyRad = solveEccentricAnomalyRad(meanAnomalyDeg, elements.eccentricity)
+    return 1 - elements.eccentricity * Math.cos(eccentricAnomalyRad)
+  }
 }
 
 export function solveEccentricAnomalyRad(meanAnomalyDeg: number, eccentricity: number) {

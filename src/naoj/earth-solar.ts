@@ -10,6 +10,7 @@ import type {
 } from '../orbital-model'
 import { placePlanet } from '../orbital-model'
 import { meanOrbitalOptionsOf, type MeanOrbitalInput } from '../astronomy-data'
+import { solveEccentricAnomalyRad } from '../keplerian-orbital'
 import { mod } from '../number'
 import {
   DEG_TO_RAD,
@@ -30,6 +31,10 @@ import {
 export type EarthSolarOrbitalOptions = MeanOrbitalInput
 
 const SOLAR_HOUR_ANGLE_DEG_PER_DAY = 360.98564736629
+const SOLAR_RADIUS_KM = 695700
+const ASTRONOMICAL_UNIT_KM = 149597870.7
+const EARTH_SEMI_MAJOR_AXIS_AU = 1.000001018
+const EARTH_ECCENTRICITY = 0.016708634
 
 const EARTH_L_TERMS = [
   [
@@ -180,6 +185,9 @@ export class EarthSolarOrbital implements SolarEventModel {
   static readonly axialTiltDeg = 23.4397
   static readonly meanTropicalYearMsec = 31556925147
   static readonly vernalEquinoxEpochMsec = 1553119080000
+  static readonly meanSolarAngularRadiusDeg = asin_deg(
+    SOLAR_RADIUS_KM / (EARTH_SEMI_MAJOR_AXIS_AU * ASTRONOMICAL_UNIT_KM),
+  )
 
   readonly periodMsec: number
   readonly epochMsec: number
@@ -232,6 +240,10 @@ export class EarthSolarOrbital implements SolarEventModel {
     return mod((earthLongitude / 1e8) * RAD_TO_DEG + 180 - 0.00569 - 0.00478 * Math.sin(omega), 360)
   }
 
+  solarAngularRadiusDeg(utc: number) {
+    return asin_deg(SOLAR_RADIUS_KM / (this.solarDistanceAu(utc) * ASTRONOMICAL_UNIT_KM))
+  }
+
   solarEquatorial(utc: number): SolarEquatorialCoordinates {
     const jde = julian_day(utc) + delta_t_sec(utc) / 86400
     const longitudeDeg = this.solarLongitudeDeg(utc)
@@ -262,6 +274,8 @@ export class EarthSolarOrbital implements SolarEventModel {
 
   solarEvents(utc: number, options: SolarObservationOptions): SolarObservation {
     const { latitudeDeg, longitudeDeg, timezoneDeg = longitudeDeg, horizonDeg = -50 / 60 } = options
+    const horizonAt = (at: number) =>
+      horizonDeg - (this.solarAngularRadiusDeg(at) - EarthSolarOrbital.meanSolarAngularRadiusDeg)
     const timezoneMsec = (timezoneDeg / 360) * MSEC_PER_DAY
     const dayStartUtc =
       options.dayStartUtc ??
@@ -275,14 +289,18 @@ export class EarthSolarOrbital implements SolarEventModel {
       longitudeDeg,
     )
     const transit = this.solarHorizontal(transitAt, latitudeDeg, longitudeDeg)
-    const hourAngleDeg = this.riseSetHourAngleDeg(latitudeDeg, transit.declinationDeg, horizonDeg)
+    const hourAngleDeg = this.riseSetHourAngleDeg(
+      latitudeDeg,
+      transit.declinationDeg,
+      horizonAt(transitAt),
+    )
     const riseAt = Number.isNaN(hourAngleDeg)
       ? NaN
       : this.timeOfSolarAltitude(
           transitAt - (hourAngleDeg / SOLAR_HOUR_ANGLE_DEG_PER_DAY) * MSEC_PER_DAY,
           latitudeDeg,
           longitudeDeg,
-          horizonDeg,
+          horizonAt,
         )
     const setAt = Number.isNaN(hourAngleDeg)
       ? NaN
@@ -290,7 +308,7 @@ export class EarthSolarOrbital implements SolarEventModel {
           transitAt + (hourAngleDeg / SOLAR_HOUR_ANGLE_DEG_PER_DAY) * MSEC_PER_DAY,
           latitudeDeg,
           longitudeDeg,
-          horizonDeg,
+          horizonAt,
         )
     const rise = Number.isNaN(riseAt)
       ? undefined
@@ -345,12 +363,13 @@ export class EarthSolarOrbital implements SolarEventModel {
     near: number,
     latitudeDeg: number,
     longitudeDeg: number,
-    altitudeDeg: number,
+    altitudeDeg: number | ((at: number) => number),
   ) {
     let at = near
     for (let i = 0; i < 8; i++) {
       const altitude = this.solarHorizontal(at, latitudeDeg, longitudeDeg).altitudeDeg
-      const diff = altitude - altitudeDeg
+      const target = typeof altitudeDeg === 'function' ? altitudeDeg(at) : altitudeDeg
+      const diff = altitude - target
       if (Math.abs(diff) < 1e-7) break
       const before = this.solarHorizontal(at - 60000, latitudeDeg, longitudeDeg).altitudeDeg
       const after = this.solarHorizontal(at + 60000, latitudeDeg, longitudeDeg).altitudeDeg
@@ -360,6 +379,15 @@ export class EarthSolarOrbital implements SolarEventModel {
       at -= correction
     }
     return Math.round(at)
+  }
+
+  private solarDistanceAu(utc: number) {
+    const jde = julian_day(utc) + delta_t_sec(utc) / 86400
+    const T = (jde - 2451545.0) / 36525
+    const eccentricity = EARTH_ECCENTRICITY - 0.000042037 * T - 0.0000001267 * T * T
+    const meanAnomalyDeg = 357.5291092 + 35999.05029 * T
+    const eccentricAnomalyRad = solveEccentricAnomalyRad(meanAnomalyDeg, eccentricity)
+    return EARTH_SEMI_MAJOR_AXIS_AU * (1 - eccentricity * Math.cos(eccentricAnomalyRad))
   }
 
   phaseAt(utc: number) {

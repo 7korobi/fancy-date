@@ -1,10 +1,26 @@
-import type { OrbitalModel, RotationModel, SKY_BODY, SPOT, TIMEZONE } from './orbital-model'
-import { resolveSkyBody } from './orbital-model'
+import type {
+  LunarPhaseEventModel,
+  OrbitalModel,
+  RotationModel,
+  SKY_BODY,
+  SPOT,
+  TIMEZONE,
+} from './orbital-model'
+import {
+  bodyProfileOf,
+  hasApparentLongitude,
+  hasLunarEvents,
+  hasLunarPhaseEvents,
+  resolveSkyBody,
+} from './orbital-model'
 import { MeanOrbital, MeanRotation } from './mean'
+import { OrbitalLunarEventModel } from './orbital-lunar-events'
+import { RelativeLunarPhaseEventModel } from './relative-lunar-phase'
 
 export type PreparedSpotModels = {
   sunny: OrbitalModel
   moony?: OrbitalModel
+  lunarPhase?: LunarPhaseEventModel
   earthy: RotationModel
 }
 
@@ -13,11 +29,29 @@ export type PreparedSpot = PreparedSpotModels & {
 }
 
 export function prepareSpotModels(body: SKY_BODY): PreparedSpotModels {
-  const { planetaryOrbital, planetaryRotation, satelliteOrbital } = resolveSkyBody(body)
+  const { planet, satellite, planetaryOrbital, planetaryRotation, satelliteOrbital } =
+    resolveSkyBody(body)
+  const sunny = MeanOrbital.from(planetaryOrbital)
+  const earthy = MeanRotation.from(planetaryRotation)
+  const sourceMoony = satelliteOrbital ? MeanOrbital.from(satelliteOrbital) : undefined
+  const lunarPhase = hasLunarPhaseEvents(sourceMoony)
+    ? sourceMoony
+    : sourceMoony && hasApparentLongitude(sunny) && hasApparentLongitude(sourceMoony)
+      ? new RelativeLunarPhaseEventModel(sunny, sourceMoony)
+      : undefined
+  const moony =
+    sourceMoony && !hasLunarEvents(sourceMoony) && hasApparentLongitude(sourceMoony)
+      ? new OrbitalLunarEventModel(sourceMoony, earthy, {
+          radiusKm: satellite ? bodyProfileOf(satellite)?.radiusKm : undefined,
+          meanDistanceKm: satellite ? bodyProfileOf(satellite)?.meanDistanceKm : undefined,
+          centerRadiusKm: bodyProfileOf(planet)?.radiusKm,
+        })
+      : sourceMoony
   return {
-    sunny: MeanOrbital.from(planetaryOrbital),
-    moony: satelliteOrbital ? MeanOrbital.from(satelliteOrbital) : undefined,
-    earthy: MeanRotation.from(planetaryRotation),
+    sunny,
+    moony,
+    ...(lunarPhase ? { lunarPhase } : {}),
+    earthy,
   }
 }
 

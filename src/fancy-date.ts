@@ -6,13 +6,14 @@ import { hasLunarEvents, hasLunarOrbitEvents, hasSolarEvents } from './orbital-m
 import type {
   LunarApsisKind,
   LunarNodeKind,
+  LunarPhaseEventModel,
   OrbitalModel,
   RotationModel,
   SPOT,
   TIMEZONE,
 } from './orbital-model'
 import { lunisolar as resolveLunisolar } from './phenomena/lunisolar'
-import type { LunisolarDate } from './phenomena/lunisolar'
+import type { CivilDayModel, LunisolarDate } from './phenomena/lunisolar'
 import {
   normalizeDayBoundaryPolicy,
   normalizeHourDivisionPolicy,
@@ -24,6 +25,7 @@ import type {
   HourArithmeticPolicy,
   HourDivisionInput,
   HourDivisionPolicy,
+  LunisolarBoundaryPolicy,
 } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
@@ -125,8 +127,17 @@ export type {
   VenusSolarOrbitalOptions,
 } from './nasa'
 export { MeanOrbital, MeanRotation, TransformedOrbital, transformOrbital } from './mean'
-export type { LunisolarDate, LunisolarPrincipalTerm } from './phenomena/lunisolar'
 export type {
+  CivilDayBoundary,
+  CivilDayModel,
+  LunarPhaseEvent,
+  LunarPhaseEventResolver,
+  LunisolarDate,
+  LunisolarPrincipalTerm,
+} from './phenomena/lunisolar'
+export type {
+  ConstrainedNominalOptions,
+  ConstrainedNominalScore,
   CalendarMonthLayout,
   CalendarYearLayout,
   CalendarYearPolicyContext,
@@ -139,9 +150,13 @@ export type {
   HourArithmeticPolicy,
   HourDivisionPolicy,
   LegacyHourDivision,
+  LunisolarBoundaryPolicy,
   LunisolarBoundary,
+  LunisolarBoundarySelection,
+  LunisolarBoundarySelectionSummary,
   LunisolarBoundarySource,
   LunisolarPhaseBoundary,
+  LunisolarMonthLengthPolicy,
   FeastDate,
   FeastKind,
   FeastPolicy,
@@ -642,7 +657,10 @@ type IDIC = IIDX & {
   assignments: AssignmentOptions
   is_dusk: boolean
   observed_lunisolar?: boolean
+  observed_lunisolar_boundary_policy?: LunisolarBoundaryPolicy
+  observed_lunisolar_boundary_tolerance_msec?: number
   observed_lunisolar_solar_year?: LunisolarYearResolver
+  lunarPhase?: LunarPhaseEventModel
   thai_official_lunisolar?: boolean
 }
 export type DivisionOptions = {
@@ -651,6 +669,8 @@ export type DivisionOptions = {
 export type LunisolarYearResolver = (at: number) => number
 export type ObservedLunisolarOptions = {
   solarYear?: LunisolarYearResolver
+  boundaryPolicy?: LunisolarBoundaryPolicy
+  boundaryToleranceMsec?: number
 }
 type LocaleNumeralRef = Numeral | NumeralPurpose | null | undefined
 export type LocaleApplyOptions = {
@@ -1251,6 +1271,10 @@ export class FancyDate {
     this.dic.observed_lunisolar = enabled
     this.dic.observed_lunisolar_solar_year =
       enabled && typeof options === 'object' ? options.solarYear : undefined
+    this.dic.observed_lunisolar_boundary_policy =
+      enabled && typeof options === 'object' ? options.boundaryPolicy : undefined
+    this.dic.observed_lunisolar_boundary_tolerance_msec =
+      enabled && typeof options === 'object' ? options.boundaryToleranceMsec : undefined
     this._lunisolar_cache.length = 0
     return this
   }
@@ -1524,6 +1548,7 @@ export class FancyDate {
     if (!this.dic.moony) {
       throw new Error('lunar_phase requires a satellite orbital model')
     }
+    if (this.dic.lunarPhase) return this.dic.lunarPhase.timeOfPhase(mod(phase, 1), near)
     return this.dic.moony.timeOfPhase(mod(phase, 1), near)
   }
 
@@ -1565,6 +1590,8 @@ export class FancyDate {
           (hasSolarEvents(this.dic.sunny) && hasLunarEvents(this.dic.moony))
             ? 'observed'
             : 'mean',
+        boundaryPolicy: this.dic.observed_lunisolar_boundary_policy,
+        boundaryToleranceMsec: this.dic.observed_lunisolar_boundary_tolerance_msec,
         solarYear:
           this.dic.observed_lunisolar_solar_year ??
           (this.dic.observed_lunisolar
@@ -1573,7 +1600,12 @@ export class FancyDate {
         geo: this.dic.geo,
         dayMsec: this.calc.msec.day,
         dayZero: this.calc.zero.day,
+        civilDay: this.lunisolar_civil_day_model(),
         lunarPhase: (phase, near) => this.lunar_phase(phase, near),
+        lunarPhaseEvent: this.dic.lunarPhase
+          ? (phase, near) => this.dic.lunarPhase!.lunarPhaseEvent(phase, near)
+          : undefined,
+        lunarSynodicPeriodMsec: this.dic.lunarPhase?.synodicPeriodMsec,
         solarPhase: (phase, near) => this.solar_phase(phase, near),
       },
       utc,
@@ -3831,6 +3863,15 @@ K   = @dic.earthy[2] / 360
       this.calc.zero.season,
       event,
     ))
+  }
+
+  private lunisolar_civil_day_model(): CivilDayModel | undefined {
+    if (!this.day_start_event()) return undefined
+    const rule = this.solar_event_day_core_rule()
+    return {
+      at: (utc) => rule.boundary_at(utc),
+      atIndex: (dayIndex) => rule.boundary_at_index(dayIndex),
+    }
   }
 
   private solar_event_day_rule(): CachedTempoRule<SubdivideBase> {

@@ -931,6 +931,12 @@ export class SolarDayHourTempoRule implements TempoRule<SolarDayHourBase> {
 
 export type SolarDayBoundaryEvent = 'sunrise' | 'sunset'
 
+export type SolarEventDayBoundary = {
+  day_index: number
+  last_at: number
+  next_at: number
+}
+
 const SOLAR_EVENT_DAY_CACHE_CAPACITY = 128
 
 /**
@@ -1022,6 +1028,21 @@ export class SolarEventDayTempoRule implements TempoRule<SubdivideBase> {
     const event0 = this.event_of(civil)
     if (write_at <= event0) return event0
     return this.event_of(fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, civil.now_idx + 1))
+  }
+
+  boundary_at_index(day_index: number): SolarEventDayBoundary {
+    const last_at = this.event_of(fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, day_index))
+    const next_at = this.event_of(
+      fixed_envelope_by_idx(this.dayMsec, this.civilDayZero, day_index + 1),
+    )
+    return { day_index, last_at, next_at }
+  }
+
+  boundary_at(write_at: number): SolarEventDayBoundary {
+    const civil = fixed_envelope(this.dayMsec, this.civilDayZero, write_at)
+    const eventAt = this.event_of(civil)
+    const day_index = write_at < eventAt ? civil.now_idx - 1 : civil.now_idx
+    return this.boundary_at_index(day_index)
   }
 
   at(write_at: number, base: SubdivideBase): TempoEnvelope {

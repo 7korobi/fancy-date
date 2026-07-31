@@ -1,6 +1,6 @@
 {
   "name": "fancy-date",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "架空の暦を扱う",
   "type": "commonjs",
   "main": "lib/index.js",
@@ -53,6 +53,8 @@
     "jest:update": "jest -u --config config/jest.js --rootDir .",
     "metrics:mean": "bun run compile && node scripts/mean-metrics.js",
     "metrics:naoj": "bun run compile && node scripts/naoj-metrics.js",
+    "perf:apparent-radius": "bun run compile && node scripts/perf-apparent-radius.js",
+    "perf:orbital-lunar": "bun run compile && node scripts/perf-orbital-lunar.js",
     "perf": "bun run perf:core",
     "perf:core": "bun run compile && node scripts/perf.js",
     "compile": "bun run compile:ts",

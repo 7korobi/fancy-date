@@ -58,6 +58,46 @@ export class PeriodicCalendarYearPolicy implements CalendarYearPolicy<CalendarYe
 
 export type LunisolarBoundarySource = 'mean' | 'observed' | 'table' | 'hybrid'
 
+export type LunisolarMonthLengthPolicy =
+  | { kind: 'event-derived' }
+  | { kind: 'fixed-range'; minDays: number; maxDays: number }
+
+export type ConstrainedNominalOptions = {
+  kind: 'constrained-nominal'
+  boundaryToleranceMsec?: number
+  monthLength?: LunisolarMonthLengthPolicy
+  tieBreak?: 'earlier' | 'later' | 'error'
+  maxStabilityExpansions?: number
+}
+
+export type LunisolarBoundaryPolicy = 'nominal' | 'constrained-nominal' | ConstrainedNominalOptions
+
+export type ConstrainedNominalScore = readonly [
+  changedBoundaryCount: number,
+  shiftedDayCount: number,
+  intervalSupportPenalty: number,
+  monthLengthResidual: number,
+]
+
+export type LunisolarBoundarySelection = {
+  selected: readonly number[]
+  score: ConstrainedNominalScore
+  globally_ambiguous: boolean
+  optimal_path_count: number
+  alternative_boundaries: readonly (readonly number[])[]
+}
+
+export type LunisolarBoundarySelectionSummary = {
+  policy: 'nominal' | 'constrained-nominal'
+  selected_at: number
+  nominal_at: number
+  changed: boolean
+  locally_ambiguous: boolean
+  globally_ambiguous: boolean
+  optimal_path_count: number
+  score?: ConstrainedNominalScore
+}
+
 export type LunisolarBoundary = {
   index: number
   last_at: number
@@ -65,6 +105,9 @@ export type LunisolarBoundary = {
   source_at?: number
   next_source_at?: number
   source_kind: LunisolarBoundarySource
+  boundary_ambiguous?: boolean
+  boundary_selection?: LunisolarBoundarySelection
+  boundary_selection_summary?: LunisolarBoundarySelectionSummary
 }
 
 export type LunisolarPhaseBoundary = LunisolarBoundary & {

@@ -107,24 +107,43 @@ export const 創作赤星: PLANET = placeKeplerianPlanet(
     perihelionLongitudeDeg: 90,
   },
   {
-    body: { kind: 'virtual', name: '創作赤星', derivedFrom: 火星 },
+    body: {
+      kind: 'virtual',
+      name: '創作赤星',
+      radiusKm: 3389.5,
+      derivedFrom: 火星,
+    },
     rotation: [dayMsec * 1.5, 0, 23.5],
   },
 )
 
-/** 創作楕円軌道衛星: 創作赤星の周りを 30 日周期の楕円軌道で公転。 */
+/** 創作楕円軌道衛星: 創作赤星の周りを 88 日周期の楕円軌道で公転。
+ *
+ * 創作赤星の自転周期（1.5 日）との公倍数を避けるため、30 日の倍数ではなく
+ * 88 日を採用。これにより、暦の日境界と新月の位相が毎月ずれ、自然な
+ * 太陰太陽暦の月長変化が得られる。
+ */
 export const 創作赤星の衛星: SATELLITE = placeKeplerianSatellite(
   創作赤星,
   {
-    periodMsec: dayMsec * 30,
+    periodMsec: dayMsec * 88,
     epochMsec: 0,
     eccentricity: 0.2,
     meanLongitudeDeg: 0,
     perihelionLongitudeDeg: 45,
   },
   {
-    body: { kind: 'virtual', name: '創作赤星の衛星', derivedFrom: 月 },
-    rotation: [dayMsec * 30, 0, 0],
+    // 月出入りを計算するための創作上の幾何パラメータ。
+    // 半径・平均距離は地球の月を基準値として採用し、楕円軌道の
+    // 距離比率は KeplerianOrbital から別途反映する。
+    body: {
+      kind: 'virtual',
+      name: '創作赤星の衛星',
+      radiusKm: 1737.4,
+      meanDistanceKm: 384400,
+      derivedFrom: 月,
+    },
+    rotation: [dayMsec * 88, 0, 0],
   },
 )
 

@@ -29,6 +29,7 @@ const {
 } = require('../lib/sample')
 const { 天文地球, 創作赤星, 創作赤星の衛星 } = require('../lib/sample/astro')
 const { MEAN_MOON } = require('../lib/astronomy-data')
+const { RelativeLunarPhaseEventModel } = require('../lib/relative-lunar-phase')
 const { to_msec, to_sec, to_tempo_bare } = require('../lib/time')
 const { english, jpn, kor, roman } = require('../lib/number')
 const {
@@ -2365,6 +2366,87 @@ describe('KeplerianOrbital', () => {
 })
 
 describe('創作楕円軌道天体', () => {
+  test('創作赤星太陰太陽暦は不定時法と真夜中起点の日界を使う', () => {
+    const c = Calendar.創作赤星太陰太陽暦
+    const first = c.to_tempos(0).d
+    const next = c.to_tempos(first.next_at).d
+    const lunar = c.lunisolar(0)
+
+    expect(c.dic.hour_division.kind).toBe('temporal')
+    expect(c.dic.day_start).toBeUndefined()
+    expect(c.dic.day_boundary.kind).toBe('midnight')
+    expect(first.next_at).toBe(next.last_at)
+    expect(first.next_at - first.last_at).toBe(c.calc.msec.day)
+    expect(lunar.day_start_at).toBeLessThan(lunar.next_at)
+  })
+
+  test('同じ可変日界計算を日の出起点にも切り替えられる', () => {
+    const sunrise = new FancyDate(Calendar.創作赤星太陰太陽暦, (c) => c.dayStart('sunrise')).init()
+    const first = sunrise.to_tempos(0).d
+    const next = sunrise.to_tempos(first.next_at).d
+
+    expect(sunrise.dic.day_start).toBe('sunrise')
+    expect(first.next_at).toBe(next.last_at)
+    expect(first.next_at - first.last_at).not.toBe(sunrise.calc.msec.day)
+    expect(sunrise.lunisolar(0).day).toBeGreaterThanOrEqual(1)
+  })
+
+  test('創作衛星の朔は太陽相対モデルで解決される', () => {
+    const planetary = 創作赤星[1]
+    const lunar = 創作赤星の衛星[1]
+    const model = new RelativeLunarPhaseEventModel(planetary, lunar)
+    const event = model.lunarPhaseEvent(0, 0)
+    const day = 24 * 60 * 60 * 1000
+
+    expect(model.synodicPeriodMsec / day).toBeCloseTo(100.052918, 5)
+    expect(Math.abs(model.phaseAt(event.at))).toBeLessThan(1e-8)
+    expect(event.lower_at).toBeLessThanOrEqual(event.at)
+    expect(event.at).toBeLessThanOrEqual(event.upper_at)
+  })
+
+  test('創作衛星の朔探索は予測ブラケットを検証して短縮される', () => {
+    const planetary = 創作赤星[1]
+    const lunar = 創作赤星の衛星[1]
+    const model = new RelativeLunarPhaseEventModel(planetary, lunar)
+    const day = 24 * 60 * 60 * 1000
+    const originalPhaseAt = model.phaseAt.bind(model)
+    let phaseAtCalls = 0
+    model.phaseAt = (at) => {
+      phaseAtCalls++
+      return originalPhaseAt(at)
+    }
+
+    const event = model.lunarPhaseEvent(0, 45 * day)
+
+    expect(phaseAtCalls).toBeLessThan(64)
+    expect(Math.abs(model.phaseAt(event.at))).toBeLessThan(1e-8)
+  })
+
+  test('創作赤星太陰太陽暦は衛星周期ではなく朔望周期で探索する', () => {
+    const c = Calendar.創作赤星太陰太陽暦
+    const day = 24 * 60 * 60 * 1000
+    expect(c.dic.lunarPhase.synodicPeriodMsec / day).toBeCloseTo(100.052918, 5)
+    expect(c.lunisolar(0).new_moon_at).not.toBe(c.lunar_phase(0, 0))
+  })
+
+  test('創作赤星の衛星で月出・月没・南中を算出できる', () => {
+    const c = Calendar.創作赤星太陰太陽暦
+    const observation = c.lunar(0)
+    const model = c.dic.moony
+    const day = 24 * 60 * 60 * 1000
+    const nearDistance = model.lunarEquatorial(0).distanceKm
+    const farDistance = model.lunarEquatorial(44 * day).distanceKm
+
+    expect(typeof model.lunarEvents).toBe('function')
+    expect(observation.has_moonrise).toBe(true)
+    expect(observation.has_moonset).toBe(true)
+    expect(observation.has_transit).toBe(true)
+    expect(Number.isFinite(observation.月の出)).toBe(true)
+    expect(Number.isFinite(observation.月の入)).toBe(true)
+    expect(Number.isFinite(observation.南中時刻)).toBe(true)
+    expect(nearDistance).not.toBe(farDistance)
+  })
+
   test('sample の創作惑星で暦を作れる', () => {
     const calendar = new FancyDate(g).spot(創作赤星, 0, 0, 0).init()
     const msec = calendar.parse('1年1月1日', 'y年M月d日')
@@ -2391,14 +2473,26 @@ describe('創作楕円軌道天体', () => {
 
   test('sample の創作赤星太陰太陽暦で暦日を取得できる', () => {
     const c = Calendar.創作赤星太陰太陽暦
-    const msec = 0
-    const formatted = c.format(msec, 'y年M月d日')
-    expect(formatted).toMatch(/^-?\d+年/)
+    const day = c.calc.msec.day
     // 観測太陰太陽暦の parse は、暦日の日境界ではなく近似シードを返すため、
-    // 厳密な往復は保証されない。ここでは format が暦日文字列を返せること、
-    // および parse が近似的な時刻を返すことを確認する。
+    // 厳密な往復は保証されない。暦の日の長さでサンプリングし、連続する
+    // 暦日が 1 日ずつ進むことを確認する。
+    const formatted = c.format(0, 'y年M月d日')
+    expect(formatted).toMatch(/^-?\d+年/)
     const parsed = c.parse(formatted, 'y年M月d日')
     expect(Number.isFinite(parsed)).toBe(true)
+
+    // 暦の日の長さで 2 ヶ月分進めて、日付が単調増加することを確認。
+    let previous = ''
+    let changes = 0
+    for (let i = 0; i < 80; i++) {
+      const s = c.format(i * day, 'y年M月d日')
+      if (s !== previous) {
+        previous = s
+        changes++
+      }
+    }
+    expect(changes).toBeGreaterThan(50)
   })
 })
 

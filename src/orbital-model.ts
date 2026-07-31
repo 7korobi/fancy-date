@@ -64,6 +64,28 @@ export interface OrbitalModel {
   timeOfPhase(phase: number, near: number): number
 }
 
+export type LunarPhaseEvent = {
+  cycle: number
+  phase: number
+  at: number
+  lower_at: number
+  upper_at: number
+  source_kind: 'mean' | 'observed' | 'table' | 'hybrid'
+  numeric_error_msec: number
+  model_error_msec?: number
+}
+
+export type LunarPhaseEventResolver = (phase: number, near: number) => LunarPhaseEvent
+
+export interface LunarPhaseEventModel extends OrbitalModel {
+  synodicPeriodMsec: number
+  lunarPhaseEvent(phase: number, near: number): LunarPhaseEvent
+}
+
+export type LongitudeOrbitalModel = OrbitalModel & {
+  apparentLongitudeDeg(utc: number): number
+}
+
 export type OrbitalTransformOptions = {
   phaseOffset?: number
   direction?: 1 | -1
@@ -74,6 +96,18 @@ export interface RotationModel {
   periodMsec: number
   epochMsec: number
   axialTiltDeg: number
+}
+
+export function hasLunarPhaseEvents(
+  model: OrbitalModel | undefined,
+): model is LunarPhaseEventModel {
+  return typeof (model as LunarPhaseEventModel | undefined)?.lunarPhaseEvent === 'function'
+}
+
+export function hasApparentLongitude(
+  model: OrbitalModel | undefined,
+): model is LongitudeOrbitalModel {
+  return typeof (model as LongitudeOrbitalModel | undefined)?.apparentLongitudeDeg === 'function'
 }
 
 function definePlacementProps<T extends object, P extends object>(target: T, props: P): T & P {

@@ -211,9 +211,15 @@ export {
   ThaiBuddhistFeastPolicy,
   transformOrbital,
 } from './fancy-date'
+export { RelativeLunarPhaseEventModel } from './relative-lunar-phase'
+export { OrbitalLunarEventModel } from './orbital-lunar-events'
+export { hasApparentLongitude, hasLunarPhaseEvents } from './orbital-model'
+export type { LunarPhaseEventModel, LongitudeOrbitalModel } from './orbital-model'
 export type {
   AssignmentOptions,
   AssignmentToken,
+  CivilDayBoundary,
+  CivilDayModel,
   CalendarMonthLayout,
   CalendarYearLayout,
   CalendarYearPolicyContext,
@@ -238,9 +244,15 @@ export type {
   HourDivisionInput,
   HourDivisionPolicy,
   LegacyHourDivision,
+  LunisolarBoundaryPolicy,
   LunisolarBoundary,
+  LunisolarBoundarySelection,
+  LunisolarBoundarySelectionSummary,
   LunisolarBoundarySource,
   LunisolarPhaseBoundary,
+  LunisolarMonthLengthPolicy,
+  ConstrainedNominalOptions,
+  ConstrainedNominalScore,
   LunisolarPrincipalTermLike,
   PrincipalTermLunisolarMonth,
   LunisolarYearResolver,
@@ -281,6 +293,8 @@ export type {
   LocaleApplyOptions,
   LunisolarDate,
   LunisolarPrincipalTerm,
+  LunarPhaseEvent,
+  LunarPhaseEventResolver,
   ThaiLunisolarDate,
   ThaiLunisolarOptions,
   ThaiLunisolarYearType,
@@ -300,6 +314,12 @@ export type {
   UranusSolarOrbitalOptions,
   VenusSolarOrbitalOptions,
 } from './fancy-date'
+export {
+  AmbiguousLunisolarBoundaryError,
+  LunisolarBoundaryConstraintError,
+  LunisolarBoundaryError,
+  UnstableLunisolarBoundaryError,
+} from './phenomena/lunisolar'
 // orbital-model/mean/naoj/nasa/prepare の値・型はすべて './fancy-date' が
 // 既に named export として再エクスポート済みなので、ここで重複して
 // 再々エクスポートする必要はない。
@@ -342,6 +362,7 @@ export {
 } from './tempo'
 export type {
   SolarDayBoundaryEvent,
+  SolarEventDayBoundary,
   TempoEnvelope,
   TempoBase,
   TempoRule,

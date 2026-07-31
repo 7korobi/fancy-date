@@ -6,6 +6,8 @@ import type {
   LunarHorizontalCoordinates,
   LunarNode,
   LunarNodeKind,
+  LunarPhaseEvent,
+  LunarPhaseEventModel,
   LunarObservation,
   LunarObservationOptions,
   PLANET,
@@ -164,13 +166,17 @@ const MOON_B_TERMS = [
   [2, -2, 0, 1, 107],
 ] as const
 
-export class EarthMoonOrbital implements LunarEventModel {
+const MOON_RADIUS_KM = 1737.4
+
+export class EarthMoonOrbital implements LunarEventModel, LunarPhaseEventModel {
   static readonly meanSynodicMonthMsec = 2551442889
   static readonly newMoonEpochMsec = 1577310360000
   static readonly rotationAxialTiltDeg = 6.68
+  static readonly meanLunarAngularRadiusDeg = asin_deg(MOON_RADIUS_KM / 384400)
 
   readonly periodMsec: number
   readonly epochMsec: number
+  readonly synodicPeriodMsec: number
 
   constructor(options: EarthMoonOrbitalOptions = {}) {
     const {
@@ -179,6 +185,7 @@ export class EarthMoonOrbital implements LunarEventModel {
     } = meanOrbitalOptionsOf(options)
     this.periodMsec = periodMsec
     this.epochMsec = epochMsec
+    this.synodicPeriodMsec = periodMsec
   }
 
   static rotation(): ROTATION {
@@ -271,6 +278,10 @@ export class EarthMoonOrbital implements LunarEventModel {
     }
   }
 
+  lunarAngularRadiusDeg(utc: number) {
+    return asin_deg(MOON_RADIUS_KM / this.lunarEquatorial(utc).distanceKm)
+  }
+
   lunarHorizontal(
     utc: number,
     latitudeDeg: number,
@@ -324,6 +335,9 @@ export class EarthMoonOrbital implements LunarEventModel {
       heightM = 0,
       horizonDeg = -34 / 60,
     } = options
+    const horizonAt = (_at: number, distanceKm: number) =>
+      horizonDeg -
+      (asin_deg(MOON_RADIUS_KM / distanceKm) - EarthMoonOrbital.meanLunarAngularRadiusDeg)
     const timezoneMsec = (timezoneDeg / 360) * MSEC_PER_DAY
     const dayStartUtc =
       options.dayStartUtc ??
@@ -331,18 +345,16 @@ export class EarthMoonOrbital implements LunarEventModel {
     const samples = this.lunarSamples(dayStartUtc, latitudeDeg, longitudeDeg, heightM)
     const moonrise = this.findAltitudeEvent(
       samples,
-      horizonDeg,
+      horizonAt,
       1,
-      horizonDeg,
       latitudeDeg,
       longitudeDeg,
       heightM,
     )
     const moonset = this.findAltitudeEvent(
       samples,
-      horizonDeg,
+      horizonAt,
       -1,
-      horizonDeg,
       latitudeDeg,
       longitudeDeg,
       heightM,
@@ -448,25 +460,29 @@ export class EarthMoonOrbital implements LunarEventModel {
     longitudeDeg: number,
     heightM: number,
   ) {
-    const samples: { at: number; altitudeDeg: number; hourAngleDeg: number }[] = []
+    const samples: {
+      at: number
+      altitudeDeg: number
+      hourAngleDeg: number
+      distanceKm: number
+    }[] = []
     for (let i = 0; i <= 24; i++) {
       const at = dayStartUtc + i * 60 * MSEC_PER_MINUTE
-      const { altitudeDeg, hourAngleDeg } = this.lunarHorizontal(
+      const { altitudeDeg, hourAngleDeg, distanceKm } = this.lunarHorizontal(
         at,
         latitudeDeg,
         longitudeDeg,
         heightM,
       )
-      samples.push({ at, altitudeDeg, hourAngleDeg })
+      samples.push({ at, altitudeDeg, hourAngleDeg, distanceKm })
     }
     return samples
   }
 
   private findAltitudeEvent(
-    samples: { at: number; altitudeDeg: number }[],
-    targetDeg: number,
+    samples: { at: number; altitudeDeg: number; distanceKm: number }[],
+    targetDeg: number | ((at: number, distanceKm: number) => number),
     direction: 1 | -1,
-    horizonDeg: number,
     latitudeDeg: number,
     longitudeDeg: number,
     heightM: number,
@@ -474,15 +490,19 @@ export class EarthMoonOrbital implements LunarEventModel {
     for (let i = 1; i < samples.length; i++) {
       const prev = samples[i - 1]
       const next = samples[i]
-      const prevAltitude = prev.altitudeDeg - targetDeg
-      const nextAltitude = next.altitudeDeg - targetDeg
+      const prevTarget =
+        typeof targetDeg === 'function' ? targetDeg(prev.at, prev.distanceKm) : targetDeg
+      const nextTarget =
+        typeof targetDeg === 'function' ? targetDeg(next.at, next.distanceKm) : targetDeg
+      const prevAltitude = prev.altitudeDeg - prevTarget
+      const nextAltitude = next.altitudeDeg - nextTarget
       if (prevAltitude === 0 || prevAltitude * nextAltitude <= 0) {
         if (direction === 1 && nextAltitude < prevAltitude) continue
         if (direction === -1 && prevAltitude < nextAltitude) continue
         return this.timeOfLunarAltitude(
           prev.at,
           next.at,
-          horizonDeg,
+          targetDeg,
           latitudeDeg,
           longitudeDeg,
           heightM,
@@ -511,17 +531,17 @@ export class EarthMoonOrbital implements LunarEventModel {
   private timeOfLunarAltitude(
     from: number,
     to: number,
-    altitudeDeg: number,
+    altitudeDeg: number | ((at: number, distanceKm: number) => number),
     latitudeDeg: number,
     longitudeDeg: number,
     heightM: number,
   ) {
-    return bisect_zero(
-      from,
-      to,
-      (at) =>
-        this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM).altitudeDeg - altitudeDeg,
-    )
+    return bisect_zero(from, to, (at) => {
+      const horizontal = this.lunarHorizontal(at, latitudeDeg, longitudeDeg, heightM)
+      const target =
+        typeof altitudeDeg === 'function' ? altitudeDeg(at, horizontal.distanceKm) : altitudeDeg
+      return horizontal.altitudeDeg - target
+    })
   }
 
   private timeOfLunarHourAngle(
@@ -547,6 +567,20 @@ export class EarthMoonOrbital implements LunarEventModel {
   timeOfPhase(phase: number, near: number) {
     const k = this.nearestLunation(phase, near)
     return jde_to_utc(this.phaseJde(k))
+  }
+
+  lunarPhaseEvent(phase: number, near: number): LunarPhaseEvent {
+    const normalizedPhase = mod(phase, 1)
+    const at = this.timeOfPhase(normalizedPhase, near)
+    return {
+      cycle: Math.round((at - this.epochMsec) / this.periodMsec),
+      phase: normalizedPhase,
+      at,
+      lower_at: at,
+      upper_at: at,
+      source_kind: 'observed',
+      numeric_error_msec: 0,
+    }
   }
 
   private nearestLunation(phase: number, near: number) {

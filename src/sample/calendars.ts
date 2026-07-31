@@ -481,14 +481,22 @@ const Jupiter = new FancyDate((c) =>
 
 const JupiterObserved = new FancyDate(Jupiter, (c) => c.observedLunisolar())
 
-/** 創作赤星太陰太陽暦: 楕円軌道の創作惑星とその楕円軌道衛星を使った太陰太陽暦。 */
+/** 創作赤星太陰太陽暦: 楕円軌道の創作惑星とその楕円軌道衛星を使った太陰太陽暦。
+ *
+ * 創作赤星の公転周期は 2 年、自転周期は 1.5 日、衛星の公転周期は 88 日。
+ * 1 年を 8 ヶ月で区切ることで、中気間隔（約 91.3 日）と朔望月（88 日）が
+ * ほぼ 1 対 1 になり、自然な閏月を伴う観測太陰太陽暦となる。
+ */
 const 創作赤星太陰太陽暦 = new FancyDate((c) =>
   baseCalendar(c)
+    .notation({ ...commonNotation, M: [8], Z: [8] })
     .lang('y年M月d日', 'Gy年M月d日(E) HH:mm')
     .spot(創作赤星の衛星, 35, 0, 0)
+    .division({ H: 'solar' })
+    .dayStart('midnight')
     .era('赤星暦', '赤星前')
     .calendar(['1年1月1日', 'y年M月d日', 0])
-    .observedLunisolar()
+    .observedLunisolar({ boundaryPolicy: 'constrained-nominal' })
     .init(),
 )
 

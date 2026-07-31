@@ -38,18 +38,18 @@ const SOLAR_EVENT_DIFF_BASELINE = {
   max: {
     sunriseMinutes: 0.82,
     transitMinutes: 0.436,
-    sunsetMinutes: 0.059,
-    sunriseAzimuthDeg: 0.048,
+    sunsetMinutes: 0.073,
+    sunriseAzimuthDeg: 0.045,
     transitAltitudeDeg: 0.031,
-    sunsetAzimuthDeg: 0.049,
+    sunsetAzimuthDeg: 0.046,
   },
   mean: {
-    sunriseMinutes: 0.38,
+    sunriseMinutes: 0.378,
     transitMinutes: 0.285,
-    sunsetMinutes: 0.047,
-    sunriseAzimuthDeg: 0.031,
+    sunsetMinutes: 0.048,
+    sunriseAzimuthDeg: 0.03,
     transitAltitudeDeg: 0.022,
-    sunsetAzimuthDeg: 0.021,
+    sunsetAzimuthDeg: 0.022,
   },
 }
 
@@ -64,20 +64,20 @@ const LUNAR_EVENT_DIFF_FIELDS = [
 const LUNAR_EVENT_DIFF_BASELINE = {
   count: 3,
   max: {
-    moonriseMinutes: 0.347,
+    moonriseMinutes: 0.442,
     transitMinutes: 0.391,
-    moonsetMinutes: 0.356,
-    moonriseAzimuthDeg: 0.017,
+    moonsetMinutes: 0.436,
+    moonriseAzimuthDeg: 0.019,
     transitAltitudeDeg: 0.066,
-    moonsetAzimuthDeg: 0.064,
+    moonsetAzimuthDeg: 0.065,
   },
   mean: {
-    moonriseMinutes: 0.251,
+    moonriseMinutes: 0.3,
     transitMinutes: 0.227,
-    moonsetMinutes: 0.26,
-    moonriseAzimuthDeg: 0.01,
+    moonsetMinutes: 0.275,
+    moonriseAzimuthDeg: 0.011,
     transitAltitudeDeg: 0.033,
-    moonsetAzimuthDeg: 0.036,
+    moonsetAzimuthDeg: 0.035,
   },
 }
 
