@@ -52,6 +52,7 @@ export {
 } from './sample/locale'
 
 export {
+  ERA_VALIDITY_NOTES,
   七巻冊子元号,
   伊勢之巻元号,
   元号,
@@ -64,6 +65,13 @@ export {
   皇代記元号,
   続史愚抄元号,
   金剛寺文書元号,
+} from './sample/eras'
+export type {
+  EraValidityClaim,
+  EraValidityNote,
+  EraValiditySequence,
+  EraValiditySource,
+  EraValiditySourceKind,
 } from './sample/eras'
 
 export {

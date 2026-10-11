@@ -10,6 +10,7 @@ export {
   Cairo,
   Calendar,
   CHURCH_FEAST_LABELS,
+  ERA_VALIDITY_NOTES,
   THAI_BUDDHIST_FEAST_LABELS,
   Jaypore,
   London,
@@ -134,6 +135,11 @@ export type {
   Panchanga,
   PanchangaCondition,
   PanchangaNoteRule,
+  EraValidityClaim,
+  EraValidityNote,
+  EraValiditySequence,
+  EraValiditySource,
+  EraValiditySourceKind,
 } from './sample'
 
 export {

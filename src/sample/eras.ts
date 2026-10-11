@@ -266,6 +266,219 @@ export const 元号 = [
   ['令和', 1556636400000], // JST 2019-05-01; WJ/CAO
 ] as const
 
+export type EraValiditySourceKind =
+  | 'official-publication'
+  | 'historical-document'
+  | 'historical-text'
+  | 'secondary-reference'
+
+export type EraValiditySequence = 'japanese' | 'northern-court' | 'southern-court'
+
+export type EraValiditySource = {
+  readonly id: string
+  readonly title: string
+  readonly kind: EraValiditySourceKind
+  readonly url?: string
+}
+
+export type EraValidityClaim =
+  | {
+      readonly kind: 'reported-start-date'
+      readonly at: number
+      readonly precision: 'day' | 'estimated'
+    }
+  | {
+      readonly kind: 'reported-start-period'
+      readonly description: string
+    }
+  | {
+      readonly kind: 'start-no-later-than'
+      readonly at: number
+    }
+
+export type EraValidityNote = {
+  readonly era: string
+  readonly sequence: EraValiditySequence
+  readonly claim: EraValidityClaim
+  readonly source: EraValiditySource
+  readonly assessment?: 'unconfirmed' | 'disfavored'
+  readonly caveat?: string
+}
+
+const ERA_VALIDITY_SOURCES: Readonly<Record<string, EraValiditySource>> = {
+  WJ: {
+    id: 'japanese-era-list',
+    title: '元号一覧 (日本)',
+    kind: 'secondary-reference',
+    url: 'https://ja.wikipedia.org/wiki/元号一覧_(日本)',
+  },
+  CAO: {
+    id: 'cabinet-office-era-announcements',
+    title: '内閣府「元号について」',
+    kind: 'official-publication',
+    url: 'https://www.cao.go.jp/others/soumu/gengou/index.html',
+  },
+  南朝編年記略: {
+    id: 'nancho-hennenki',
+    title: '南朝編年記略',
+    kind: 'historical-text',
+  },
+  南朝公卿補任: {
+    id: 'nancho-kugyo-bunin',
+    title: '南朝公卿補任',
+    kind: 'historical-text',
+  },
+  続史愚抄: {
+    id: 'zoku-shi-gusho',
+    title: '続史愚抄',
+    kind: 'historical-text',
+  },
+  南方紀伝: {
+    id: 'nanpo-kiden',
+    title: '南方紀伝',
+    kind: 'historical-text',
+  },
+  皇代記: {
+    id: 'kodaiki',
+    title: '皇代記',
+    kind: 'historical-text',
+  },
+  七巻冊子: {
+    id: 'shichikan-soshi',
+    title: '七巻冊子',
+    kind: 'historical-text',
+  },
+  伊勢之巻: {
+    id: 'ise-no-maki',
+    title: '伊勢之巻',
+    kind: 'historical-text',
+  },
+  金剛寺文書: {
+    id: 'kongouji-documents',
+    title: '金剛寺文書',
+    kind: 'historical-document',
+  },
+}
+
+const ERA_START_VALIDITY_NOTES: EraValidityNote[] = 元号.flatMap(([era, at, sourceTag]) => {
+  const sourceTags =
+    sourceTag == null || sourceTag === '北' || sourceTag === '南' ? ['WJ'] : sourceTag.split('・')
+  const sequence: EraValiditySequence =
+    sourceTag === '北' ? 'northern-court' : sourceTag ? 'southern-court' : 'japanese'
+
+  return sourceTags.map((tag) => {
+    const source = ERA_VALIDITY_SOURCES[tag]
+    if (!source) throw new Error(`unknown era validity source ${tag}`)
+    const isJapaneseEraList = source.id === 'japanese-era-list'
+    const claim: EraValidityClaim =
+      era === '文中' && isJapaneseEraList
+        ? { kind: 'reported-start-period', description: '建徳3年4月（日未確定）' }
+        : {
+            kind: 'reported-start-date',
+            at,
+            precision: era === '大化' && isJapaneseEraList ? 'estimated' : 'day',
+          }
+    const details: Pick<EraValidityNote, 'assessment' | 'caveat'> =
+      era === '大化' && isJapaneseEraList
+        ? { caveat: '始期不明のため、公布推定日を開始日の候補としている。' }
+        : era === '文中' && source.id === 'shichikan-soshi'
+          ? { assessment: 'unconfirmed', caveat: '開始日の確証を得ない。' }
+          : era === '文中' && (source.id === 'nancho-hennenki' || source.id === 'zoku-shi-gusho')
+            ? { assessment: 'disfavored', caveat: 'この開始日説は誤りとされる。' }
+            : {}
+
+    return {
+      era,
+      sequence,
+      claim,
+      source,
+      ...details,
+    }
+  })
+})
+
+const SOUTHERN_SOURCE_START_NOTES: EraValidityNote[] = [
+  {
+    era: '建徳',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18913856400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['南朝編年記略'],
+  },
+  {
+    era: '建徳',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18913856400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['南朝公卿補任'],
+  },
+  {
+    era: '天授',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18760496400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['南朝編年記略'],
+  },
+  {
+    era: '天授',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18760496400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['続史愚抄'],
+  },
+  {
+    era: '弘和',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18580784400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['南朝公卿補任'],
+  },
+  {
+    era: '弘和',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18580784400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['続史愚抄'],
+  },
+  {
+    era: '元中',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18479782800000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['南方紀伝'],
+  },
+  {
+    era: '元中',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-date', at: -18479782800000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES['続史愚抄'],
+  },
+]
+
+export const ERA_VALIDITY_NOTES: readonly EraValidityNote[] = [
+  ...ERA_START_VALIDITY_NOTES,
+  {
+    era: '平成',
+    sequence: 'japanese',
+    claim: { kind: 'reported-start-date', at: 600188400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES.CAO,
+  },
+  {
+    era: '令和',
+    sequence: 'japanese',
+    claim: { kind: 'reported-start-date', at: 1556636400000, precision: 'day' },
+    source: ERA_VALIDITY_SOURCES.CAO,
+  },
+  ...SOUTHERN_SOURCE_START_NOTES,
+  {
+    era: '天授',
+    sequence: 'southern-court',
+    claim: { kind: 'reported-start-period', description: '2月上旬' },
+    source: ERA_VALIDITY_SOURCES['七巻冊子'],
+    caveat: '日付を開始時刻へ正規化していない資料注記。',
+  },
+  {
+    era: '文中',
+    sequence: 'southern-court',
+    claim: { kind: 'start-no-later-than', at: -18857350800000 },
+    source: ERA_VALIDITY_SOURCES['金剛寺文書'],
+    caveat: '正確な始期日ではなく、文中が用いられていたことを示す上限根拠。',
+  },
+]
+
 export const 北朝元号 = 元号.filter(([, , s]) => !s || s === '北') as readonly ERA[]
 export const 南朝元号 = 元号.filter(([, , s]) => !s || s === '南') as readonly ERA[]
 
