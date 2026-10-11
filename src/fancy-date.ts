@@ -266,6 +266,26 @@ export type {
 
 export type ERA = readonly [string, number, string?]
 export type ERA_WITH_YEAR = readonly [string, number, number]
+export type MonthNotationToken = 'Mo' | 'Mr'
+export type MonthNotationContext = Readonly<{
+  /** 暦の月番号。1 始まりで、閏月は重複する月番号を使う。 */
+  month: number
+  is_leap: boolean
+}>
+export type MonthNotationFormatter = (label: string, month: MonthNotationContext) => string
+export type MonthNotationAlias = Readonly<{
+  token: MonthNotationToken
+  /** Mo または Mr のトークン全体に対応する、完全一致の表記。 */
+  text: string
+  /** 1 始まりの月番号。 */
+  month: number
+  is_leap: boolean
+}>
+export type MonthNotationOptions = Readonly<{
+  Mo?: MonthNotationFormatter
+  Mr?: MonthNotationFormatter
+  aliases?: readonly MonthNotationAlias[]
+}>
 
 type ALL_DIC = ALGO_DIC | 'D' | 'G' | 'J' | 'Q' | 'Y' | 'd' | 'p' | 'u' | 'w' | 'x' | 'y'
 type ALGO_DIC = 'E' | 'H' | 'M' | 'N' | 'S' | 'Z' | 'd' | 'm' | 's' | CycleToken
@@ -660,6 +680,7 @@ type IDIC = IIDX & {
   observed_lunisolar_boundary_policy?: LunisolarBoundaryPolicy
   observed_lunisolar_boundary_tolerance_msec?: number
   observed_lunisolar_solar_year?: LunisolarYearResolver
+  month_notation?: MonthNotationOptions
   lunarPhase?: LunarPhaseEventModel
   thai_official_lunisolar?: boolean
 }
@@ -897,6 +918,11 @@ type IndexerProps =
   | [number]
   | readonly [readonly string[], readonly string[] | null]
   | readonly [readonly string[], readonly string[] | null, string | readonly string[]]
+type MonthNotationTarget = Readonly<{
+  monthIndex: number
+  is_leap: boolean
+}>
+type MonthNotationParsers = Record<MonthNotationToken, Map<string, MonthNotationTarget>>
 class Indexer {
   tempo?: TempoLabelLike
   list: readonly string[] = []
@@ -906,6 +932,10 @@ class Indexer {
   zero: number = 0
   regex: string = ''
   regex_o: string = ''
+  month_parse_labels: MonthNotationParsers = {
+    Mo: new Map(),
+    Mr: new Map(),
+  }
   declare regex_r: string
   to_idx: IndexFactory = () => 0
   to_value: LabelFactory = () => ''
@@ -1222,6 +1252,15 @@ export class FancyDate {
     return this
   }
 
+  monthNotation(options: MonthNotationOptions) {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new Error('monthNotation() expects an options object')
+    }
+    this.dic.month_notation = options
+    this.def_regex()
+    return this
+  }
+
   algo(o: Partial<TOKENS<ALGO_DIC | LegacyTokenAlias, IndexerProps>>) {
     return this.notation(o)
   }
@@ -1445,6 +1484,37 @@ export class FancyDate {
     return numeral ? parseNumeral(numeral, value, size) : ''
   }
 
+  private month_notation_base(token: MonthNotationToken, monthIndex: number, size: number) {
+    const indexer = this.dic.M
+    const labels = token === 'Mo' ? indexer.list : indexer.rubys
+    const label = labels[monthIndex]
+    if (label != null) return label
+    return token === 'Mo'
+      ? this.format_number(monthIndex + 1, size, indexer)
+      : this.format_number_ruby(monthIndex + 1, size, indexer)
+  }
+
+  private month_notation_label(
+    token: MonthNotationToken,
+    monthIndex: number,
+    is_leap: boolean,
+    size: number,
+  ) {
+    const label = this.month_notation_base(token, monthIndex, size)
+    const formatter = this.dic.month_notation?.[token]
+    if (formatter) {
+      const formatted = formatter(label, { month: monthIndex + 1, is_leap })
+      if (typeof formatted !== 'string' || formatted.length === 0) {
+        throw new Error(
+          `${token} month formatter must return a non-empty string for month ${monthIndex + 1}`,
+        )
+      }
+      return formatted
+    }
+    const leapMarker = token === 'Mo' ? '閏' : 'うるう'
+    return `${is_leap ? leapMarker : ''}${label}`
+  }
+
   private format_numeral_label(value: number, size: number, indexer?: Indexer) {
     const numeral = indexer?.numeral_label ?? this.dic.numeral_label
     if (numeral) return parseNumeral(numeral, value, size)
@@ -1506,6 +1576,169 @@ export class FancyDate {
     return patterns.length === 1 ? patterns[0]! : `(?:${patterns.join('|')})`
   }
 
+  private validate_month_notation_config() {
+    const options = this.dic.month_notation
+    if (options == null) return
+    if (typeof options !== 'object' || Array.isArray(options)) {
+      throw new Error('monthNotation() expects an options object')
+    }
+    for (const token of ['Mo', 'Mr'] as const) {
+      const formatter = options[token]
+      if (formatter != null && typeof formatter !== 'function') {
+        throw new Error(`${token} month formatter must be a function`)
+      }
+    }
+    const aliases = options.aliases ?? []
+    if (!Array.isArray(aliases)) throw new Error('monthNotation() aliases must be an array')
+    for (const alias of aliases) {
+      if (!alias || typeof alias !== 'object') {
+        throw new Error('monthNotation() aliases must contain alias objects')
+      }
+      if (alias.token !== 'Mo' && alias.token !== 'Mr') {
+        throw new Error('monthNotation() alias token must be Mo or Mr')
+      }
+      if (typeof alias.text !== 'string' || alias.text.length === 0) {
+        throw new Error('monthNotation() alias text must be a non-empty string')
+      }
+      if (!Number.isInteger(alias.month) || alias.month < 1) {
+        throw new Error('monthNotation() alias month must be a positive integer')
+      }
+      if (typeof alias.is_leap !== 'boolean') {
+        throw new Error('monthNotation() alias is_leap must be a boolean')
+      }
+    }
+  }
+
+  private validate_month_notation_alias_range() {
+    const aliases = this.dic.month_notation?.aliases ?? []
+    for (const alias of aliases) {
+      if (alias.month > this.dic.M.length) {
+        throw new Error(
+          `monthNotation() alias ${JSON.stringify(alias.text)} names month ${alias.month}, but this calendar has ${this.dic.M.length} months`,
+        )
+      }
+      if (alias.is_leap && !this.month_notation_may_have_leap()) {
+        throw new Error(
+          `monthNotation() alias ${JSON.stringify(alias.text)} marks a leap month, but this calendar has no leap months`,
+        )
+      }
+    }
+  }
+
+  private month_notation_may_have_leap() {
+    if (this.dic.leaps != null || this.dic.month_divs != null) return false
+    return (
+      this.dic.moony != null ||
+      this.dic.observed_lunisolar === true ||
+      this.dic.thai_official_lunisolar === true
+    )
+  }
+
+  private month_fallback_target(
+    token: MonthNotationToken,
+    text: string,
+  ): MonthNotationTarget | undefined {
+    const indexer = this.dic.M
+    const marker = token === 'Mo' ? '閏' : 'うるう'
+    const is_leap = text.startsWith(marker)
+    const value = is_leap ? text.slice(marker.length) : text
+    const pattern =
+      token === 'Mr'
+        ? this.ruby_number_pattern(undefined, indexer)
+        : this.number_pattern(undefined, indexer)
+    if (!new RegExp(`^(?:${pattern})$`).test(value)) return undefined
+    const labels = token === 'Mo' ? indexer.list : indexer.rubys
+    const labelIndex = labels.indexOf(value)
+    const monthIndex =
+      labelIndex >= 0
+        ? labelIndex
+        : (token === 'Mr'
+            ? this.parse_number_ruby(value, indexer)
+            : this.parse_number(value, indexer)) - 1
+    if (!Number.isFinite(monthIndex)) return undefined
+    return { monthIndex, is_leap }
+  }
+
+  private month_label_parser(token: MonthNotationToken) {
+    const indexer = this.dic.M
+    const options = this.dic.month_notation
+    const formatter = options?.[token]
+    const aliases = (options?.aliases ?? []).filter((alias) => alias.token === token)
+    const configured = formatter != null || aliases.length > 0
+    // 未設定時の従来 parse は維持し、設定時は暦の閏月可否に従う。
+    const allowLeapParsing = !configured || this.month_notation_may_have_leap()
+    const hasMonthLabels =
+      token === 'Mo' && indexer.list.length > 0 && indexer.list.every((label) => label != null)
+    const hasNumericFallback = token === 'Mr' || !hasMonthLabels
+    const includeCanonicalLabels = configured || token === 'Mr' || hasMonthLabels
+    const labels = new Set<string>()
+    const monthLabels = new Map<string, MonthNotationTarget>()
+    const addLabel = (text: string, target: MonthNotationTarget) => {
+      if (!text) return
+      labels.add(text)
+      if (!configured) return
+      const previous = monthLabels.get(text)
+      if (
+        previous &&
+        (previous.monthIndex !== target.monthIndex || previous.is_leap !== target.is_leap)
+      ) {
+        throw new Error(
+          `ambiguous ${token} month label ${JSON.stringify(text)} maps to multiple months or leap states`,
+        )
+      }
+      monthLabels.set(text, target)
+    }
+
+    if (includeCanonicalLabels) {
+      const leapStates = allowLeapParsing ? [false, true] : [false]
+      for (let monthIndex = 0; monthIndex < indexer.length; monthIndex++) {
+        const base = this.month_notation_base(token, monthIndex, 2)
+        for (const is_leap of leapStates) {
+          if (!formatter && !base) continue
+          const text = this.month_notation_label(token, monthIndex, is_leap, 2)
+          addLabel(text, { monthIndex, is_leap })
+        }
+      }
+    }
+
+    for (const alias of aliases) {
+      addLabel(alias.text, { monthIndex: alias.month - 1, is_leap: alias.is_leap })
+    }
+
+    if (configured) {
+      for (const [text, target] of monthLabels) {
+        const fallback = this.month_fallback_target(token, text)
+        if (
+          fallback &&
+          (fallback.monthIndex !== target.monthIndex || fallback.is_leap !== target.is_leap)
+        ) {
+          throw new Error(
+            `ambiguous ${token} month label ${JSON.stringify(text)} conflicts with numeric month parsing`,
+          )
+        }
+      }
+    }
+
+    const patterns = [...labels]
+      .sort((a, b) => b.length - a.length)
+      .map((label) => escape_regexp(label))
+    if (hasNumericFallback) {
+      const number =
+        token === 'Mr'
+          ? this.ruby_number_pattern(undefined, indexer)
+          : this.number_pattern(undefined, indexer)
+      patterns.push(
+        token === 'Mr'
+          ? `${allowLeapParsing ? '(?:うるう)?' : ''}${number}`
+          : `${allowLeapParsing ? '閏?' : ''}${number}`,
+      )
+    }
+    if (!patterns.length) patterns.push('(?!)')
+    const body = patterns.length === 1 ? patterns[0] : `(?:${patterns.join('|')})`
+    indexer.month_parse_labels[token] = configured ? monthLabels : new Map()
+    return `(${body})`
+  }
+
   init() {
     // 不定時法(division({ H: 'solar' }))は日の出・日の入りの間隔を等分するため、
     // 極域(概ね北緯/南緯66.5度=極圏以遠)では日の出/日の入りが存在しない
@@ -1545,6 +1778,7 @@ export class FancyDate {
     this.strategy = leaps != null ? 'SolarTable' : month_divs != null ? 'SeasonTable' : 'SolarLunar'
 
     this.def_regex()
+    this.validate_month_notation_alias_range()
     this.def_to_idx()
     this.def_to_label()
     this.def_calc()
@@ -2940,6 +3174,7 @@ export class FancyDate {
   }
 
   def_regex() {
+    this.validate_month_notation_config()
     let A, B, C, D, E, G, H, N, Q, S, Y, Z
     let a, b, c, d, m, p, s, w, y
     const number = (fallback?: string, indexer?: Indexer) => this.number_pattern(fallback, indexer)
@@ -3014,34 +3249,8 @@ export class FancyDate {
       d = (list: readonly string[]) => strategy(list, this.dic.d)
       m = (list: readonly string[]) => strategy(list, this.dic.m)
       s = (list: readonly string[]) => strategy(list, this.dic.s)
-      const M = (list: string[]) => {
-        // list に null(ロムルス暦の暦外期間ラベルのように、一部の要素だけ
-        // ラベルを持ち残りは数値表示にフォールバックさせる設計、
-        // sample/locale.ts の ロムルス月ラベル 参照)が混ざる場合、
-        // 正規表現全体を1パターンに畳めない(null は join で空文字列に
-        // なり、意図しないマッチを生む)ため、パース用正規表現は
-        // 素直に数値パターンへフォールバックする。表示(to_label)側は
-        // 要素ごとに個別フォールバックできるが、パースは全体で1つの
-        // パターンが要るため、この違いを許容する。
-        if (list && list.length && list.every((s) => null != s)) {
-          if (list.every((s) => 1 === s.length)) {
-            return `(閏?[${list.join('')}])`
-          }
-          if (list.join) {
-            return `(閏?(?:${list.join('|')}))`
-          }
-        }
-        return `(閏?${number(undefined, this.dic.M)})`
-      }
-      const rubyM = () => {
-        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const labels = [...new Set(this.dic.M.rubys.filter(Boolean))]
-          .sort((a, b) => b.length - a.length)
-          .map(escape)
-        const numberRuby = this.ruby_number_pattern(undefined, this.dic.M)
-        const value = labels.length ? `(?:${labels.join('|')}|${numberRuby})` : numberRuby
-        return `((?:うるう)?${value})`
-      }
+      const M = () => this.month_label_parser('Mo')
+      const rubyM = () => this.month_label_parser('Mr')
 
       const object = { H, M, N, Q, Z, d, m, s }
 
@@ -3295,7 +3504,7 @@ export class FancyDate {
       indexer.to_value = at(integer(1, indexer))
     }
 
-    M = month(at(integer(1, this.dic.M)))
+    M = (_, val, size) => this.month_notation_label('Mo', val.now_idx, !!val.is_leap, size)
     H = at(integer(0, this.dic.H))
     N = at(integer(0, this.dic.N))
     m = at(integer(0, this.dic.m))
@@ -3325,7 +3534,7 @@ export class FancyDate {
     const ruby_integer = (idx: number, indexer: Indexer): LabelFactory => {
       return (_, val, size: number) => this.format_number_ruby(val.now_idx + idx, size, indexer)
     }
-    M = month(at(ruby_integer(1, this.dic.M)), 'うるう')
+    M = (_, val, size) => this.month_notation_label('Mr', val.now_idx, !!val.is_leap, size)
     A = at(ruby_integer(1, this.dic.A))
     B = at(ruby_integer(1, this.dic.B))
     C = at(ruby_integer(1, this.dic.C))
@@ -4422,6 +4631,19 @@ K   = @dic.earthy[2] / 360
       const dic = this.dic[top]
       if (dic) {
         if ('M' === top) {
+          if (mode === 'o' || mode === 'r') {
+            const parsed = dic.month_parse_labels[mode === 'o' ? 'Mo' : 'Mr'].get(s)
+            if (parsed) {
+              if (parsed.monthIndex < 0 || parsed.monthIndex >= dic.length) {
+                throw new Error(
+                  `${mode === 'o' ? 'Mo' : 'Mr'} month label ${JSON.stringify(s)} names a month outside 1..${dic.length}`,
+                )
+              }
+              data.M = parsed.monthIndex
+              data.M_is_leap = parsed.is_leap
+              continue
+            }
+          }
           const leapMarker = mode === 'r' ? 'うるう' : '閏'
           if (s.startsWith(leapMarker)) {
             data.M_is_leap = true
