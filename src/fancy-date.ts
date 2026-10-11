@@ -906,6 +906,7 @@ class Indexer {
   zero: number = 0
   regex: string = ''
   regex_o: string = ''
+  declare regex_r: string
   to_idx: IndexFactory = () => 0
   to_value: LabelFactory = () => ''
   to_label: LabelFactory = () => ''
@@ -919,6 +920,12 @@ class Indexer {
   numeral_label_ruby?: Numeral | null
 
   constructor(arg: IndexerProps) {
+    Object.defineProperty(this, 'regex_r', {
+      configurable: true,
+      enumerable: false,
+      value: '',
+      writable: true,
+    })
     const [list, rubys, relatives] = arg
     const [zero] = arg.slice(-1)
     if (list instanceof Array) {
@@ -1365,6 +1372,7 @@ export class FancyDate {
 
   numeral_ruby(numeral: Numeral | null = null) {
     this.dic.numeral_ruby = numeral
+    this.def_regex()
     return this
   }
 
@@ -1419,7 +1427,8 @@ export class FancyDate {
       const indexer = this.dic[base]
       if (!indexer) continue
       indexer[key] = numeral
-      if (key === 'numeral' || key === 'numeral_text') needs_rebuild = true
+      if (key === 'numeral' || key === 'numeral_text' || key === 'numeral_ruby')
+        needs_rebuild = true
     }
     if (needs_rebuild) this.def_regex()
   }
@@ -1465,6 +1474,20 @@ export class FancyDate {
     return parsed ?? numeric
   }
 
+  private parse_month_ruby(text: string, indexer: Indexer) {
+    const index = indexer.rubys.indexOf(text)
+    if (0 <= index) return index
+    return this.parse_number_ruby(text, indexer) - 1
+  }
+
+  private parse_number_ruby(text: string, indexer?: Indexer) {
+    const numeric = Number(text)
+    if (Number.isFinite(numeric)) return numeric
+    const parsed =
+      indexer?.numeral_ruby?.to_number?.(text) ?? this.dic.numeral_ruby?.to_number?.(text)
+    return parsed ?? numeric
+  }
+
   private number_pattern(fallback = '\\d+', indexer?: Indexer) {
     const patterns = [
       indexer?.numeral?.regex,
@@ -1473,6 +1496,13 @@ export class FancyDate {
       this.dic.numeral_text?.regex,
       fallback,
     ].filter(Boolean)
+    return patterns.length === 1 ? patterns[0]! : `(?:${patterns.join('|')})`
+  }
+
+  private ruby_number_pattern(fallback = '\\d+', indexer?: Indexer) {
+    const patterns = [indexer?.numeral_ruby?.regex, this.dic.numeral_ruby?.regex, fallback].filter(
+      Boolean,
+    )
     return patterns.length === 1 ? patterns[0]! : `(?:${patterns.join('|')})`
   }
 
@@ -3003,6 +3033,15 @@ export class FancyDate {
         }
         return `(閏?${number(undefined, this.dic.M)})`
       }
+      const rubyM = () => {
+        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const labels = [...new Set(this.dic.M.rubys.filter(Boolean))]
+          .sort((a, b) => b.length - a.length)
+          .map(escape)
+        const numberRuby = this.ruby_number_pattern(undefined, this.dic.M)
+        const value = labels.length ? `(?:${labels.join('|')}|${numberRuby})` : numberRuby
+        return `((?:うるう)?${value})`
+      }
 
       const object = { H, M, N, Q, Z, d, m, s }
 
@@ -3016,6 +3055,7 @@ export class FancyDate {
         const indexer: Indexer = this.dic[key]
         indexer.regex_o = strategy(indexer.list, indexer)
       }
+      this.dic.M.regex_r = rubyM()
     })()
 
     function strategy(list: readonly string[], indexer?: Indexer) {
@@ -4378,17 +4418,20 @@ K   = @dic.earthy[2] / 360
       if (token === 'da') continue
       const parts = format_token_parts(token)
       if (!parts) continue
-      const { top } = parts
+      const { top, mode } = parts
       const dic = this.dic[top]
       if (dic) {
-        if ('M' === top && '閏' === s[0]) {
-          data.M_is_leap = true
-          s = s.slice(1)
+        if ('M' === top) {
+          const leapMarker = mode === 'r' ? 'うるう' : '閏'
+          if (s.startsWith(leapMarker)) {
+            data.M_is_leap = true
+            s = s.slice(leapMarker.length)
+          }
         }
         if ('G' === top && s === this.dic.G.list[0]) {
           data.G_is_past = true
         }
-        data[top] = dic.to_idx(s)
+        data[top] = top === 'M' && mode === 'r' ? this.parse_month_ruby(s, dic) : dic.to_idx(s)
       }
     }
     if (dayPeriod != null) {
@@ -4455,7 +4498,7 @@ K   = @dic.earthy[2] / 360
           const prefix = past ? `(?:${escape_regex(past)}|-)?` : '-?'
           reg.push(`(${prefix}${this.number_pattern()})`)
         } else if (isLabelMode) {
-          reg.push(dic.regex_o)
+          reg.push(mode === 'r' && dic.regex_r ? dic.regex_r : dic.regex_o)
         } else {
           reg.push(dic.regex)
         }
