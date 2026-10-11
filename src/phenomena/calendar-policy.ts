@@ -151,6 +151,37 @@ export type LunisolarPrincipalTermLike = {
   at: number
 }
 
+/** A selected lunisolar month together with every principal term in its half-open interval. */
+export type LunisolarPrincipalTermMonthInput = LunisolarPhaseBoundary & {
+  principal_terms: readonly LunisolarPrincipalTermLike[]
+}
+
+/** Labels returned for the exact month input at the corresponding sequence position. */
+export type LunisolarPrincipalTermMonthAssignment = {
+  input: LunisolarPrincipalTermMonthInput
+  year: number
+  month: number
+  is_leap: boolean
+}
+
+export type LunisolarPrincipalTermYearContext = {
+  principalTermCount: number
+  yearOf(at: number): number
+}
+
+/**
+ * Assigns civil labels to the complete chronological month sequence for one
+ * lunisolar resolution. The sequence includes context months around the queried
+ * month and may span multiple calendar years because year boundaries are policy
+ * output. Results must be 1:1 and retain each input object at the same position.
+ */
+export type LunisolarPrincipalTermYearPolicy = {
+  assign(
+    months: readonly LunisolarPrincipalTermMonthInput[],
+    context: LunisolarPrincipalTermYearContext,
+  ): readonly LunisolarPrincipalTermMonthAssignment[]
+}
+
 export type PrincipalTermLunisolarMonth = LunisolarPhaseBoundary & {
   month: number
   is_leap: boolean
@@ -158,26 +189,36 @@ export type PrincipalTermLunisolarMonth = LunisolarPhaseBoundary & {
   principal_term?: LunisolarPrincipalTermLike
 }
 
-export class PrincipalTermLunisolarPolicy {
-  constructor(
-    private readonly resolvePrincipalTerm: (
-      boundary: LunisolarPhaseBoundary,
-    ) => LunisolarPrincipalTermLike | undefined,
-    private readonly yearOf: (at: number) => number,
-  ) {}
+/**
+ * Default assignment for calendars with at most one principal term per month.
+ * Months containing multiple terms need an explicit calendar-specific policy.
+ */
+export class DefaultLunisolarPrincipalTermYearPolicy implements LunisolarPrincipalTermYearPolicy {
+  constructor(private readonly yearOf: (at: number) => number) {}
 
-  assign(boundaries: readonly LunisolarPhaseBoundary[]): PrincipalTermLunisolarMonth[] {
-    const assigned = boundaries.map((boundary) => ({
-      ...boundary,
+  assign(
+    months: readonly LunisolarPrincipalTermMonthInput[],
+    _context: LunisolarPrincipalTermYearContext,
+  ): LunisolarPrincipalTermMonthAssignment[] {
+    if (months.some(({ principal_terms }) => principal_terms.length > 1)) {
+      throw new Error(
+        'multiple principal terms in one lunisolar month require a custom year assignment policy',
+      )
+    }
+
+    const assigned = months.map((input) => ({
+      input,
       month: NaN,
       is_leap: false,
       year: NaN,
-      principal_term: this.resolvePrincipalTerm(boundary),
     }))
+    if (assigned.length === 0) return assigned
+
     let month = NaN
     for (const item of assigned) {
-      if (item.principal_term) {
-        month = item.principal_term.month
+      const principalTerm = item.input.principal_terms[0]
+      if (principalTerm) {
+        month = principalTerm.month
         item.month = month
         item.is_leap = false
       } else {
@@ -191,8 +232,8 @@ export class PrincipalTermLunisolarPolicy {
       let previousMonth = assigned[firstAssignedIndex].month
       for (let index = firstAssignedIndex - 1; 0 <= index; index--) {
         const item = assigned[index]
-        if (item.principal_term) {
-          previousMonth = item.principal_term.month
+        if (item.input.principal_terms[0]) {
+          previousMonth = item.input.principal_terms[0].month
           item.month = previousMonth
           item.is_leap = false
         } else {
@@ -204,23 +245,64 @@ export class PrincipalTermLunisolarPolicy {
 
     const firstMonthOneIndex = assigned.findIndex(({ month, is_leap }) => month === 1 && !is_leap)
     if (firstMonthOneIndex < 0) {
-      const year = this.yearOf(assigned[0].last_at)
+      const year = this.yearOf(assigned[0].input.last_at)
       for (const item of assigned) item.year = year
       return assigned
     }
 
-    let year = this.yearOf(assigned[firstMonthOneIndex].last_at)
+    let year = this.yearOf(assigned[firstMonthOneIndex].input.last_at)
     for (let index = 0; index < firstMonthOneIndex; index++) {
       assigned[index].year = year - 1
     }
     for (let index = firstMonthOneIndex; index < assigned.length; index++) {
       const item = assigned[index]
       if (item.month === 1 && !item.is_leap) {
-        year = this.yearOf(item.last_at)
+        year = this.yearOf(item.input.last_at)
       }
       item.year = year
     }
     return assigned
+  }
+}
+
+/**
+ * Compatibility adapter for the former per-boundary, single-term resolver API.
+ * New lunisolar resolution uses LunisolarPrincipalTermYearPolicy instead.
+ */
+export class PrincipalTermLunisolarPolicy {
+  constructor(
+    private readonly resolvePrincipalTerm: (
+      boundary: LunisolarPhaseBoundary,
+    ) => LunisolarPrincipalTermLike | undefined,
+    private readonly yearOf: (at: number) => number,
+  ) {}
+
+  assign(boundaries: readonly LunisolarPhaseBoundary[]): PrincipalTermLunisolarMonth[] {
+    const months = boundaries.map((boundary) => {
+      const principalTerm = this.resolvePrincipalTerm(boundary)
+      return {
+        ...boundary,
+        principal_terms: principalTerm ? [principalTerm] : [],
+      }
+    })
+    const principalTermCount = months.reduce(
+      (count, { principal_terms }) => Math.max(count, principal_terms[0]?.month ?? 0),
+      1,
+    )
+    const assigned = new DefaultLunisolarPrincipalTermYearPolicy(this.yearOf).assign(months, {
+      principalTermCount,
+      yearOf: this.yearOf,
+    })
+    return assigned.map(({ input, month, is_leap, year }) => {
+      const { principal_terms, ...boundary } = input
+      return {
+        ...boundary,
+        month,
+        is_leap,
+        year,
+        principal_term: principal_terms[0],
+      }
+    })
   }
 }
 

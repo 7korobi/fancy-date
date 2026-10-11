@@ -26,6 +26,7 @@ import type {
   HourDivisionInput,
   HourDivisionPolicy,
   LunisolarBoundaryPolicy,
+  LunisolarPrincipalTermYearPolicy,
 } from './phenomena/calendar-policy'
 import { thai_lunisolar as resolveThaiLunisolar } from './phenomena/thai-lunisolar'
 import type { ThaiLunisolarDate, ThaiLunisolarOptions } from './phenomena/thai-lunisolar'
@@ -133,6 +134,7 @@ export type {
   LunarPhaseEvent,
   LunarPhaseEventResolver,
   LunisolarDate,
+  LunisolarOptions,
   LunisolarPrincipalTerm,
 } from './phenomena/lunisolar'
 export type {
@@ -157,6 +159,10 @@ export type {
   LunisolarBoundarySource,
   LunisolarPhaseBoundary,
   LunisolarMonthLengthPolicy,
+  LunisolarPrincipalTermMonthAssignment,
+  LunisolarPrincipalTermMonthInput,
+  LunisolarPrincipalTermYearContext,
+  LunisolarPrincipalTermYearPolicy,
   FeastDate,
   FeastKind,
   FeastPolicy,
@@ -167,6 +173,7 @@ export type {
 export {
   normalizeDayBoundaryPolicy,
   normalizeHourDivisionPolicy,
+  DefaultLunisolarPrincipalTermYearPolicy,
   PeriodicCalendarYearPolicy,
   PrincipalTermLunisolarPolicy,
 } from './phenomena/calendar-policy'
@@ -679,6 +686,7 @@ type IDIC = IIDX & {
   observed_lunisolar?: boolean
   observed_lunisolar_boundary_policy?: LunisolarBoundaryPolicy
   observed_lunisolar_boundary_tolerance_msec?: number
+  observed_lunisolar_year_assignment_policy?: LunisolarPrincipalTermYearPolicy
   observed_lunisolar_solar_year?: LunisolarYearResolver
   month_notation?: MonthNotationOptions
   lunarPhase?: LunarPhaseEventModel
@@ -692,6 +700,8 @@ export type ObservedLunisolarOptions = {
   solarYear?: LunisolarYearResolver
   boundaryPolicy?: LunisolarBoundaryPolicy
   boundaryToleranceMsec?: number
+  /** Required when any selected month contains multiple principal terms. */
+  yearAssignmentPolicy?: LunisolarPrincipalTermYearPolicy
 }
 type LocaleNumeralRef = Numeral | NumeralPurpose | null | undefined
 export type LocaleApplyOptions = {
@@ -1321,6 +1331,8 @@ export class FancyDate {
       enabled && typeof options === 'object' ? options.boundaryPolicy : undefined
     this.dic.observed_lunisolar_boundary_tolerance_msec =
       enabled && typeof options === 'object' ? options.boundaryToleranceMsec : undefined
+    this.dic.observed_lunisolar_year_assignment_policy =
+      enabled && typeof options === 'object' ? options.yearAssignmentPolicy : undefined
     this._lunisolar_cache.length = 0
     return this
   }
@@ -1856,6 +1868,7 @@ export class FancyDate {
             : 'mean',
         boundaryPolicy: this.dic.observed_lunisolar_boundary_policy,
         boundaryToleranceMsec: this.dic.observed_lunisolar_boundary_tolerance_msec,
+        yearAssignmentPolicy: this.dic.observed_lunisolar_year_assignment_policy,
         solarYear:
           this.dic.observed_lunisolar_solar_year ??
           (this.dic.observed_lunisolar

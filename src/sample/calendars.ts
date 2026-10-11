@@ -1,5 +1,10 @@
-import { FancyDate, tithi, transformOrbital } from '../fancy-date'
-import type { PLANET, SATELLITE } from '../fancy-date'
+import {
+  DefaultLunisolarPrincipalTermYearPolicy,
+  FancyDate,
+  tithi,
+  transformOrbital,
+} from '../fancy-date'
+import type { LunisolarPrincipalTermYearPolicy, PLANET, SATELLITE } from '../fancy-date'
 import { getLocale } from '../locale-registry'
 import { english, jpn, old_jpn, roman, sanskrit, sizewise } from '../number'
 import { localTimezoneDeg } from '../time'
@@ -82,6 +87,50 @@ const commonNotation: Parameters<FancyDate['notation']>[0] = {
 
 const baseCalendar = (c: FancyDate) => c.notation(commonNotation)
 
+/**
+ * 旧来の定気法表示を保つ明示的な暦固有policy。
+ * 同じ月に複数termがある場合は、phase index の小さいtermを選び、同じindexの反復分は
+ * 月相境界のsource中央に最も近いものを使う。全イベント自体は元の入力配列に保持する。
+ */
+const phaseIndexCompatibilityYearPolicy: LunisolarPrincipalTermYearPolicy = {
+  assign(months, context) {
+    const compatibilityMonths = months.map((input) => {
+      const referenceAt = (input.source_at + input.next_source_at) / 2
+      const principalTerm = [...input.principal_terms].sort(
+        (a, b) =>
+          a.index - b.index ||
+          Math.abs(a.at - referenceAt) - Math.abs(b.at - referenceAt) ||
+          a.at - b.at,
+      )[0]
+      return {
+        ...input,
+        principal_terms: principalTerm ? [principalTerm] : [],
+      }
+    })
+    const assigned = new DefaultLunisolarPrincipalTermYearPolicy(context.yearOf).assign(
+      compatibilityMonths,
+      context,
+    )
+    return assigned.map(({ year, month, is_leap }, index) => ({
+      input: months[index],
+      year,
+      month,
+      is_leap,
+    }))
+  },
+}
+
+const phaseIndexCompatibilityLunisolarOptions = (calendar: FancyDate) => {
+  const yearOf = (at: number) =>
+    new Date(
+      at + (24 * 60 * 60 * 1000 * (calendar.dic.geo[2] ?? calendar.dic.geo[1])) / 360,
+    ).getUTCFullYear()
+  return {
+    solarYear: yearOf,
+    yearAssignmentPolicy: phaseIndexCompatibilityYearPolicy,
+  }
+}
+
 const numericLabels = (length: number) => Array.from({ length }, (_, index) => `${index}`)
 
 const romanTemporalNotation: Parameters<FancyDate['notation']>[0] = {
@@ -104,7 +153,9 @@ const g = new FancyDate((c) => gregorianBase(c).spot(...London))
 const UTC = g
 const Gregorian = new FancyDate(g, (c) => c.spot(...東京))
 
-const GregorianAstronomical = new FancyDate(g, (c) => c.spot(...天文東京))
+const GregorianAstronomical = new FancyDate(g, (c) =>
+  c.spot(...天文東京).observedLunisolar(phaseIndexCompatibilityLunisolarOptions(c)),
+)
 
 /**
  * LocalGregorian: ブラウザ(実行環境)のタイムゾーンを反映した「現地グレゴリオ暦」。
@@ -239,7 +290,10 @@ const タイ太陰太陽暦天文 = new FancyDate(アマンタ, (c) =>
     .spot(天文月, Bangkok[1], Bangkok[2], Bangkok[3])
     .era('พ.ศ.', 'ก่อน พ.ศ.')
     .calendar(['2512-11-24', 'y-M-d', 0])
-    .observedLunisolar({ solarYear: thai_lunar_buddhist_year })
+    .observedLunisolar({
+      solarYear: thai_lunar_buddhist_year,
+      yearAssignmentPolicy: phaseIndexCompatibilityYearPolicy,
+    })
     .notation({
       M: [タイ太陰月名, タイ太陰月名RTGS],
     }),
@@ -302,6 +356,7 @@ const 定気法 = new FancyDate((c) =>
   baseCalendar(c)
     .lang('Gy年Mod日', 'Gy年Mod日(R6)Homo')
     .spot(...天文東京)
+    .observedLunisolar(phaseIndexCompatibilityLunisolarOptions(c))
     .era(ja.G.current, ja.G.past, ja.G.eras)
     // 年干支(yC)が平気法の同一起点(皇紀2629年=西暦1969年)と1年ずれていた
     // (戊申=1968年の干支。1969年の正しい年干支は己酉で、平気法側の
@@ -479,7 +534,9 @@ const Jupiter = new FancyDate((c) =>
     }),
 )
 
-const JupiterObserved = new FancyDate(Jupiter, (c) => c.observedLunisolar())
+const JupiterObserved = new FancyDate(Jupiter, (c) =>
+  c.observedLunisolar({ yearAssignmentPolicy: phaseIndexCompatibilityYearPolicy }),
+)
 
 /** 創作赤星太陰太陽暦: 楕円軌道の創作惑星とその楕円軌道衛星を使った太陰太陽暦。
  *
@@ -496,7 +553,10 @@ const 創作赤星太陰太陽暦 = new FancyDate((c) =>
     .dayStart('midnight')
     .era('赤星暦', '赤星前')
     .calendar(['1年1月1日', 'y年M月d日', 0])
-    .observedLunisolar({ boundaryPolicy: 'constrained-nominal' })
+    .observedLunisolar({
+      boundaryPolicy: 'constrained-nominal',
+      yearAssignmentPolicy: phaseIndexCompatibilityYearPolicy,
+    })
     .init(),
 )
 

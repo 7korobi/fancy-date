@@ -1,5 +1,6 @@
 require('../lib/sample')
 const { Calendar } = require('../lib/sample')
+const { FancyDate } = require('../lib/fancy-date')
 const { to_msec } = require('../lib/time')
 
 /**
@@ -148,5 +149,38 @@ describe('_lunisolar_cache tuning history (performance spec)', () => {
       for (const utc of zigzag) g.to_tempos(utc)
     })
     expect(revisitResolves).toBe(0)
+  })
+})
+
+describe('lunisolar year assignment policy cache invalidation', () => {
+  test('observedLunisolar clears cached dates when the assignment policy changes', () => {
+    const calendar = new FancyDate(Calendar.GregorianAstronomical)
+    const utc = Calendar.Gregorian.parse('2024年3月10日')
+    const policyCalls = [0, 0]
+    const policy = (slot) => ({
+      assign(months, { principalTermCount }) {
+        policyCalls[slot]++
+        expect(months.every(({ principal_terms }) => Array.isArray(principal_terms))).toBe(true)
+        return months.map((input, index) => ({
+          input,
+          year: 2000 + Math.floor(index / principalTermCount),
+          month: (index % principalTermCount) + 1,
+          is_leap: false,
+        }))
+      },
+    })
+
+    calendar.lunisolar(utc)
+    expect(calendar._lunisolar_cache).toHaveLength(1)
+
+    calendar.observedLunisolar({ yearAssignmentPolicy: policy(0) })
+    expect(calendar._lunisolar_cache).toHaveLength(0)
+    calendar.lunisolar(utc)
+    expect(policyCalls[0]).toBe(1)
+
+    calendar.observedLunisolar({ yearAssignmentPolicy: policy(1) })
+    expect(calendar._lunisolar_cache).toHaveLength(0)
+    calendar.lunisolar(utc)
+    expect(policyCalls).toEqual([1, 1])
   })
 })

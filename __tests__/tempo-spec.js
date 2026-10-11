@@ -914,6 +914,7 @@ describe('ObservedLunisolarMonthRule', () => {
     geo: g.dic.geo,
     dayMsec: g.calc.msec.day,
     dayZero: g.calc.zero.day,
+    yearAssignmentPolicy: g.dic.observed_lunisolar_year_assignment_policy,
     lunarPhase: (phase, near) => g.lunar_phase(phase, near),
     solarPhase: (phase, near) => g.solar_phase(phase, near),
   }

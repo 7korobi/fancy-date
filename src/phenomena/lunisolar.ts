@@ -4,7 +4,11 @@ import type {
   OrbitalModel,
   TIMEZONE,
 } from '../orbital-model'
-import { PrincipalTermLunisolarPolicy } from './calendar-policy'
+import {
+  DefaultLunisolarPrincipalTermYearPolicy,
+  type LunisolarPrincipalTermMonthInput,
+  type LunisolarPrincipalTermYearPolicy,
+} from './calendar-policy'
 import type {
   ConstrainedNominalOptions,
   ConstrainedNominalScore,
@@ -48,9 +52,12 @@ export type LunisolarDate = {
   next_at: number
   new_moon_at: number
   next_new_moon_at: number
+  /** All principal terms in this month, ordered by time and then phase index. */
+  principal_terms: readonly LunisolarPrincipalTerm[]
   boundary_ambiguous?: boolean
   boundary_selection?: LunisolarBoundarySelection
   boundary_selection_summary?: LunisolarBoundarySelectionSummary
+  /** Compatibility view of the first time-ordered term; use principal_terms for all terms. */
   principal_term?: LunisolarPrincipalTerm
 }
 
@@ -125,6 +132,8 @@ export type LunisolarOptions = {
   moony?: OrbitalModel
   solarPeriodMsec?: number
   principalTermCount?: number
+  /** Required when any month contains multiple principal terms. */
+  yearAssignmentPolicy?: LunisolarPrincipalTermYearPolicy
   solarYear?: YearResolver
   boundarySource?: LunisolarBoundarySource
   boundaryPolicy?: LunisolarBoundaryPolicy
@@ -188,25 +197,61 @@ export function lunisolar(options: LunisolarOptions, utc: number): LunisolarDate
 }
 
 function lunisolar_months_around(options: LunisolarOptions, utc: number): LunisolarMonth[] {
+  const principalTermCount = options.principalTermCount ?? 12
+  if (!Number.isInteger(principalTermCount) || principalTermCount <= 0) {
+    throw new Error(`invalid principal term count ${principalTermCount}`)
+  }
   const boundaries = lunisolar_boundaries_around(options, utc)
+  const months: LunisolarPrincipalTermMonthInput[] = boundaries.map((boundary) => ({
+    ...boundary,
+    principal_terms: lunisolar_principal_terms(options, boundary, principalTermCount),
+  }))
   const yearOf = (at: number) =>
     options.solarYear?.(at) ?? new Date(at + local_timezone_msec(options)).getUTCFullYear()
-  const policy = new PrincipalTermLunisolarPolicy(
-    (boundary) => lunisolar_principal_term(options, boundary),
-    yearOf,
-  )
-  return policy.assign(boundaries).map((item) => ({
-    month: item.month,
-    is_leap: item.is_leap,
-    year: item.year,
-    last_at: item.last_at,
-    next_at: item.next_at,
-    new_moon_at: item.source_at,
-    next_new_moon_at: item.next_source_at,
-    boundary_ambiguous: item.boundary_ambiguous,
-    boundary_selection: item.boundary_selection,
-    boundary_selection_summary: item.boundary_selection_summary,
-    principal_term: item.principal_term,
+  const policy = options.yearAssignmentPolicy ?? new DefaultLunisolarPrincipalTermYearPolicy(yearOf)
+  const assignments = policy.assign(months, { principalTermCount, yearOf })
+  if (!Array.isArray(assignments)) {
+    throw new Error('lunisolar year assignment policy must return an array')
+  }
+  if (assignments.length !== months.length) {
+    throw new Error(
+      `lunisolar year assignment policy returned ${assignments.length} labels for ${months.length} months`,
+    )
+  }
+  for (let index = 0; index < assignments.length; index++) {
+    const assignment = assignments[index]
+    if (!assignment || assignment.input !== months[index]) {
+      throw new Error(
+        `lunisolar year assignment policy input identity/order mismatch at index ${index}`,
+      )
+    }
+    if (!Number.isInteger(assignment.year)) {
+      throw new Error(`invalid lunisolar year label at index ${index}`)
+    }
+    if (
+      !Number.isInteger(assignment.month) ||
+      assignment.month < 1 ||
+      principalTermCount < assignment.month
+    ) {
+      throw new Error(`invalid lunisolar month label at index ${index}`)
+    }
+    if (typeof assignment.is_leap !== 'boolean') {
+      throw new Error(`invalid lunisolar leap-month label at index ${index}`)
+    }
+  }
+  return assignments.map(({ input, year, month, is_leap }) => ({
+    month,
+    is_leap,
+    year,
+    last_at: input.last_at,
+    next_at: input.next_at,
+    new_moon_at: input.source_at,
+    next_new_moon_at: input.next_source_at,
+    boundary_ambiguous: input.boundary_ambiguous,
+    boundary_selection: input.boundary_selection,
+    boundary_selection_summary: input.boundary_selection_summary,
+    principal_terms: input.principal_terms,
+    principal_term: input.principal_terms[0],
   }))
 }
 
@@ -714,30 +759,88 @@ function boundary_resolution_window_matches(
   return true
 }
 
-function lunisolar_principal_term(options: LunisolarOptions, boundary: LunisolarPhaseBoundary) {
-  const termCount = options.principalTermCount ?? 12
-  if (!Number.isInteger(termCount) || termCount <= 0) {
-    throw new Error(`invalid principal term count ${termCount}`)
-  }
-  const near = (boundary.source_at + boundary.next_source_at) / 2
+function lunisolar_principal_terms(
+  options: LunisolarOptions,
+  boundary: LunisolarPhaseBoundary,
+  termCount: number,
+): LunisolarPrincipalTerm[] {
   const startAt = boundary.last_at
   const nextAt = boundary.next_at
-  // principalTermCount は「月名を決める中気の数」。地球型なら12、木星・
-  // カリストのように1太陽年あたり約260朔望月ある暦では260にできる。
-  // 探索窓は lunisolar_month_window_counts() が月/年比率から広げ、ここでは
-  // その年を principalTermCount 等分した中気のうち、この月に入るものを探す。
-  for (let index = 0; index < termCount; index++) {
-    const at = options.solarPhase(index / termCount, near)
+  const lunarPeriodMsec = options.lunarSynodicPeriodMsec ?? options.moony?.periodMsec
+  const solarPeriodMsec = options.solarPeriodMsec ?? (lunarPeriodMsec ?? NaN) * 13
+  if (
+    !Number.isFinite(startAt) ||
+    !Number.isFinite(nextAt) ||
+    startAt > nextAt ||
+    !Number.isFinite(solarPeriodMsec) ||
+    solarPeriodMsec <= 0
+  ) {
+    throw new Error('invalid lunisolar principal-term interval')
+  }
+  if (startAt === nextAt) return []
+  const near = (boundary.source_at + boundary.next_source_at) / 2
+  const events: { term: LunisolarPrincipalTerm; order: number }[] = []
+  let order = 0
+  const add = (index: number, at: number) => {
     if (startAt <= at && at < nextAt) {
-      return {
-        index,
-        longitudeDeg: (index * 360) / termCount,
-        month: ((index + 1) % termCount) + 1,
-        at,
-      }
+      events.push({
+        term: {
+          index,
+          longitudeDeg: (index * 360) / termCount,
+          month: ((index + 1) % termCount) + 1,
+          at,
+        },
+        order: order++,
+      })
     }
   }
-  return undefined
+
+  // principalTermCount は「月名を決める中気の数」。地球型なら12、木星・
+  // カリストのように1太陽年あたり約260朔望月ある暦では260にできる。
+  // 1 interval が太陽周期未満なら各phaseは最大1回で、従来通り中央時刻から
+  // 1回だけ解く。太陽周期以上なら同じphaseの前後cycleも列挙する。
+  for (let index = 0; index < termCount; index++) {
+    const phase = index / termCount
+    let at = options.solarPhase(phase, near)
+    if (!Number.isFinite(at)) {
+      throw new Error(`invalid principal term time for phase ${index}`)
+    }
+    if (nextAt - startAt < solarPeriodMsec) {
+      add(index, at)
+      continue
+    }
+
+    if (at < startAt) {
+      while (at < startAt) {
+        const next = options.solarPhase(phase, at + solarPeriodMsec)
+        if (!Number.isFinite(next) || next <= at) {
+          throw new Error(`solar phase failed to advance for principal term ${index}`)
+        }
+        at = next
+      }
+    } else {
+      while (true) {
+        const previous = options.solarPhase(phase, at - solarPeriodMsec)
+        if (!Number.isFinite(previous) || previous >= at) {
+          throw new Error(`solar phase failed to retreat for principal term ${index}`)
+        }
+        if (previous < startAt) break
+        at = previous
+      }
+    }
+    while (at < nextAt) {
+      add(index, at)
+      const next = options.solarPhase(phase, at + solarPeriodMsec)
+      if (!Number.isFinite(next) || next <= at) {
+        throw new Error(`solar phase failed to advance for principal term ${index}`)
+      }
+      at = next
+    }
+  }
+
+  return events
+    .sort((a, b) => a.term.at - b.term.at || a.term.index - b.term.index || a.order - b.order)
+    .map(({ term }) => term)
 }
 
 function local_timezone_msec({ dayMsec, geo }: LunisolarOptions) {
