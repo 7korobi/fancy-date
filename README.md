@@ -83,7 +83,7 @@ Calendar.Julian.format(nabonassar, 'y年M月d日')
 
 ### span / add / sub
 
-`span([from, to])` は相対表現を返す。`span_obj()` は再適用可能な `Span` (差分mapと `label`、`next_at`、`timeout`)を返す。周期・暦注tokenを `precise` に指定した場合だけは、加算不能な `SpanMeasure` を返す。`span_msec()` は anchor 付き `Span` を実ミリ秒へ戻す。
+`span([from, to])` は相対表現を返す。`span_obj()` は再適用可能な `Span` (差分mapと `label`、`next_at`、`timeout`)を返す。周期・暦注tokenを `precise` に指定した場合だけは、加算不能な `SpanMeasure` を返す。`span_msec()` はspan内部のanchor、または `{ at }` で指定した基準時刻から暦演算して、実際のミリ秒差を返す。
 
 ```ts
 const from = g.parse('2024年1月1日 0時0分0秒', 'y年M月d日 H時m分s秒')

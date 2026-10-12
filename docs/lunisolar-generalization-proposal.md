@@ -1,8 +1,10 @@
 # 太陽太陰暦アルゴリズム一般化 仕様案
 
-Status: proposal
+Status: partially implemented; the full design and several policy decisions remain proposals.
 
 この文書は、今回追加したタイ暦公式規則を出発点に、平均太陰太陽暦・観測太陰太陽暦・地域固有の官暦を同じ基盤で扱うための仕様案である。直ちに全アルゴリズムを書き換えるための確定仕様ではなく、境界を先に固定するための設計文書とする。
+
+朔境界候補の選択、月長制約、辞書順score、曖昧性情報、探索窓の安定性確認に加え、選択後の探索窓全体から principal-term occurrence を列挙して月へ partition し、context 月を含む連続月列と各月の全 `principal_terms` を受ける `LunisolarPrincipalTermYearPolicy` による割当も実装済みである。相対黄経から朔望位相を解く `RelativeLunarPhaseEventModel`、年/月policy、日界、day assignment、note/feast policyも一部の暦で実装されている。複数中気の汎用的な保持・引き渡しは実装済みだが、どの `year/month/is_leap` に割り当てるかは普遍規則がなく、暦固有のpolicy選択が必要である。公式表・歴史的override・地域・宗派差も未解決であり、本文の全受入条件を満たしたことはまだ確認できていない。細かな実装記録は [development-notes.md](development-notes.md) と [multiple-principal-terms.md](multiple-principal-terms.md) を参照。
 
 ## 1. 目的と非目的
 
@@ -41,7 +43,7 @@ type LunisolarBoundary = {
 `LunisolarBoundary` は `last_at`/`next_at` と天文由来のsource metadataを持つ、月番号付与前の境界候補である。
 ```
 
-Policy の責務は以下である。
+初期の境界単位policy案では、責務を以下のように想定していた。
 
 - `yearOf(context, boundary)` による暦年の決定。
 - `monthOf(context, boundary)` による月番号の決定。
@@ -51,11 +53,11 @@ Policy の責務は以下である。
 
 月境界の生成と policy を一つの関数に閉じ込めず、同じ天文結果に複数の地域 policy を適用できる形を目標にする。
 
-この境界形状は `src/phenomena/calendar-policy.ts` に置き、Phase 4で`PrincipalTermLunisolarPolicy`へ接続した。初期に検討した汎用契約は実装形状と一致しなかったため公開面へ持ち込まず、現在は境界生成と中気による割り当てを担うpolicyを正本とする。
+上の境界形状とmethod listは初期案であり、現在の principal-term assignment API ではない。Phase 4の実装では、選択済み境界の全月と各月の全 `principal_terms` を連続列として `LunisolarPrincipalTermYearPolicy` に渡す。旧 `PrincipalTermLunisolarPolicy` は per-boundary/single-term API の互換 adapter であり、新しい計算経路の year-policy contract ではない。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
 
 Phase 3では `PeriodicCalendarYearPolicy` を Gregorian/Julian の既存年表へ接続する。これは閏年の年構造だけをpolicy化する最初の実装であり、月境界や太陰太陽暦のpolicyは後続Phaseで分離する。
 
-Phase 4では、平均・観測太陰太陽暦の朔望月境界列を先に生成し、その列へ`PrincipalTermLunisolarPolicy`を適用する。中気による月番号・閏月・年番号の割り当てを境界生成から分離する。PrincipalTerm入力は`LunisolarPhaseBoundary`として`source_at`／`next_source_at`を必須にし、tableなどsource phaseを持たない境界候補とは型を分ける。既存の`LunisolarDate`へ返す結果形状は維持する。
+Phase 4の現行実装では、平均・観測太陰太陽暦の境界選択と安定性確認後、探索窓全体の principal-term occurrence を列挙し、各月の `[last_at, next_at)`（始点を含み、終点を含まない）へ partition する。全イベントを `principal_terms` として保持し、同じ phase index でも別 cycle の occurrence は別件で残す。context 月を含む連続月列と全 `principal_terms` を `LunisolarPrincipalTermYearPolicy` に渡し、各月の `year/month/is_leap` を割り当てる。複数イベントに対する普遍規則はないため、該当暦の policy が決める。旧 `PrincipalTermLunisolarPolicy` は per-boundary/single-term API の互換 adapter、既存の `LunisolarDate.principal_term` は時刻順で最初のイベントを返す互換 view である。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
 
 Phase 5では、Thaiの固定年長・固定月配置・閏日/閏月判定を`ThaiModernLunisolarYearPolicy`へ接続する。これはPrincipalTerm policyとは異なる表/規則policyだが、`CalendarYearPolicy`の共通契約を使う。天文月境界からThaiの月を推論することはせず、Thai policyが解決したyear layoutを日付投影へ使う。
 
@@ -202,6 +204,10 @@ maxDays = max(minDays, ceil(deltaMax / dayMsec))
 `fixed-range` は暦法が独自に許す月長を指定する。イベント由来範囲も計算できる場合は
 両範囲の共通部分を使い、共通部分が空なら設定矛盾として例外にする。地球の29/30日を
 他天体へ暗黙適用してはならない。架空天体の既定は `event-derived` とする。
+
+現行実装は `event-derived` と `fixed-range` の両方を選べるが、`fixed-range` 指定時に
+event-derived 範囲との共通部分を取る動作は未実装である。現在は指定された固定範囲を
+そのままhard constraintとして使う。
 
 年の月数は `principalTermCount` と中気policyから導き、12/13月を共通hard constraint
 にはしない。暦固有に通常年・閏年の月数を固定したい場合だけyear policy側に置く。
@@ -351,6 +357,12 @@ relativePhase(at) = mod((moonLongitude(at) - sunLongitude(at)) / 360, 1)
 1msを超えうるため、実際には `max(1ms, ulp(bracketStart), ulp(bracketEnd))` を使う。
 反復回数上限へ達しただけで中央時刻を成功値として返してはならない。
 
+`LunarPhaseEventModel` と `RelativeLunarPhaseEventModel` は実装済みである。相対モデルは
+既定64分割のscanに加えて予測bracketを先に検証し、bracket付き二分法で根を絞る。
+ただし、同じ基準面・黄経原点という前提は型だけでは検証されず、複数rootの最寄りが
+同距離の場合の曖昧性エラーや、反復上限時のbracket幅保証も現行実装では保証しない。
+この節の強い一意性・収束条件は、コードの現状説明ではなく未完了の設計要件として扱う。
+
 順行・同一方向の円軌道で周期が既知なら、初期推定は
 `1 / P_syn = abs(1 / P_moon - 1 / P_year)` を使える。創作赤星の88日衛星・
 730.5日太陽年なら平均朔望周期は約100.05日であり、88日を朔望周期として使わない。
@@ -366,19 +378,18 @@ relativePhase(at) = mod((moonLongitude(at) - sunLongitude(at)) / 360, 1)
 - `phaseAt()` と `timeOfPhase()` が逆関数でない `EarthMoonOrbital` に汎用root探索を
   誤適用しない。
 
-### 3.7 実装順と完了条件
+### 3.7 実装状況と完了条件
 
-上記は 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6 の順で実装する。3.2は現行実装の
-内部不整合修正、3.3〜3.5はcivil projectionの完成、3.6は創作天体で入力される
-「朔」自体の意味を正す変更である。3.6完了前の創作赤星サンプルは
-`constrained-nominal` の境界選択例ではあっても、太陽相対朔による完成した
-太陰太陽暦とは呼ばない。
+- 3.2の選択済み境界への中気割り当て、全探索窓のprincipal-term列挙・半開区間partition・`LunisolarPrincipalTermYearPolicy` による全イベント割当と、3.3〜3.5の候補制約・辞書順score・tie-break・曖昧性情報・探索窓安定性確認は `src/phenomena/lunisolar.ts` に実装済み。割当契約の詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
+- 低レベル `LunisolarOptions.solarPeriodMsec` は必須の有限・正値で、`solarPhase` と同じ resolver の権威ある cycle-scale period である。`timeOfPhase(phase, t ± P)` は直前・直後の同じ phase occurrence を返し、その間の phase は単調にちょうど一周する。`lunarPeriodMsec * 13` fallback はなく、`FancyDate` は sunny model の `periodMsec` を渡す。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
+- 3.6の太陽相対月相モデルも実装済みだが、前節のとおり同一基準面のruntime検証、最寄りrootの同距離検出、反復上限時のbracket幅保証は未完了。
+- `lunisolar-fixture-spec.js` は候補選択、固定月長、tie-break、曖昧性などを、`fancy-date-spec.js` は創作衛星のsynodic periodと相対位相を検証する。本文の全受入条件、とくに窓・問い合わせ順・cache状態を変えた1000回以上の比較は専用テストで網羅されていない。
 
-完了条件は、全受入条件に加え、同じ月を窓・query順・cache状態を変えて1000回以上
-比較して境界差分0件、全月で `last_at < next_at`、隣接月で
-`current.next_at === next.last_at` が成立することとする。
+完了条件には、同じ月を窓・query順・cache状態を変えて1000回以上比較して境界差分0件となること、全月で `last_at < next_at`、隣接月で
+`current.next_at === next.last_at` が成立することも含む。
 
-日界は天文層と独立した policy option にする。
+日界は天文層と独立したpolicyとして実装されている。`.dayStart('sunrise' | 'sunset')` と
+`.dayBoundary(offsetHours)` は別の境界方式であり、後者はd/Nの構築規則に固定offsetを適用する。
 
 - `midnight`: 固定タイムゾーンの現地0時。
 - `sunrise`: 実際の日の出。
@@ -396,11 +407,11 @@ relativePhase(at) = mod((moonLongitude(at) - sunLongitude(at)) / 360, 1)
 - `phaseDirection`: 増加方向。
 - `solarYearModel`: 平均周期、実軌道周期、外部表のいずれか。
 
-一つの朔望月に複数の中気が入る場合は、最初の一つを黙って採用しない。policy が `multipleTerms: 'first' | 'last' | 'error' | 'split'` を選ぶ。中気がない月は、一般 policy では閏月候補になるが、タイ暦公式のような表方式ではその判定を使わない。
+選択済み境界の安定性確認後、探索窓全体の principal-term occurrence を列挙して各月の `[last_at, next_at)`（始点を含み、終点を含まない）へ partition し、全件を `principal_terms` に保持する。context 月を含む連続月列と各月の全イベントを `LunisolarPrincipalTermYearPolicy` に渡して `year/month/is_leap` を割り当てるため、汎用層で first/last を選んだり、error/split に分けたりする方式は取らない。同じ phase index でも別 cycle のイベントは別件として残る。複数イベントを月番号・閏月へ反映する普遍規則はないため、該当暦の policy が決める。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
 
 ## 5. 閏月と閏日
 
-閏月と閏日は、各暦の具体的なyear policyが返すmonth layoutの属性として扱う。未接続の汎用型は置かず、Thaiでは`ThaiModernLunisolarYearPolicy`、平均・観測系では`PrincipalTermLunisolarPolicy`の結果を利用する。
+閏月と閏日は、各暦のyear policyが返すmonth layoutの属性として扱う。中気を使う暦では `LunisolarPrincipalTermYearPolicy` がcontext月を含む連続月列と各月の全 `principal_terms` を受け取り、`year/month/is_leap` を割り当てる。複数中気を月番号・閏月へ反映する普遍規則はなく、該当暦のpolicyに残る判断である。`ThaiModernLunisolarYearPolicy` は表・規則policyであり、天文月の中気から月を推論しない。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
 
 同じ年に閏月と閏日を同時に許すか、閏日を閏月の年に限定するかも policy の明示項目にする。月の物理的長さを29.5日から丸める処理と、暦法上の加日を別にする。
 
@@ -476,8 +487,8 @@ type CalendarProvenance = {
 - 旧暦の歴史的改暦をどの年代境界で切り替えるか。
 - タイ暦の公式表と、地域・宗派・占星術上の別規則を同じ名前空間でどう表すか。
 - `8/8` のような表示専用別名を `notation()` の既存 list/ruby API へどう注入するか。
-- 日の出時点で tithi を割り当てるインド系暦のような、月境界とは別の day assignment をどの層へ置くか。
-- 複数中気、無中気、年初が太陽年の途中にある暦での `raw_year` の標準化。
+- `DayAssignmentPolicy` とtithiの日界時点への割り当ては実装済み。残る課題は、インド系暦を含む各地域・宗派の採用条件、欠日/重日や祭日規則をどこまで共通policy化し、どのようなDSLで表現するか。
+- 複数中気を含む全イベントの汎用引き渡しは実装済み。残るのは、各暦が複数中気・無中気を月番号・閏月へどう反映し、太陽年の途中に年初がある暦の `raw_year` をどう標準化するか。
 
 ## 11. Computus と宗教暦
 

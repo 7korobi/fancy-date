@@ -10,7 +10,8 @@ fancy-date の開発者向け検討メモ・調査結果・実装ログ。エン
 - 実装済み: 不断token・暦注tokenを `precise` に指定した `span_obj()` は、再適用不能な `SpanMeasure` (`precision/value/label`) を返す。`add()`/`sub()` は `SpanLike` に含まれないため受け付けない。「次の甲子日」などの探索は、周期差の加算ではなく別のfind系APIで扱う。
 - `find_span(at, condition, { order, base })` の契約: `order=1/-1/0` は未来/過去/実時刻差で近い側、`base='at'/'match'` はSpanの基準時刻。`find()` の一方向列挙とは分け、R6/LM27を含むラベル条件を日境界探索して通常のSpanへ変換する。
 - `span_sub({ dC60: '乙丑' }, { dC60: '甲子' })` は不断cycle限定のsymbolic変換。cycle上の順方向mod差を年cycle=`y`/日cycle=`d`へ割り当て、常に非負のanchorなしSpanを返す。`R6`/`LM27`/`Q`は非連続なのでinvalid。厳密な時刻差は`find_span()`の責務。`span_from_labels(token, from, to)`は互換wrapperとして残す。
-- 部分実装: span 同士の symbolic 演算は `span_neg()` / `span_add()` / `span_sub()` で実装済み。同じ token だけを相殺し、異なる token 間の繰り上げ・相殺はしない。残課題は、平均サイズによる lossy な `span_approx()`、anchor 時刻の実暦境界に基づく `span_normalize()`、cyclic token span をどこまで演算対象に含めるかの整理。
+- 実装済み: span 同士の象徴演算は `span_neg()` / `span_add()` / `span_sub()` で行う。同じ token だけを相殺し、異なる token 間の繰り上げ・相殺はしない。不断cycleラベルの差は `span_sub()` で日/年の代表Spanへ変換でき、非連続cycle・暦注ラベルは対象外。
+- 未実装: 平均サイズによる lossy な `span_approx()` と、anchor 時刻の実暦境界に基づく専用 `span_normalize()`。既存の `add()` / `span_obj()` / `span_msec()` で個別に計算できることと、専用APIがあることは区別する。
 - 採用済み token 命名: `dC<number>` は「日不断の number-cycle」、`yC<number>` は「年不断の number-cycle」を表す正本 token とする。干支系は `dC60/dC10/dC12`・`yC60/yC10/yC12` が正本で、既存の `dC/dCS/dCB`・`yC/yCS/yCB` と `A/C/B/a/c/b` は文化的 alias として残す。ルビは `dC60r` / `dC10r` / `dC12r` / `yC60r` など数値付き token に付く。同じ multi-character token registry で `Ha`=午前午後、`da`=paksha のような派生 token も扱える。
 - 周期・暦注 token 方針: 九星は `yC9`=年九星、`dC9`=日九星。`E` は一般的な weekday token として、暦ごとの週相当 cycle (`dC7` / `dC8` / `dC10`) を指す。二十八宿のような日不断の宿は `dC28`。六曜は天文現象や lunar mansion ではなく旧暦月日から決まる暦注なので、固有 token `R6`(rokuyo 6)にする。二十七宿は lunar mansion ではあるが日不断ではなく旧暦月日由来なので `LM27` とし、`dC28` と分ける。旧 `f/F/V` alias は廃止し、それぞれ `yC9` / `dC9` / `dC28` または `LM27` を明示する。これらは format/find 表示・検索条件には使うが、通常 parse では日時座標の決定に使わない。干支などの周期 token から候補日時を推定する用途は、parse ではなく将来の find/候補探索 API 拡張で扱う。
 - 今後の制約: multi-character token 追加時も、`format_parts()` の `{ token, text, ruby? }` 契約と「`text` 連結が `format()` と一致する」性質を維持する。
@@ -19,7 +20,7 @@ fancy-date の開発者向け検討メモ・調査結果・実装ログ。エン
 
 - `number.ts` には `DIC`/`Numeral` 基盤(`jpn`, `old_jpn`, `english`, `roman`, `angle`)が実装済み。appendix は呼び出し時引数ではなく構築時に一度だけ確定する方式へ変更し、`DIC` に `.語尾(tail)` という日本語専用の公開ファクトリを追加する設計は [numeral-design.md](numeral-design.md) に集約済み。
 - 「数詞体系・暦法・地域をまとめたものが暦」という整理に基づくバリエーション切り替えは、ロケール登録簿の設計でカタログ側は解決したが、`.spot()`(地域)側のバリエーション切り替えは未解決。
-- 日本語漢数字の文化的バリエーションでは、位取り表記 vs 桁列挙表記が実装候補。和暦の日付は「十三日」のように位取りで畳むが、西暦4桁年は「二〇二四年」のように桁列挙が自然な文脈がある。`jpn.漢字` は位取り式なので、`english`/`roman` と同様に `DIC` を継承しない桁ごとの薄い `Numeral` 実装(例: `jpn.桁読み`)を別途用意する余地がある。
+- 日本語漢数字の位取り表記と桁列挙表記は `jpn.漢字` / `jpn.桁読み` として実装済みで、`jaLocale.numerals.cardinalDigit` から選択できる。地域ごとの `.spot()` による数詞バリエーション切り替えは未解決。
 - 廿・卅・卌(合字)は、合字を使わない対抗ポジション(音便なしの `jpn.漢字` 相当)を並べる価値がある。一方、合字をさらに積極的に使う拡張は、体系的規則だった裏付けが薄いため見送るべき。
 - 調査したが日付表示には無関係と判断したもの: 大字(壱弐参…)は金銭・法的数量の慣習に限定され、日付そのものを大字で書く歴史的・現代的用例は見つからなかった。命数法の万進/万万進/上数、仏教由来超大数、四の字忌避、地域方言による漢数字表記も、暦日付表示の実装軸としては採用しない。
 
@@ -27,7 +28,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ### 暦法・天文モデルの拡張
 
-- インド系暦を本格対応する場合、日の出始まりの civil day 自体は `.dayStart('sunrise')` で表現できる。ただしヒンドゥー暦・パンチャーンガの実務では「日の出時点で存在する tithi をその日の日付/祭日に割り当てる」層が本体になる。必要な追加要素は、(1) tithi(月太陽離角12度ごとの30分割)・paksha(白分/黒分)・nakshatra/yoga/karana 等の位相トークン、(2) 日の出時点での tithi 採用、欠日(kshaya tithi)・重日(adhika/repeated tithi)の扱い、(3) amanta/purnimanta の月名方式、adhika masa/kshaya masa の月規則、(4) 太陽入宮(sankranti)による sidereal solar month と ayanamsha/黄道基準の選択、(5) 地域・宗派・祭日ごとの「前日/翌日採用」「日の出前後の持続条件」などの判定 DSL。単に `dayStart('sunrise')` を追加するだけでは不十分で、月相日を civil day へ投影する専用 rule/assignment 層が必要。
+- インド系暦・パンチャーンガは部分実装。`.dayStart('sunrise')` と `.assign({ d: tithi(moony) })` による tithi の日界時点への割り当て、`repeated` / `skipped` の判定、`panchanga()` の tithi/paksha/nakshatra/yoga/karana、amanta/purnimanta と tithi 版のサンプル暦がある。一方、これらは地域・宗派の暦法を一式実装したものではない。sidereal solar month・ayanamsha、暦ごとの adhika/kshaya masa 規則、地域・宗派・祭日ごとの採用条件DSLは未解決であり、`panchangaNotes()` の単純な条件照合とも区別する。
 - 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
 - 歴史的時刻表現として、定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。ローマ・ユリウス暦サンプルでは、H を horae temporariae、m を pars minuta として表示し、秒・ミリ秒は標準表示から外した。秒は内部精度としては残すが、古代/中世以前の生活時刻語彙として一般化しない。
 - 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。
@@ -42,11 +43,11 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - Proxy による `Calendar` 遅延化は、サンプル暦の即時 `.init()`/`new FancyDate()` を避ける効果が大きかった。一方、同期 API を保ったまま `astro.ts`/`eras.ts` の import 自体を遅延するのは難しく、そこまで必要ならサブパス分割や動的 import を別途検討する。
 - サブパス分割(`fancy-date/calendars/core` 等)は実効性があるが、現行の `Calendar.X` 集約アクセスを使い続ける限り恩恵はゼロ。消費側がサブパス import へ移行する非互換な変更が要る。将来、1〜数暦だけを使う利用者が現れた場合の候補として保留する。
 - svelte-tick-timer の `/fancy` ページは複数の重い暦を意図的に同時表示するデモなので、暦単位の遅延化をしても結局多くを使う。その用途への対処は `export const ssr = false` のままでよい。
+- 2026-10-12の同一条件比較（pre-window `bf95dc8` / window `266c07e`、Gregorian入力 `2024-03-20`、Jupiter入力 epoch `0`、warmup 10回、5サンプル×20 cold）では、cold中央値がGregorian `13.277169`→`1.267144 ms/call`（90.5%減）、Jupiter `2.361533`→`0.259615 ms/call`（89.0%減）。`solar_phase` 呼出数は `444`→`53`（88.1%減）、`138060`→`922`（99.33%減）。詳細は [perf-orbital-lunar.md](perf-orbital-lunar.md)。
 
-## 既知課題
+## 現在の制約・既知課題
 
-- 元号あり暦の anchor 表記規約: `calendar()` の anchor 文字列に `u` 年(era 調整前の通年 index)を使う場合、`parse()` でもその通年を正しく解釈できるようになった。`u` が `sub_tokens` に含まれていたため `parse_by()` 冒頭で `data.u` が `diff.u || 0` に上書きされ失われるのが真因だった。`u` を `main_tokens` へ移動し、`u` 指定時には `calc.eras` から実際の元号を特定して `era_relative_y` を計算、`parse_by()` の平均太陰太陽暦経路では `to_tempos()` の `u` 規則と同じ `EraAdjustedTempoRule` で年 envelope を解決することで、`format(parse(anchor_string)) === anchor_string` の round-trip を実現した。
-- `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dayStart('sunrise' | 'sunset')` とは違い、月頭の切り詰め区間は既知の例外として残る。
+- `dayBoundary()` は固定オフセットを d/N の構築規則だけに適用する。月・年境界まで丸める `dayStart('sunrise' | 'sunset')` とは別の仕様であり、月頭の切り詰め区間は残る。これは未修正バグではなく、固定オフセット方式と天文イベント方式の差である。
 
 ## 実装済み・検証済み
 
@@ -98,7 +99,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - `.dayStart('sunrise' | 'sunset')` は `SolarEventDayTempoRule` で実際の日の出/日の入を暦日境界にする。`dusk()` は `.dayStart('sunset')` の互換 alias。月・年の開始候補も `StartAlignedTempoRule` で「その後に最初に来る太陽イベント」へ丸め上げ、月初/年初直前の短い区間を前月末/前年末として扱う。これにより、月初の `d.succ()` と `add(..., '1日後')` の意味を一致させた。
 - `dayStart()` の d/N では、`CachedTempoRule` に `parent.last_at` を cacheKey として渡し、異なる月親で同じ write_at のキャッシュが混ざらないようにした。
 - `find_span_time()` は `month.last_at + dayIndex*msec.day` ではなく `resolve_day_start()` を使うようにした。`dayStart()`/`dayBoundary()` 暦で `add()`/`sub()` が1日早い日付を返す実バグを修正した。`SolarEventDayTempoRule` の `now_idx` は、親境界からの経過ミリ秒ではなく civil day index 差分で求める。日の出が前日より早くなる季節でも `d` が重複しないようにするため。
-- 非地球太陰太陽暦の足場として `.observedLunisolar()` を追加し、`JupiterObserved` サンプルを追加した。`lunisolar()` は `principalTermCount` を受け取り、地球型の12中気固定ではなく暦の月数(`M.length`)に合わせて月番号を割り当てられる。明示 opt-in した非地球暦では、年番号も地球の `Date#getUTCFullYear()` ではなく暦自身の太陽年座標から解決する。`observedLunisolar({ solarYear })` で暦固有の年解決関数を渡せる。現状は平均軌道の phase-resolved モデルであり、衛星の出没や摂動まで含む高精度モデルではない。
+- 非地球太陰太陽暦の足場として `.observedLunisolar()` と `JupiterObserved` を追加した。`lunisolar()` は `principalTermCount` を受け取り、暦の月数(`M.length`)に合わせて月番号を割り当てる。明示 opt-in した非地球暦では、年番号も地球の `Date#getUTCFullYear()` ではなく暦自身の太陽年座標から解決し、`observedLunisolar({ solarYear })` で年解決関数を渡せる。境界選択には `nominal` と `constrained-nominal` があり、後者は event-derived / fixed-range の月長制約、辞書順score、tie-break、曖昧性情報、探索窓の安定性確認を使う。`RelativeLunarPhaseEventModel` は惑星・衛星の相対黄経から朔望位相とsynodic periodを解き、創作衛星にも接続できる。これは共通黄経基準面を仮定したモデルで、三次元軌道や摂動まで含む高精度モデルではない。
 - タイ暦固有の規則を `thaiOfficialLunisolar()` として追加した。既存の `Calendar.タイ太陰太陽暦`(平均モデル)と `Calendar.タイ太陰太陽暦天文`(観測近似)は互換性のため変更せず、`Calendar.タイ太陰太陽暦公式`を別サンプルとして公開する。規則層は月相・中気から閏月を推測するのではなく、タイ暦の年型判定(通常354日、อธิกวาร 355日、อธิกมาส 384日)と、7月加日・8月重複の civil month table を使う。1903〜2460年は参照実装との検証範囲として回帰テストで固定し、2461年以後は最後の seed/anchor から同じ算術規則を proleptic に継続する。将来の政府公表年表を保証する official table モードではなく、既知のタイ固有規則を計算するモデルである。`thaiLunisolar()` は `year_type`、`is_intercalary_day`、`is_leap`(8/8)を返す。1903年未満は歴史的 seed/anchor の不足により引き続き拒否する。
 
 タイ暦の一般化仕様案は [lunisolar-generalization-proposal.md](lunisolar-generalization-proposal.md) に分離した。天文現象の生成、閏月・閏日の civil policy、年番号、日界、表示を別層にする方針で、今回の公式タイ暦はその最初の policy 実装に位置付ける。
@@ -106,8 +107,9 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 教会暦対応の第一段階として `src/phenomena/computus.ts` に Gregorian computus / Julian Paschalion と教会暦上の復活祭満月・復活祭・主要祝祭日の純粋計算を追加し、`src/sample/derived/church.ts` の `churchFeastDates()` / `churchFeastNotes()` で任意の市民暦へ変換する。`system`(Computusの伝統)と`calendarSystem`(CivilDateの表示先)を分離し、Julian系の復活祭をGregorian日付へ表示できる。教会暦上の月は`OrbitalModel`/`SATELLITE`として公開せず、必要なら将来内部の位相adapterを追加する。
 - 太陽太陰暦一般化のPhase 1として、`policy-regression-spec.js` に年/月/日/時刻区間の半開境界、階層包含、日/月送り、不定時法の単調性を追加した。Phase 2では `src/phenomena/calendar-policy.ts` に `CalendarYearPolicy`、`LunisolarBoundary`、`HourDivisionPolicy` などの型契約を追加し、公開barrelへ再exportした。まだ既存の計算経路へ接続せず、型と回帰specを先に固定する段階である。
 - 太陽太陰暦一般化のPhase 3として、`PeriodicCalendarYearPolicy` を追加し、Gregorianの`[4,100,400]`・Julianの`[4]`を既存の `def_year_table()` へ接続した。`leap_shift` を含む旧周期解釈と同値であることを専用specで固定し、年構造policyだけを実経路へ差し替えた。月表・太陰太陽暦境界・日界・Hour policyの接続は後続Phaseに残している。
-- 太陽太陰暦一般化のPhase 4として、`lunisolar_boundaries_around()` が朔望月境界列だけを生成し、`PrincipalTermLunisolarPolicy` が中気から月番号・閏月・年番号を付与する構造へ分離した。既存の`LunisolarDate`の公開形状は維持し、境界の`source_kind`/source phase metadataは内部policy結果に限定している。NAOJ fixtureとTempo/Thai回帰は無修正で通過している。
-- 太陽太陰暦一般化のPhase 5として、`ThaiModernLunisolarYearPolicy` を追加し、Thaiの通常年・`อธิกวาร`・`อธิกมาส`の年型と月配置を共有 `CalendarYearPolicy` 契約へ接続した。既存のseed/偏差計算と`ThaiLunisolarDate`の公開結果は維持し、日付resolverの月配置だけをpolicy結果から構築する。Thai固有policyと一般のPrincipalTerm policyは同じ契約層にあるが、月境界生成の方式は混同しない。
+- 太陽太陰暦一般化のPhase 4として、`lunisolar_boundaries_around()` が朔望月境界列を生成し、`src/phenomena/lunisolar.ts` は境界選択・安定性確認後に探索窓全体の principal-term occurrence を列挙して各月の `[last_at, next_at)`（始点を含み終点を含まない）へ partition する。全件を `LunisolarDate.principal_terms` に保持し、同じ phase index でも異なる cycle のイベントは別件で残す。問い合わせ月だけでなく context 月を含む連続月列と各月の全イベントを `LunisolarPrincipalTermYearPolicy` に渡し、`year/month/is_leap` を割り当てる。複数イベントへの普遍的な月・閏規則はなく暦固有 policy が必要である。`LunisolarDate.principal_term` は時刻順で最初のイベントを返す互換 view、旧 `PrincipalTermLunisolarPolicy` は per-boundary/single-term API の互換 adapter であり、新経路の year-policy contract ではない。境界の`source_kind`/source phase metadataは内部policy結果に限定している。NAOJ fixtureとTempo/Thai回帰は無修正で通過している。詳細は [multiple-principal-terms.md](multiple-principal-terms.md) と [lunisolar-generalization-proposal.md](lunisolar-generalization-proposal.md)。
+- 低レベル `LunisolarOptions.solarPeriodMsec` は必須の有限・正値で、`solarPhase` と同じ resolver の権威ある cycle-scale period とする。`timeOfPhase(phase, t ± P)` が直前・直後の同じ phase occurrence を返し、その間の phase が単調にちょうど一周する契約で、`lunarPeriodMsec * 13` fallback は削除済み。`FancyDate` は sunny model の `periodMsec` を渡す。詳細は [multiple-principal-terms.md](multiple-principal-terms.md)。
+- 太陽太陰暦一般化のPhase 5として、`ThaiModernLunisolarYearPolicy` を追加し、Thaiの通常年・`อธิกวาร`・`อธิกมาส`の年型と月配置を共有 `CalendarYearPolicy` 契約へ接続した。既存のseed/偏差計算と`ThaiLunisolarDate`の公開結果は維持し、日付resolverの月配置だけをpolicy結果から構築する。Thai固有の表・規則policyと中気を使う `LunisolarPrincipalTermYearPolicy` は別の判断規則であり、月境界生成の方式も混同しない。
 - 太陽太陰暦一般化のPhase 6として、legacyの`.division({ H: 'equal' | 'solar' })`を`HourDivisionPolicy`へ正規化し、`to_tempos()`のHour構築を`equal`/`temporal`/`table`の3経路へ分けた。`dayStart()`/`dayBoundary()`は引き続き独立した暦日境界policyであり、Hour policyの`arithmetic`は経過時間と境界stepの意味を保持するための契約として先に公開している。既存の定時法・不定時法の数値挙動と、固定table Hourの`succ()`を回帰specで固定した。
 - 太陽太陰暦一般化のPhase 7として、`dayStart()`/`dayBoundary()`を`DayBoundaryPolicy`へ正規化した。`midnight`、`fixed-offset`、`solar-event`を共通型で表し、既存のsolar-event優先順位と逆方向の日付解決を維持する。内部設定は非列挙で保持し、既存の`dic` snapshot形状を変更しない。
 - 太陽太陰暦一般化のPhase 8として、assignmentの公開契約を`DayAssignmentPolicy`へ統一した。tithiは必要な月モデルをfactoryへ明示注入し、raw連続index、civil dayへの投影、`repeated`/`skipped` flags、cache semanticsをpolicy内部で扱う。assignmentがday boundary policyとは別軸であることを型契約へ反映した。
@@ -120,7 +122,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 - 太陽太陰暦一般化のPhase 10として、予約していた`HourArithmeticPolicy`を`add()`/`span()`へ接続した。`elapsed-duration`ではH/m/s/Sを固定durationへ集約して時刻へ加算し、`boundary-step`ではtemporal/tableの実境界を辿る。等分Hourはelapsed、temporal/table Hourはboundaryを既定値とし、`Tempo.succ()`/`back()`自体は各Hour ruleの境界stepとして維持した。
 - 太陽太陰暦一般化のPhase 11として、`ThaiBuddhistFeastPolicy`を追加した。マーカブーチャー(3/15)、ヴィサーカブーチャー(6/15)、アーサーンハブーチャー(8/15)、入安居(8/16)、出安居(11/15)を、閏月年にはアーサーンハブーチャーと入安居だけ後半の8/8へ移し、既存のThai近代規則から現地civil dateへ投影する。これは政府休日・振替休日の年表ではなく、宗教上の月日を返す計算policyである。
 - 太陽太陰暦一般化のPhase 12として、Thai feastのsample adapterを追加した。`thaiBuddhistFeastDates()`は既定の日本語labelまたは呼び出し側のlabel override付きで日付を返し、`thaiBuddhistFeastNotes()`は公式Thai暦の日境界から該当行事を逆引きする。core policyの計算結果と、sampleの表示／notes責務を分離している。
-- 0系API整理として、policyへ委譲するだけだった`church_feasts()`と、実装経路へ接続されなかった暫定`LunisolarPolicy`／`LunisolarYearContext`／`LunisolarLeapDay`を削除した。互換wrapperを残さず、現在実際に使われている`ChurchFeastPolicy`と`PrincipalTermLunisolarPolicy`を公開面の正本とする。
+- 0系API整理として、policyへ委譲するだけだった`church_feasts()`と、実装経路へ接続されなかった暫定`LunisolarPolicy`／`LunisolarYearContext`／`LunisolarLeapDay`を削除した。互換wrapperを残さず、`ChurchFeastPolicy`を現在の公開面の正本とする。`PrincipalTermLunisolarPolicy`は旧per-boundary/single-term APIの互換adapterとしてのみ残り、現行の中気割当経路は`LunisolarPrincipalTermYearPolicy`を使う。
 
 Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [不定時法の説明 - THE SEIKO MUSEUM GINZA](https://museum.seiko.co.jp/knowledge/relation_16/) / [和時計 - Wikipedia](https://ja.wikipedia.org/wiki/%E5%92%8C%E6%99%82%E8%A8%88) / [Danna (Mesopotamian) - Wikipedia](<https://en.wikipedia.org/wiki/Danna_(Mesopotamian)>) / [Hour - Wikipedia (Babylonian hours)](https://en.wikipedia.org/wiki/Babylonian_hours) / [Equinoctial hours - Wikipedia](https://en.wikipedia.org/wiki/Equinoctial_hours) / [Babylonian calendar - Wikipedia](https://en.wikipedia.org/wiki/Babylonian_calendar) / [Witnesses of time: How Ottoman Empire measured time - Türkiye Today](https://www.turkiyetoday.com/culture/witnesses-of-time-how-the-ottoman-empire-measured-regulated-and-lived-time-3212480) / [Our Time: On the Durability of the Alaturka Hour System in the Late Ottoman Empire](https://www.academia.edu/10068187/_Our_Time_On_the_Durability_of_the_Alaturka_Hour_System_in_the_Late_Ottoman_Empire_International_Journal_of_Turkish_Studies_16_2010_47_69)
 
@@ -128,7 +130,7 @@ Sources: [Unequal hours](https://en.wikipedia.org/wiki/Unequal_hours) / [不定�
 
 - 干支のサンプル初期値の誤りを修正した。定気法の年干支(a)起点値が1968年の「戊申」になっていたが、平気法と同じ起点年(皇紀2629年=西暦1969年)の正しい年干支「己酉」に直した。
 - 日干支(A)起点値のズレを調査し、最終的な真因は `def_zero()` の日次巡回トークン二重シフトだった。`dC60/dC12/dC10/E/dC28` などの日次 cycle のゼロ点を、d 自身のシフト分を含まない `hour` 起点で計算するよう修正した。これにより Julian の anchor「1582年10月5日は金曜日」という史実や、同一UTC瞬間を指す複数暦の日干支が一致することを確認した。
-- 定気法(観測太陰太陽暦モデル)の `.parse()` 年逆算バグを修正した。観測モデルでは `ObservedLunisolarYearRule` がグレゴリオ暦年を使うため、平気法の連続 index 前提の `zero + y*msec.year` では約660年ズレていた。元号開始 msec を起点に `lunisolar()` 探索で目標年へ収束させる分岐を追加した。
+- 定気法(観測太陰太陽暦モデル)の `.parse()` 年逆算バグを修正した。観測モデルでは `ObservedLunisolarYearRule` がグレゴリオ暦年を使うため、平気法の連続 index 前提の `zero + y*msec.year` では約660年ズレていた。元号開始 msec を起点に `lunisolar()` 探索で目標年へ収束させる分岐を追加した。この報告時の具体例を固定する専用回帰テストは未整備。
 - 平均太陰太陽暦の `.parse()` 月逆算バグを修正した。従来は `parse_by()` が中気付近の単発シードから月初を決めていたため、閏月直後の非閏月を直前の閏月へ戻したり、年末閏月・師走を前年へ戻したりしていた。従来シードを近傍探索の中心として残しつつ、前後1年ぶんの候補月から元号・年番号・月番号・閏フラグが一致する月を選ぶようにした。平気法1980〜2025年の月初既定表示 round-trip と、バビロニア暦カスプ/ベールの月初表示同一性で検証済み。
 - `export *` の tslib バンドル非互換性を修正した。`src/index.ts`・`src/sample.ts`・`src/sample/index.ts`・`src/naoj.ts`・`src/naoj/index.ts`・`src/nasa/index.ts`・`src/fancy-date.ts` の計7箇所で `export *` を明示的な named export に置き換え、esbuild bundle で `Calendar`/`Tempo`/`to_msec` が undefined にならないことを確認した。
 - 元号1年目の `format()`→`parse()` round-trip ズレを修正した。`find_lunisolar_parse_month()` が月の開始時点だけで元号/年号一致を判定していたため、改元が月の途中で起きる年(大正/昭和/平成/令和元年)で約1年ずれていた。月の開始時点と終了直前の両方で一致確認するようにした。

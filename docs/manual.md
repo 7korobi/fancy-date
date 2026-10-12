@@ -18,28 +18,58 @@ g.format(utc, 'Gy年MM月dd日(E)')
 
 主な API は次の通り。
 
-| API                                      | 役割                                      |
-| ---------------------------------------- | ----------------------------------------- |
-| `parse(text, format?)`                   | 暦表現を UTC ミリ秒へ変換する             |
-| `parse_obj(text, format?)`               | 暦表現を token 値のオブジェクトへ変換する |
-| `format(utc, format?)`                   | UTC ミリ秒や `Tempos` を暦表現へ変換する  |
-| `span([from, to], options?)`             | 範囲の相対表現を文字列で返す              |
-| `span_obj([from, to], options?)`         | 相対表現を `Span` / `SpanMeasure` で返す  |
-| `parse_span(text, options?)`             | 相対表現を正規化した `Span` に変換する    |
-| `format_span(span, direction?)`          | `SpanLike` を現在の暦の表記へ整える       |
-| `format_span_parts(span, direction?)`    | span表示を `RichText` として返す          |
-| `span_msec(span, options?)`              | anchor 付き span を実ミリ秒へ変換する     |
-| `span_add(left, right)`                  | span 同士を token ごとに足す              |
-| `span_sub(left, right)`                  | span/連続cycleラベルを引く                |
-| `span_neg(span)`                         | span の向きを反転する                     |
-| `span_from_labels(token, from, to)`      | `span_sub` の互換wrapper                  |
-| `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する       |
-| `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する     |
-| `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                    |
-| `find_span(at, condition, options?)`     | 条件に合う次/前の時刻までをSpanで返す     |
-| `periods([from, to], { step })`          | 指定 step の `Tempo` 範囲を列挙する       |
-| `labels(labels)`                         | span の fallback 単位表記を差し替える     |
-| `numeral(numeral)`                       | 数値表記辞書を差し替える                  |
+| API                                      | 役割                                                      |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `parse(text, format?)`                   | 暦表現を UTC ミリ秒へ変換する                             |
+| `parse_obj(text, format?)`               | 暦表現を token 値のオブジェクトへ変換する                 |
+| `format(utc, format?)`                   | UTC ミリ秒や `Tempos` を暦表現へ変換する                  |
+| `span([from, to], options?)`             | 範囲の相対表現を文字列で返す                              |
+| `span_obj([from, to], options?)`         | 相対表現を `Span` / `SpanMeasure` で返す                  |
+| `parse_span(text, options?)`             | 相対表現を正規化した `Span` に変換する                    |
+| `format_span(span, direction?)`          | `SpanLike` を現在の暦の表記へ整える                       |
+| `format_span_parts(span, direction?)`    | span表示を `RichText` として返す                          |
+| `span_msec(span, options?)`              | span のanchorまたは `options.at` から実ミリ秒差を計算する |
+| `span_add(left, right)`                  | span 同士を token ごとに足す                              |
+| `span_sub(left, right)`                  | span/連続cycleラベルを引く                                |
+| `span_neg(span)`                         | span の向きを反転する                                     |
+| `span_from_labels(token, from, to)`      | `span_sub` の互換wrapper                                  |
+| `add(utc, span)`                         | 暦表現の差分を UTC ミリ秒へ加算する                       |
+| `sub(utc, span)`                         | 暦表現の差分を UTC ミリ秒から減算する                     |
+| `find([from, to], conditions, options?)` | 条件に合う暦境界を探す                                    |
+| `find_span(at, condition, options?)`     | 条件に合う次/前の時刻までをSpanで返す                     |
+| `periods([from, to], { step })`          | 指定 step の `Tempo` 範囲を列挙する                       |
+| `labels(labels)`                         | span の fallback 単位表記を差し替える                     |
+| `numeral(numeral)`                       | 暦全体の数値表記辞書を設定する                            |
+| `locale(locale, options?)`               | locale の既定書式・labels・数詞を適用する                 |
+| `token_numeral(token, numeral?)`         | tokenごとの数値表記辞書を設定する                         |
+
+### 数詞・locale
+
+`numeral()` は暦全体の数値表記を設定する。tokenごとに分ける場合は
+`token_numeral()` を使い、本文・ruby・ラベル用にはそれぞれ
+`token_numeral_text()` / `token_numeral_ruby()` / `token_numeral_label()` /
+`token_numeral_label_ruby()` を使う。tokenには単一値またはtoken配列を渡せる。
+
+`locale()` は `LocaleEntry` の既定書式やlabelsを適用し、`LocaleApplyOptions` で
+数詞を明示的に選べる。数詞参照には `LocaleEntry.numerals` の役割名または `Numeral`
+そのものを渡す。token別の設定は `token_numerals` などのmapで行う。
+
+```ts
+import { Calendar, FancyDate, getLocale } from 'fancy-date'
+
+const korean = new FancyDate(Calendar.Gregorian)
+  .locale(getLocale('ko')!, {
+    token_numerals: { d: 'cardinalSino' },
+  })
+  .init()
+
+const utc = korean.parse('2024년 3월 십오일', 'y년 M월 d일')
+korean.format(utc, 'y년 M월 d일')
+// '2024년 3월 십오일'
+```
+
+`LocaleEntry.vocabulary` は暦の語彙カタログであり、`locale()` はそれを
+`.notation()` へ自動適用しない。表示名・読みを使う場合は暦定義側で設定する。
 
 Computus と教会祝祭日は、暦の天体モデルとは独立した計算層として扱う。
 
