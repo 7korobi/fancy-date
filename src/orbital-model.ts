@@ -58,9 +58,21 @@ export type SatellitePlacementOptions = {
 }
 
 export interface OrbitalModel {
+  /** Cycle-scale period (ms) for this phase model. */
   periodMsec: number
   epochMsec: number
   phaseAt(utc: number): number
+  /**
+   * Resolve the occurrence of `phase` nearest to `near` (ties may resolve either way).
+   *
+   * When `periodMsec` is used to hop between occurrences, it must describe the
+   * cycle of this same phase model, and this resolver must return the immediately
+   * adjacent occurrence: from an occurrence at `t`, resolving at
+   * `t + periodMsec` / `t - periodMsec` returns the next / previous occurrence.
+   * The phase makes exactly one monotone turn between each pair; it is neither
+   * repeated nor skipped. This adjacency contract does not set a root-accuracy
+   * tolerance, which remains model-specific.
+   */
   timeOfPhase(phase: number, near: number): number
 }
 

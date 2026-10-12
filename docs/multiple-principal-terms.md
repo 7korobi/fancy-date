@@ -2,11 +2,30 @@
 
 ## 天文イベントと暦法上の割り当て
 
-天文層は、選択済みの月境界 `[last_at, next_at)` ごとに、その区間へ入る principal
-term をすべて列挙する。イベントは `{ index, longitudeDeg, month, at }` の全値を保持し、
-`at` 昇順、同時刻なら phase `index` 昇順（同値は安定順）に並ぶ。開始時刻は含み、
-終了時刻は含まないため、境界時刻のイベントは次の月だけに属する。同一 phase index
-でも異なる solar cycle にあるイベントは別々に残る。
+天文層は、境界選択と安定性確認が完了した月境界 sequence 全体を対象に、覆われた区間
+`[first.last_at, last.next_at)` の principal term を各 phase/cycle ごとに一度だけ列挙し、
+時刻順に並べて選択済み月境界へ partition する。各月では `[last_at, next_at)` の
+半開区間を使い、イベントは `{ index, longitudeDeg, month, at }` の全値を保持する。
+開始時刻は含み、終了時刻は含まないため、境界時刻のイベントは次の月だけに属する。
+同一 phase index でも異なる solar cycle にあるイベントは別々に残る。
+通常は最初の選択境界 `first.last_at` で各 phase の最寄り occurrence を seed にし、
+seed が開始境界より前なら区間へ入るまで前進してから、覆われた区間の末尾まで走査する。
+seed が区間より後に返った場合は後続イベントを取りこぼさないよう後ろ向きに列挙する。
+
+低レベル `LunisolarOptions` では `solarPeriodMsec` が必須で、有限かつ正の値でなければ
+ならない。この周期は `solarPhase` と同じモデルの権威ある cycle-scale period であり、
+境界探索窓の大きさと principal term の前後 cycle 探索の両方に使う。ある phase の
+イベント時刻 `t` から `t ± solarPeriodMsec` を使って解決した結果は、直前・直後の
+同じ phase の occurrence でなければならず、その間に phase は単調にちょうど一周する
+（repeat/skip しない）。この契約は `OrbitalModel.timeOfPhase` にも記載され、root の
+数値精度許容値を規定するものではない。`solarPhase(phase, near)` は `near` に最も近い
+occurrence を返す（同距離ならどちらでもよい）。
+
+この必須化は、`LunisolarOptions` を直接構築する TypeScript 利用者に対する意図的な
+低レベル API tightening である。JavaScript 利用時も period が欠落・非有限・非正なら
+明示的に例外となる。従来の `lunarPeriodMsec * 13` を太陽周期の暗黙 fallback として
+使わない。`FancyDate` の `lunisolar()` 経路は内部の `dic.sunny.periodMsec` を渡すため、
+通常の高レベル利用方法に変更はない。
 
 天文イベントの検出と、暦年・月・閏月の決定は別の責務である。選択された全月の
 `principal_terms` を一つの連続 sequence として年 assignment policy へ渡し、policy が

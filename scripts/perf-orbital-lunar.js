@@ -8,6 +8,8 @@ const redPhase = red.dic.lunarPhase
 const redAt = 0
 const earth = Calendar.GregorianAstronomical
 const earthAt = earth.parse('2024年3月20日')
+const jupiter = Calendar.JupiterObserved
+const jupiterAt = 0
 
 const cases = [
   {
@@ -62,6 +64,36 @@ const cases = [
     run: () => red.format(redAt),
   },
   {
+    key: 'earthLunisolarCold',
+    label: 'GregorianAstronomical lunisolar(cache clear)',
+    count: 20,
+    run: () => {
+      earth._lunisolar_cache.length = 0
+      return earth.lunisolar(earthAt)
+    },
+  },
+  {
+    key: 'earthLunisolarCached',
+    label: 'GregorianAstronomical lunisolar(cache hit)',
+    count: 200,
+    run: () => earth.lunisolar(earthAt),
+  },
+  {
+    key: 'jupiterLunisolarCold',
+    label: 'JupiterObserved lunisolar(cache clear)',
+    count: 20,
+    run: () => {
+      jupiter._lunisolar_cache.length = 0
+      return jupiter.lunisolar(jupiterAt)
+    },
+  },
+  {
+    key: 'jupiterLunisolarCached',
+    label: 'JupiterObserved lunisolar(cache hit)',
+    count: 200,
+    run: () => jupiter.lunisolar(jupiterAt),
+  },
+  {
     key: 'earthLunarEventsBaseline',
     label: '地球月 lunarEvents baseline',
     count: 200,
@@ -103,12 +135,44 @@ function measure(item) {
   }
 }
 
+function countLunisolarSolarPhaseCalls(calendar, utc) {
+  const cache = calendar._lunisolar_cache
+  const originalSolarPhase = calendar.solar_phase
+  const hadOwnSolarPhase = Object.prototype.hasOwnProperty.call(calendar, 'solar_phase')
+  let calls = 0
+
+  calendar.solar_phase = function (phase, near) {
+    calls++
+    return originalSolarPhase.call(this, phase, near)
+  }
+
+  try {
+    cache.length = 0
+    calendar.lunisolar(utc)
+    const cold = calls
+    calls = 0
+    calendar.lunisolar(utc)
+    return { cold, cacheHit: calls }
+  } finally {
+    if (hadOwnSolarPhase) calendar.solar_phase = originalSolarPhase
+    else delete calendar.solar_phase
+    cache.length = 0
+  }
+}
+
+// Count outside measure(): the temporary wrapper is never active during timing.
+const solarPhaseCallCounts = {
+  GregorianAstronomical: countLunisolarSolarPhaseCalls(earth, earthAt),
+  JupiterObserved: countLunisolarSolarPhaseCalls(jupiter, jupiterAt),
+}
+
 console.log(
   JSON.stringify(
     {
       generatedAt: new Date().toISOString(),
       runs: RUNS,
       redDayMsec: DAY,
+      solarPhaseCallCounts,
       cases: Object.fromEntries(cases.map((item) => [item.key, measure(item)])),
     },
     null,

@@ -130,7 +130,13 @@ const LUNISOLAR_BOUNDARY_TOLERANCE_MSEC = 1
 
 export type LunisolarOptions = {
   moony?: OrbitalModel
-  solarPeriodMsec?: number
+  /**
+   * Required cycle-scale period (ms) for the same phase model as `solarPhase`.
+   * It sizes the boundary search window and is used to hop between adjacent
+   * principal-term occurrences; the resolver must satisfy `OrbitalModel.timeOfPhase`'s
+   * adjacency contract.
+   */
+  solarPeriodMsec: number
   principalTermCount?: number
   /** Required when any month contains multiple principal terms. */
   yearAssignmentPolicy?: LunisolarPrincipalTermYearPolicy
@@ -146,7 +152,22 @@ export type LunisolarOptions = {
   lunarPhase: PhaseResolver
   lunarPhaseEvent?: LunarPhaseEventResolver
   lunarSynodicPeriodMsec?: number
+  /**
+   * Resolve the nearest occurrence of a solar phase to a time. A callback by
+   * itself does not define a trustworthy cycle or adjacent-event relation.
+   * Recurrent term enumeration requires the authoritative `solarPeriodMsec`
+   * above to describe this same model, and the resolver must return adjacent
+   * occurrences when period-hopped.
+   */
   solarPhase: PhaseResolver
+}
+
+function authoritative_solar_period_msec(options: Pick<LunisolarOptions, 'solarPeriodMsec'>) {
+  const solarPeriodMsec = options.solarPeriodMsec
+  if (!Number.isFinite(solarPeriodMsec) || solarPeriodMsec <= 0) {
+    throw new Error('lunisolar requires a finite positive solarPeriodMsec')
+  }
+  return solarPeriodMsec
 }
 
 export function lunisolar_month_window_counts(
@@ -156,14 +177,11 @@ export function lunisolar_month_window_counts(
     throw new Error('lunisolar requires a satellite orbital model')
   }
   const monthMsec = options.lunarSynodicPeriodMsec ?? options.moony.periodMsec
-  const yearMsec = options.solarPeriodMsec ?? monthMsec * 13
+  const solarPeriodMsec = authoritative_solar_period_msec(options)
   if (!Number.isFinite(monthMsec) || monthMsec <= 0) {
     throw new Error(`invalid lunar period ${monthMsec}`)
   }
-  if (!Number.isFinite(yearMsec) || yearMsec <= 0) {
-    throw new Error(`invalid solar period ${yearMsec}`)
-  }
-  const monthsPerSolarYear = Math.max(1, Math.ceil(yearMsec / monthMsec))
+  const monthsPerSolarYear = Math.max(1, Math.ceil(solarPeriodMsec / monthMsec))
   return {
     past: monthsPerSolarYear + LUNISOLAR_MONTH_WINDOW_PAST_MARGIN,
     future: monthsPerSolarYear + LUNISOLAR_MONTH_WINDOW_FUTURE_MARGIN,
@@ -202,9 +220,10 @@ function lunisolar_months_around(options: LunisolarOptions, utc: number): Luniso
     throw new Error(`invalid principal term count ${principalTermCount}`)
   }
   const boundaries = lunisolar_boundaries_around(options, utc)
-  const months: LunisolarPrincipalTermMonthInput[] = boundaries.map((boundary) => ({
+  const principalTermsByMonth = lunisolar_principal_terms(options, boundaries, principalTermCount)
+  const months: LunisolarPrincipalTermMonthInput[] = boundaries.map((boundary, index) => ({
     ...boundary,
-    principal_terms: lunisolar_principal_terms(options, boundary, principalTermCount),
+    principal_terms: principalTermsByMonth[index],
   }))
   const yearOf = (at: number) =>
     options.solarYear?.(at) ?? new Date(at + local_timezone_msec(options)).getUTCFullYear()
@@ -643,16 +662,16 @@ function lunisolar_boundaries_around(
     throw new Error('lunisolar requires a satellite orbital model')
   }
   const periodMsec = options.lunarSynodicPeriodMsec ?? options.moony.periodMsec
-  const newMoon = lunar_phase_event(options, 0, utc, 0)
+  const solarPeriodMsec = authoritative_solar_period_msec(options)
 
   // 前後の探索幅は「太陽年に含まれる朔望月数 + 安全マージン」から導く。
   // 地球の月では ceil(太陽年/朔望月)=13 なので従来と同じ過去18/未来19ヶ月
   // (中心を含む37ヶ月区間)になる。月が地球より短い場合は年境界を見失わない
   // よう探索幅を広げ、長い場合は不要な探索を減らす。
   const window = lunisolar_month_window_counts(options)
+  const newMoon = lunar_phase_event(options, 0, utc, 0)
   const constrained = constrained_nominal_options(options)
-  const solarYearMsec = options.solarPeriodMsec ?? periodMsec * 13
-  const monthsPerSolarYear = Math.max(1, Math.ceil(solarYearMsec / periodMsec))
+  const monthsPerSolarYear = Math.max(1, Math.ceil(solarPeriodMsec / periodMsec))
   const maxStabilityExpansions = constrained?.maxStabilityExpansions ?? 4
   if (!Number.isInteger(maxStabilityExpansions) || maxStabilityExpansions < 0) {
     throw new Error(`invalid lunar boundary stability expansions ${maxStabilityExpansions}`)
@@ -761,24 +780,40 @@ function boundary_resolution_window_matches(
 
 function lunisolar_principal_terms(
   options: LunisolarOptions,
-  boundary: LunisolarPhaseBoundary,
+  boundaries: readonly LunisolarPhaseBoundary[],
   termCount: number,
-): LunisolarPrincipalTerm[] {
-  const startAt = boundary.last_at
-  const nextAt = boundary.next_at
-  const lunarPeriodMsec = options.lunarSynodicPeriodMsec ?? options.moony?.periodMsec
-  const solarPeriodMsec = options.solarPeriodMsec ?? (lunarPeriodMsec ?? NaN) * 13
-  if (
-    !Number.isFinite(startAt) ||
-    !Number.isFinite(nextAt) ||
-    startAt > nextAt ||
-    !Number.isFinite(solarPeriodMsec) ||
-    solarPeriodMsec <= 0
-  ) {
+): LunisolarPrincipalTerm[][] {
+  const solarPeriodMsec = authoritative_solar_period_msec(options)
+  const termsByMonth: LunisolarPrincipalTerm[][] = boundaries.map(() => [])
+  if (boundaries.length === 0) return termsByMonth
+
+  for (let index = 0; index < boundaries.length; index++) {
+    const boundary = boundaries[index]
+    if (
+      !Number.isFinite(boundary.last_at) ||
+      !Number.isFinite(boundary.next_at) ||
+      boundary.last_at > boundary.next_at ||
+      (index > 0 && boundaries[index - 1].last_at > boundary.last_at)
+    ) {
+      throw new Error('invalid lunisolar principal-term interval')
+    }
+  }
+
+  const startAt = boundaries[0].last_at
+  const nextAt = boundaries[boundaries.length - 1].next_at
+  if (startAt > nextAt) {
     throw new Error('invalid lunisolar principal-term interval')
   }
-  if (startAt === nextAt) return []
-  const near = (boundary.source_at + boundary.next_source_at) / 2
+  const intervalMsec = nextAt - startAt
+  if (!Number.isFinite(intervalMsec)) {
+    throw new Error('invalid lunisolar principal-term interval')
+  }
+  if (intervalMsec === 0) return termsByMonth
+  const near = startAt
+  if (!Number.isFinite(near)) {
+    throw new Error('invalid lunisolar principal-term interval')
+  }
+
   const events: { term: LunisolarPrincipalTerm; order: number }[] = []
   let order = 0
   const add = (index: number, at: number) => {
@@ -797,50 +832,73 @@ function lunisolar_principal_terms(
 
   // principalTermCount は「月名を決める中気の数」。地球型なら12、木星・
   // カリストのように1太陽年あたり約260朔望月ある暦では260にできる。
-  // 1 interval が太陽周期未満なら各phaseは最大1回で、従来通り中央時刻から
-  // 1回だけ解く。太陽周期以上なら同じphaseの前後cycleも列挙する。
+  // 境界選択済みの全区間を各phaseについて一度だけ走査し、後で選択済み
+  // last_at/next_at の半開区間へ振り分ける。
   for (let index = 0; index < termCount; index++) {
     const phase = index / termCount
-    let at = options.solarPhase(phase, near)
+    const resolve = (near: number) => options.solarPhase(phase, near)
+    const nextOccurrence = (at: number) => {
+      const nextNear = at + solarPeriodMsec
+      if (!Number.isFinite(nextNear)) {
+        throw new Error(`invalid solar phase advance request for principal term ${index}`)
+      }
+      const next = resolve(nextNear)
+      if (!Number.isFinite(next)) {
+        throw new Error(`invalid principal term time for phase ${index}`)
+      }
+      if (next <= at) {
+        throw new Error(`solar phase failed to advance for principal term ${index}`)
+      }
+      return next
+    }
+    let at = resolve(near)
     if (!Number.isFinite(at)) {
       throw new Error(`invalid principal term time for phase ${index}`)
     }
-    if (nextAt - startAt < solarPeriodMsec) {
-      add(index, at)
+
+    if (at >= nextAt) {
+      // A nearest occurrence can lie beyond a short covered interval. Walk
+      // backward in that case so no earlier in-range event can be skipped.
+      while (at >= startAt) {
+        add(index, at)
+        const previousNear = at - solarPeriodMsec
+        if (!Number.isFinite(previousNear)) {
+          throw new Error(`invalid solar phase retreat request for principal term ${index}`)
+        }
+        const previous = resolve(previousNear)
+        if (!Number.isFinite(previous)) {
+          throw new Error(`invalid principal term time for phase ${index}`)
+        }
+        if (previous >= at) {
+          throw new Error(`solar phase failed to retreat for principal term ${index}`)
+        }
+        at = previous
+      }
       continue
     }
 
-    if (at < startAt) {
-      while (at < startAt) {
-        const next = options.solarPhase(phase, at + solarPeriodMsec)
-        if (!Number.isFinite(next) || next <= at) {
-          throw new Error(`solar phase failed to advance for principal term ${index}`)
-        }
-        at = next
-      }
-    } else {
-      while (true) {
-        const previous = options.solarPhase(phase, at - solarPeriodMsec)
-        if (!Number.isFinite(previous) || previous >= at) {
-          throw new Error(`solar phase failed to retreat for principal term ${index}`)
-        }
-        if (previous < startAt) break
-        at = previous
-      }
+    while (at < startAt) {
+      at = nextOccurrence(at)
     }
     while (at < nextAt) {
       add(index, at)
-      const next = options.solarPhase(phase, at + solarPeriodMsec)
-      if (!Number.isFinite(next) || next <= at) {
-        throw new Error(`solar phase failed to advance for principal term ${index}`)
-      }
-      at = next
+      at = nextOccurrence(at)
     }
   }
 
-  return events
-    .sort((a, b) => a.term.at - b.term.at || a.term.index - b.term.index || a.order - b.order)
-    .map(({ term }) => term)
+  events.sort((a, b) => a.term.at - b.term.at || a.term.index - b.term.index || a.order - b.order)
+  let monthIndex = 0
+  for (const { term } of events) {
+    while (monthIndex < boundaries.length && term.at >= boundaries[monthIndex].next_at) {
+      monthIndex++
+    }
+    const boundary = boundaries[monthIndex]
+    if (!boundary || term.at < boundary.last_at || term.at >= boundary.next_at) {
+      throw new Error(`principal term at ${term.at} is outside selected lunisolar boundaries`)
+    }
+    termsByMonth[monthIndex].push(term)
+  }
+  return termsByMonth
 }
 
 function local_timezone_msec({ dayMsec, geo }: LunisolarOptions) {

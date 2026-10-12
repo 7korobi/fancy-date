@@ -911,6 +911,7 @@ describe('ObservedLunisolarMonthRule', () => {
   const g = Calendar.定気法
   const options = {
     moony: g.dic.moony,
+    solarPeriodMsec: g.dic.sunny.periodMsec,
     geo: g.dic.geo,
     dayMsec: g.calc.msec.day,
     dayZero: g.calc.zero.day,

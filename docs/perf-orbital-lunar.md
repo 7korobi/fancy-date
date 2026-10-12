@@ -103,3 +103,64 @@ bun run perf:orbital-lunar
 実際の根が `near` から遠く、`±P/4` ガードでfallbackするため、単体の朔イベント
 測定だけでは改善が現れない。暦計算のように、前回の候補境界に近い `near` を連続して
 渡す呼び出しで効果が大きい。
+
+## 複数 principal term の全窓列挙
+
+### 測定方法
+
+- 測定日時: 2026-10-12
+- CPU architecture: `arm64`
+- macOS: `15.6`
+- Bun: `1.2.16`
+- Node.js: `v22.12.0`
+- コマンド: `bun run perf:orbital-lunar`
+- 入力: `GregorianAstronomical` は `2024年3月20日`、`JupiterObserved` は epoch `0`
+- 各 timing case: warmup 10回、5サンプルの中央値
+- cold: sample ごとに20回、各回 `_lunisolar_cache` を消去してから `lunisolar()` を解決
+- cache hit: 事前 warmup 後、同じ日時を200回解決
+
+`GregorianAstronomical` と `JupiterObserved` の `solar_phase` 呼び出し数は、timing
+とは別に計測する。各暦で cache を消して cold 解決を1回行い、同じ日時でもう1回呼んで
+cache-hit 数を数える間だけ `FancyDate.solar_phase` を wrap し、直後に元の method を
+復元する。resolver の計測・wrapper は timing sample 内では実行しない。
+
+### 結果
+
+| 暦                      | 全窓化前の `solar_phase` 回数 | 全窓化後 cold / cache-hit |              呼び出し削減 |
+| ----------------------- | ----------------------------: | ------------------------: | ------------------------: |
+| `GregorianAstronomical` |               444 (`37 × 12`) |                    53 / 0 |    88.1%減、約8.4倍少ない |
+| `JupiterObserved`       |         138,060 (`531 × 260`) |                   922 / 0 | 99.33%減、約149.7倍少ない |
+
+全窓化前の呼び出し数と timing は、同一 machine で親が取った比較 baseline。今回の
+resolver 数は実測値であり、月数×phase 数の推定値をテスト定数にはしていない。実測数には
+各 phase の seed、選択区間に入るまでの hop、および終端を越える最初の resolver 結果も
+含まれるため、「phase 数 + 区間内 event 数」という概算とは少し差がある。
+事前の概算（地球約50回、木星約800回）に対し、地球は53回、木星は922回だった。地球は
+概算に近く、木星の差分は seed と区間端をまたぐ実測 hop を含む。script は推定値を
+assertion にせず、この暦・入力での実回数を出力する。
+
+| 暦                      | 親測定の post-step-6 cold | 親測定の pre-step-6 cold | 今回 cold 中央値 | 今回 cache-hit 中央値 |
+| ----------------------- | ------------------------: | -----------------------: | ---------------: | --------------------: |
+| `GregorianAstronomical` |                13.6955 ms |                7.6696 ms |    1.35994 ms/回 |        0.000160 ms/回 |
+| `JupiterObserved`       |                 1.1197 ms |                0.5540 ms |   0.246165 ms/回 |        0.000154 ms/回 |
+
+今回の5サンプル合計時間（ms）:
+
+```text
+GregorianAstronomical cold (各sample 20回): [27.198792, 27.490791, 27.330917, 26.613458, 26.797208]
+GregorianAstronomical cache hit (各sample 200回): [0.032459, 0.031958, 0.031625, 0.031792, 0.031917]
+JupiterObserved cold (各sample 20回): [6.421834, 5.313, 4.923291, 3.97825, 3.950666]
+JupiterObserved cache hit (各sample 200回): [0.030792, 0.030291, 0.030167, 0.116959, 0.032875]
+```
+
+同一 machine の以前の cache-hit 記録は約65nsだったが、今回の script は暦ごとの
+`lunisolar()` 呼び出し全体を測って約154–160ns/回となった。timing path の違い・小さな
+値の計測揺れがあるため cache-hit 時間は直接比較しない。cache-hit 中の
+`solar_phase` 呼び出しが0回であることは、別計測で確認した。
+
+全窓列挙後は、今回の cold median でも親の post-step-6 baseline より
+`GregorianAstronomical` は約90.1%、`JupiterObserved` は約78.0%短かった。ただし安定した
+受け入れ基準は resolver 呼び出し数の削減とし、実時間の優劣は runtime・機械・測定条件に
+依存する参考値として扱う。
+
+再測定コマンドは従来どおり `bun run perf:orbital-lunar`。
