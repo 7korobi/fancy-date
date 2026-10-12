@@ -28,7 +28,7 @@ Sources(多言語数詞一致体系の調査): [CLDR Plural Rules](https://cldr.
 
 ### 暦法・天文モデルの拡張
 
-- インド系暦・パンチャーンガは部分実装。`.dayStart('sunrise')` と `.assign({ d: tithi(moony) })` による tithi の日界時点への割り当て、`repeated` / `skipped` の判定、`panchanga()` の tithi/paksha/nakshatra/yoga/karana、amanta/purnimanta と tithi 版のサンプル暦がある。一方、これらは地域・宗派の暦法を一式実装したものではない。sidereal solar month・ayanamsha、暦ごとの adhika/kshaya masa 規則、地域・宗派・祭日ごとの採用条件DSLは未解決であり、`panchangaNotes()` の単純な条件照合とも区別する。
+- インド系暦・パンチャーンガは部分実装。`.dayStart('sunrise')` と `.assign({ d: tithi(moony) })` による tithi の日界時点への割り当て、`repeated` / `skipped` の判定、`panchanga()` の tithi/paksha/nakshatra/yoga/karana、amanta/purnimanta と tithi 版のサンプル暦がある。一方、これらは地域・宗派の暦法を一式実装したものではない。sidereal solar month・ayanamsha、暦ごとの adhika/kshaya masa 規則、地域・宗派・祭日ごとの採用条件DSLは未解決であり、`panchangaNotes()` の単純な条件照合とも区別する。パンチャーンガ・タイ暦・オスマン暦の史料根拠の初回調査は [historical-calendar-evidence-map.md](historical-calendar-evidence-map.md) を参照。
 - 太陽暦の上位単位、マヤ長期暦、中東・インド・アフリカの暦を調査する。
 - 歴史的時刻表現として、定気法に四半刻表現を採用するか、江戸時代以前の「分」「秒」に近い時刻表現を調査する。ローマ・ユリウス暦サンプルでは、H を horae temporariae、m を pars minuta として表示し、秒・ミリ秒は標準表示から外した。秒は内部精度としては残すが、古代/中世以前の生活時刻語彙として一般化しない。
 - 天文モデルは、地球以外の天体向けに `src/nasa` の高精度モデルを追加済み。
